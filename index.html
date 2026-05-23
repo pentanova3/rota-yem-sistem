@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rota Yem · Yönetim Sistemleri</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Figtree',system-ui,sans-serif;background:linear-gradient(135deg,#0C2340 0%,#174B82 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;color:#0F172A}
+.wrap{width:100%;max-width:760px}
+.head{text-align:center;margin-bottom:34px;color:#fff}
+.head .logo{font-family:'Source Serif 4',serif;font-size:38px;font-weight:700;letter-spacing:-.02em}
+.head .sub{font-size:13px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#8DC2F2;margin-top:6px}
+.head .tag{font-size:13px;color:rgba(255,255,255,.65);margin-top:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.app-card{background:#fff;border-radius:14px;padding:28px 26px;text-decoration:none;color:inherit;box-shadow:0 12px 40px rgba(0,0,0,.25);transition:transform .15s,box-shadow .15s;display:flex;flex-direction:column;border-top:4px solid #1D62A8}
+.app-card:hover{transform:translateY(-4px);box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.app-card.b2{border-top-color:#16A34A}
+.app-ic{font-size:38px;margin-bottom:14px}
+.app-card h2{font-family:'Source Serif 4',serif;font-size:21px;font-weight:700;color:#0C2340;margin-bottom:8px}
+.app-card p{font-size:13px;color:#64748B;line-height:1.55;flex:1}
+.app-go{margin-top:18px;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;color:#1D62A8}
+.app-card.b2 .app-go{color:#16A34A}
+.foot{text-align:center;margin-top:30px;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:.06em}
+@media(max-width:640px){.grid{grid-template-columns:1fr}.head .logo{font-size:30px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="logo">ROTA YEM</div>
+    <div class="sub">Yönetim Sistemleri</div>
+    <div class="tag">Rota SMI Tarım · Kurumsal uygulama portalı</div>
+  </div>
+  <div class="grid">
+    <a class="app-card" href="haftalik-toplanti/">
+      <div class="app-ic">📋</div>
+      <h2>Haftalık Yönetim Toplantısı</h2>
+      <p>Haftalık toplantı kontrol listesi, üretim istatistikleri, fabrika inşaatı takibi ve yönetim kurulu raporu.</p>
+      <span class="app-go">Aç →</span>
+    </a>
+    <a class="app-card b2" href="siparis-takip/">
+      <div class="app-ic">📦</div>
+      <h2>Sipariş Takip Sistemi</h2>
+      <p>Sipariş yönetimi, müşteri & bayi takibi, komisyon hesabı, stok ve raporlar. Excel'in yerini alan profesyonel sistem.</p>
+      <span class="app-go">Aç →</span>
+    </a>
+  </div>
+  <div class="foot">Pentanova · Kurumsal Çözümler</div>
+</div>
+</body>
+</html>
