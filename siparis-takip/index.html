@@ -1179,6 +1179,34 @@ function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReade
 loadDB();
 document.getElementById('lhint').innerHTML='Demo giriş: <b>admin</b> / <b>rota2026</b><br>(Sipariş personeli: siparis/siparis · fiyat görmez)';
 tryAutoLogin();
+// Firebase'den veri gelince yeniden yükle (cihazlar arası senkron)
+window.__reloadFromStorage=function(){window.__fbSuppress=true;try{loadDB();if(USER)initApp();}catch(e){console.warn(e)}window.__fbSuppress=false;};
+</script>
+<!-- Firebase senkron katmanı (cihazlar arası veri) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
+const DOC_ID="siparis";
+function isSyncKey(k){return !!k&&k.indexOf('rota_so_')===0}
+const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps",DOC_ID);
+function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isSyncKey(k))o[k]=localStorage.getItem(k);}return o;}
+let suppress=false,lastUpdated=0,timer=null;
+const _set=localStorage.setItem.bind(localStorage),_rem=localStorage.removeItem.bind(localStorage);
+localStorage.setItem=function(k,v){_set(k,v);if(!suppress&&!window.__fbSuppress&&isSyncKey(k))schedulePush();};
+localStorage.removeItem=function(k){_rem(k);if(!suppress&&!window.__fbSuppress&&isSyncKey(k))schedulePush();};
+function schedulePush(){clearTimeout(timer);timer=setTimeout(push,900);}
+async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated});fbDot('#16A34A','Senkron');}catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');}}
+function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isSyncKey(k))_set(k,d[k]);});}finally{suppress=false;}}
+let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Figtree,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c}"></span>☁ ${t}`;}
+(async function(){
+  fbDot('#F59E0B','Bağlanıyor');
+  try{const snap=await getDoc(dref);
+    if(snap.exists()&&snap.data().data){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Senkron');}
+    else{await push();}
+  }catch(e){console.warn('FB init',e);fbDot('#EF4444','Çevrimdışı');}
+  try{onSnapshot(dref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||(d.updated&&d.updated===lastUpdated))return;lastUpdated=d.updated||0;applyRemote(d.data);if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Güncellendi');});}catch(e){}
+})();
 </script>
 </body>
 </html>
