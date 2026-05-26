@@ -1292,7 +1292,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const DOC_ID="toplanti";
-function isSyncKey(k){return !!k&&(k.indexOf('rota_meeting_')===0||k==='rota_arc'||k.indexOf('rota_plasiyer_')===0||k.indexOf('rota_monthly_')===0);}
+function isSyncKey(k){return !!k&&(k.indexOf('rota_meeting_')===0||k==='rota_arc'||k.indexOf('rota_plasiyer_')===0||k.indexOf('rota_monthly_')===0||k.indexOf('rota_orders_')===0);}
+// Arşiv listesini (rota_arc) tarihe göre birleştirir; aynı tarih için en son kaydedileni tutar
+function mergeArc(a,b){const byDate={};[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(e=>{if(!e||!e.date)return;const ex=byDate[e.date];if(!ex||(e.savedAt||'')>(ex.savedAt||''))byDate[e.date]=e;});return Object.values(byDate).sort((x,y)=>y.date.localeCompare(x.date));}
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps",DOC_ID);
 function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isSyncKey(k))o[k]=localStorage.getItem(k);}return o;}
 let suppress=false,lastUpdated=0,timer=null;
@@ -1306,8 +1308,19 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 (async function(){
   fbDot('#F59E0B','Bağlanıyor');
   try{const snap=await getDoc(dref);
-    if(snap.exists()&&snap.data().data){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Senkron');}
-    else{await push();}
+    const remote=(snap.exists()&&snap.data().data)?snap.data().data:{};
+    const local=collectLocal();
+    // Çift yönlü birleştirme: uzaktaki + yereldeki tüm toplantıları topla
+    const merged=Object.assign({},remote);
+    Object.keys(local).forEach(k=>{if(k==='rota_arc')return;if(!(k in merged))merged[k]=local[k];});
+    // Arşiv indeksini (rota_arc) iki taraftan birleştir, böylece hiçbir toplantı listeden düşmez
+    try{const ra=remote['rota_arc']?JSON.parse(remote['rota_arc']):[];const la=local['rota_arc']?JSON.parse(local['rota_arc']):[];const m=mergeArc(ra,la);if(m.length)merged['rota_arc']=JSON.stringify(m);}catch(e){}
+    applyRemote(merged);
+    if(window.__reloadFromStorage)window.__reloadFromStorage();
+    const changed=JSON.stringify(merged)!==JSON.stringify(remote);
+    if(changed||!snap.exists()){await push();}// yerelde uzakta olmayan veri varsa Firebase'e yükle
+    else{lastUpdated=snap.data().updated||0;}
+    fbDot('#16A34A','Senkron');
   }catch(e){console.warn('FB init',e);fbDot('#EF4444','Çevrimdışı');}
   try{onSnapshot(dref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||(d.updated&&d.updated===lastUpdated))return;lastUpdated=d.updated||0;applyRemote(d.data);if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Güncellendi');});}catch(e){}
 })();
