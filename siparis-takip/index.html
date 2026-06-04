@@ -105,6 +105,13 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .st-iptal{background:var(--red-100);color:var(--red-700)}
 .firma-SMI{background:#EDE9FE;color:#6D28D9;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
 .firma-ROTA{background:#CFFAFE;color:#0E7490;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.kom-chip{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap;letter-spacing:.01em}
+.kom-chip.kom-bayi{background:#DBEAFE;color:#1D4ED8}
+.kom-chip.kom-danisman{background:#EDE9FE;color:#6D28D9}
+.tbl tbody tr.row-bayi{background:rgba(37,99,235,.05)}
+.tbl tbody tr.row-bayi:hover{background:rgba(37,99,235,.11)}
+.tbl tbody tr.row-danisman{background:rgba(124,58,237,.06)}
+.tbl tbody tr.row-danisman:hover{background:rgba(124,58,237,.12)}
 /* filters */
 .filters{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .filters input,.filters select{padding:8px 11px;border:1px solid var(--slate-300);border-radius:6px;font-size:12.5px;background:#fff;color:var(--slate-700)}
@@ -379,7 +386,7 @@ function applyPriceList(){
   DB.meta=DB.meta||{};DB.meta.priceVersion=PRICE_VERSION;DB.meta.priceDate='23.03.2026';if(DB.meta.tdIskonto==null)DB.meta.tdIskonto=TD_ISKONTO_DEFAULT;
 }
 let DB=null, USER=null, VIEW='panel';
-let filt={q:'',status:'',firma:'',from:'',to:''};
+let filt={q:'',status:'',firma:'',from:'',to:'',kom:'',year:'',month:''};
 
 function loadDB(){
   let raw=localStorage.getItem(LSKEY);
@@ -562,8 +569,16 @@ function filteredOrders(){
   if(filt.firma)arr=arr.filter(o=>o.firma===filt.firma);
   if(filt.from)arr=arr.filter(o=>o.date>=filt.from);
   if(filt.to)arr=arr.filter(o=>o.date<=filt.to);
+  if(filt.kom){
+    if(filt.kom==='all-bayi')arr=arr.filter(o=>{const k=komById(o.komisyoncuId);return k&&k.type==='bayi'});
+    else if(filt.kom==='all-danisman')arr=arr.filter(o=>{const k=komById(o.komisyoncuId);return k&&k.type==='danisman'});
+    else arr=arr.filter(o=>o.komisyoncuId===filt.kom);
+  }
+  if(filt.year)arr=arr.filter(o=>(o.date||'').slice(0,4)===filt.year);
+  if(filt.month)arr=arr.filter(o=>(o.date||'').slice(5,7)===filt.month);
   return arr.sort((a,b)=>b.date.localeCompare(a.date)||(b.id>a.id?1:-1));
 }
+function orderYears(){return [...new Set(DB.orders.map(o=>(o.date||'').slice(0,4)).filter(Boolean))].sort().reverse();}
 function setStatusTab(v){filt.status=v;render()}
 function renderOrders(c,tb){
   if(canEdit())tb.innerHTML=`<button class="btn btn-pri" onclick="openOrder()">+ Yeni Sipariş</button>`;
@@ -575,9 +590,18 @@ function renderOrders(c,tb){
   <div class="filters">
     <input class="fsearch" placeholder="Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
     <select onchange="filt.firma=this.value;refreshOrders()"><option value="">Tüm Firmalar</option>${optFirma().map(f=>`<option value="${esc(f)}" ${filt.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
+    <select onchange="filt.kom=this.value;refreshOrders()" title="Bayi / Teknik Danışman">
+      <option value="">Tüm Bayi &amp; Danışman</option>
+      <option value="all-bayi" ${filt.kom==='all-bayi'?'selected':''}>▸ Bayili siparişler</option>
+      <option value="all-danisman" ${filt.kom==='all-danisman'?'selected':''}>▸ Danışmanlı siparişler</option>
+      <optgroup label="Bayiler">${komByType('bayi').map(k=>`<option value="${k.id}" ${filt.kom===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</optgroup>
+      <optgroup label="Teknik Danışmanlar">${komByType('danisman').map(k=>`<option value="${k.id}" ${filt.kom===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</optgroup>
+    </select>
+    <select onchange="filt.year=this.value;refreshOrders()" title="Yıl"><option value="">Tüm Yıllar</option>${orderYears().map(y=>`<option value="${y}" ${filt.year===y?'selected':''}>${y}</option>`).join('')}</select>
+    <select onchange="filt.month=this.value;refreshOrders()" title="Ay"><option value="">Tüm Aylar</option>${AYLAR_TR.map((m,i)=>{const mv=String(i+1).padStart(2,'0');return `<option value="${mv}" ${filt.month===mv?'selected':''}>${m}</option>`}).join('')}</select>
     <input type="date" value="${filt.from}" onchange="filt.from=this.value;refreshOrders()" title="Başlangıç">
     <input type="date" value="${filt.to}" onchange="filt.to=this.value;refreshOrders()" title="Bitiş">
-    ${(filt.q||filt.status||filt.firma||filt.from||filt.to)?`<button class="btn btn-gray btn-sm" onclick="filt={q:'',status:'',firma:'',from:'',to:''};refreshOrders()">✕ Temizle</button>`:''}
+    ${(filt.q||filt.status||filt.firma||filt.from||filt.to||filt.kom||filt.year||filt.month)?`<button class="btn btn-gray btn-sm" onclick="filt={q:'',status:'',firma:'',from:'',to:'',kom:'',year:'',month:''};refreshOrders()">✕ Temizle</button>`:''}
   </div>
   <div class="card"><div class="card-hd"><h3 id="ordCount">${arr.length} Sipariş</h3>${canSeePrice()?`<span id="ordTotal" style="font-size:12px;color:var(--slate-500)">Toplam: <b style="color:var(--blue-900)">${fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))}</b></span>`:''}</div><div class="card-bd" id="ordersTable">${orderTable(arr)}</div></div>`;
   c.innerHTML=h;
@@ -591,12 +615,14 @@ function refreshOrders(){
 function orderTable(arr){
   if(!arr.length)return `<div class="tbl-empty">Sipariş bulunamadı</div>`;
   const priceCol=canSeePrice();
-  return `<table class="tbl"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Firma</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
+  return `<table class="tbl"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
     const prods=(o.lines||[]).map(l=>l.code).join(', ');
-    return `<tr>
+    const kom=o.komisyoncuId?komById(o.komisyoncuId):null;
+    return `<tr class="${kom?('row-'+kom.type):''}">
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap">${fmtDate(o.date)}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer"><b>${esc(o.customer)}</b></td>
       <td>${o.firma?`<span class="firma-${o.firma}">${o.firma}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
+      <td>${kom?`<span class="kom-chip kom-${kom.type}" title="${kom.type==='danisman'?'Teknik Danışman':'Bayi'}">${esc(kom.name)}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--slate-500)" title="${esc(prods)}">${esc(prods)||'—'}</td>
       <td class="num">${(o.lines||[]).length}</td>
       ${priceCol?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
