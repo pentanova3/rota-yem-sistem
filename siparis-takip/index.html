@@ -420,6 +420,7 @@ function loadDB(){
   }
   DB.users=DB.users||[{username:'admin',password:'rota2026',role:'admin',name:'Yönetici'}];
   DB.log=DB.log||[];DB.products=DB.products||[];DB.customers=DB.customers||[];DB.orders=DB.orders||[];DB.stock=DB.stock||{};DB.meta=DB.meta||{};
+  DB.hammaddeler=DB.hammaddeler||[];DB.receteler=DB.receteler||{};DB.uretimler=DB.uretimler||[];
   if(!DB.uzakCities)DB.uzakCities=UZAK_CITIES.filter(c=>c!=='URFA'&&c!=='ANTEP');
   // Fiyat listesi güncellemesi (versiyon değiştiyse mevcut kurulumu da güncelle)
   if(DB.meta.priceVersion!==PRICE_VERSION){applyPriceList();saveDB();}
@@ -473,7 +474,8 @@ const ICON_PATHS={
   ayarlar:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   menu:'<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>',
-  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>'
+  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
+  hammadde:'<path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/>'
 };
 function svgIcon(name,cls){return `<svg class="${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[name]||''}</svg>`}
 // ============ NAV ============
@@ -485,12 +487,13 @@ const NAV=[
   {v:'komisyon',ic:'komisyon',l:'Komisyon'},
   {v:'urunler',ic:'urunler',l:'Ürünler & Fiyat'},
   {v:'stok',ic:'stok',l:'Stok'},
+  {v:'hammadde',ic:'hammadde',l:'Hammadde Stok'},
   {v:'raporlar',ic:'raporlar',l:'Raporlar'},
   {v:'ayarlar',ic:'ayarlar',l:'Ayarlar'}
 ];
 function renderNav(){
   const pending=DB.orders.filter(o=>o.status==='beklemede').length;
-  document.getElementById('sbNav').innerHTML=NAV.filter(n=>n.v!=='ayarlar'||isAdmin()).map(n=>{
+  document.getElementById('sbNav').innerHTML=NAV.filter(n=>(n.v!=='ayarlar'&&n.v!=='hammadde')||isAdmin()).map(n=>{
     const badge=(n.v==='siparisler'&&pending)?`<span class="nav-badge">${pending}</span>`:'';
     return `<div class="nav-item ${n.v===VIEW?'active':''}" onclick="go('${n.v}')"><span class="nav-ic">${svgIcon(n.ic)}</span><span>${n.l}</span>${badge}</div>`;
   }).join('');
@@ -513,6 +516,7 @@ function render(){
   else if(VIEW==='komisyon')renderKomisyon(c,tb);
   else if(VIEW==='urunler')renderProducts(c,tb);
   else if(VIEW==='stok')renderStock(c,tb);
+  else if(VIEW==='hammadde')renderHammadde(c,tb);
   else if(VIEW==='raporlar')renderReports(c,tb);
   else if(VIEW==='ayarlar')renderSettings(c,tb);
 }
@@ -1153,6 +1157,116 @@ function renderStock(c,tb){
 }
 // ============ REPORTS ============
 let repView='aylik',repCharts=[],repFilt={year:'',month:''};
+// ============================================================
+// HAMMADDE STOK & REÇETE & ÜRETİM  (ana omurga)
+// ============================================================
+let hamTab='liste', hamReceteProd='', editHam=null, uForm={date:'',productId:'',miktar:'',not:''};
+const HAM_BIRIM=['kg','ton','lt','adet','torba'];
+const RECETE_BAZ=[{v:'ton',l:'1 Ton mamul'},{v:'cuval',l:'1 Çuval (25 kg)'},{v:'kg',l:'1 kg mamul'}];
+function hammaddeById(id){return (DB.hammaddeler||[]).find(h=>h.id===id)}
+function hamLow(h){return h&&+h.altLimit>0&&(+h.stok||0)<=+h.altLimit}
+function hamFull(h){return h&&+h.ustLimit>0&&(+h.stok||0)>=+h.ustLimit}
+function hamDurum(h){if(hamLow(h))return '<span class="badge st-iptal">Düşük</span>';if(hamFull(h))return '<span class="badge st-onay">Dolu</span>';return '<span class="badge st-teslim">Normal</span>'}
+function bazLbl(v){return (RECETE_BAZ.find(b=>b.v===v)||{}).l||v}
+function renderHammadde(c,tb){
+  if(!isAdmin()){c.innerHTML=`<div class="tbl-empty card" style="padding:50px">Bu bölüm yalnızca yöneticiye açıktır.</div>`;return}
+  tb.innerHTML='';
+  const tabs=[{v:'liste',l:'Hammaddeler'},{v:'recete',l:'Reçeteler'},{v:'uretim',l:'Üretim'}];
+  let h=`<div class="order-tabs">${tabs.map(t=>`<button class="otab ${hamTab===t.v?'active':''}" onclick="hamTabSet('${t.v}')">${t.l}</button>`).join('')}</div>`;
+  if(hamTab==='liste')h+=hammaddeListHTML();else if(hamTab==='recete')h+=receteHTML();else h+=uretimHTML();
+  c.innerHTML=h;
+}
+function hamTabSet(t){hamTab=t;render()}
+// ---- 1) HAMMADDELER ----
+function hammaddeListHTML(){
+  const arr=(DB.hammaddeler||[]).slice().sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
+  const lowCount=arr.filter(hamLow).length;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px"><div style="font-size:12.5px;color:var(--slate-600)">${arr.length} hammadde${lowCount?` · <b style="color:var(--red-700)">${lowCount} düşük stok</b>`:''}</div><button class="btn btn-pri" onclick="openHam()">+ Hammadde Ekle</button></div>
+    <div class="card"><div class="card-bd"><table class="tbl"><thead><tr><th>Hammadde</th><th class="num">Stok</th><th class="num">Alt / Üst</th><th>Tedarikçi</th><th>İrtibat</th><th>Durum</th><th></th></tr></thead><tbody>${arr.length?arr.map(h=>`<tr class="${hamLow(h)?'row-danisman':''}">
+      <td><b>${esc(h.ad)}</b>${h.not?`<div style="font-size:10px;color:var(--slate-400)">${esc(h.not)}</div>`:''}</td>
+      <td class="num"><b>${fmtN(h.stok)}</b> <span style="color:var(--slate-400);font-size:10px">${esc(h.birim||'')}</span></td>
+      <td class="num" style="font-size:11px;color:var(--slate-500)">${fmtN(h.altLimit)} / ${fmtN(h.ustLimit)}</td>
+      <td style="font-size:11.5px">${h.tedarikci?esc(h.tedarikci):'<span style="color:var(--slate-300)">—</span>'}</td>
+      <td style="font-size:11.5px">${h.irtibat?esc(h.irtibat):''}${h.telefon?`<div style="font-size:10px;color:var(--slate-400)">${esc(h.telefon)}</div>`:''}</td>
+      <td>${hamDurum(h)}</td>
+      <td style="white-space:nowrap"><button class="btn-ic" title="Stok girişi" onclick="quickGiris('${h.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button><button class="btn-ic" title="Düzenle" onclick="openHam('${h.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${h.telefon?`<button class="btn-ic" style="color:#25D366" title="WhatsApp" onclick="window.open('https://wa.me/'+'${phoneClean(h.telefon)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>
+    </tr>`).join(''):'<tr><td colspan="7" class="tbl-empty">Henüz hammadde eklenmedi. "+ Hammadde Ekle" ile başlayın.</td></tr>'}</tbody></table></div></div>`;
+}
+function openHam(id){
+  editHam=id?JSON.parse(JSON.stringify(hammaddeById(id))):{id:null,ad:'',birim:'kg',stok:0,altLimit:0,ustLimit:0,tedarikci:'',irtibat:'',telefon:'',email:'',not:'',active:true};
+  const o=editHam;
+  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd"><h2>${o.id?'Hammadde Düzenle':'Yeni Hammadde'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
+    <div class="modal-bd">
+      <div class="fgrid"><div class="fld"><label>Hammadde Adı</label><input value="${esc(o.ad)}" onchange="editHam.ad=this.value" placeholder="Örn: Mısır, Soya Küspesi"></div><div class="fld"><label>Birim</label><select onchange="editHam.birim=this.value">${HAM_BIRIM.map(b=>`<option ${o.birim===b?'selected':''}>${b}</option>`).join('')}</select></div></div>
+      <div class="fgrid c3"><div class="fld"><label>Mevcut Stok</label><input type="number" step="0.01" value="${o.stok||''}" onchange="editHam.stok=+this.value"></div><div class="fld"><label>Alt Limit (kritik)</label><input type="number" step="0.01" value="${o.altLimit||''}" onchange="editHam.altLimit=+this.value"></div><div class="fld"><label>Üst Limit (kapasite)</label><input type="number" step="0.01" value="${o.ustLimit||''}" onchange="editHam.ustLimit=+this.value"></div></div>
+      <div class="sub-hd">Tedarik & İrtibat</div>
+      <div class="fgrid"><div class="fld"><label>Tedarikçi / Firma</label><input value="${esc(o.tedarikci)}" onchange="editHam.tedarikci=this.value" placeholder="Nereden alınıyor"></div><div class="fld"><label>İrtibat Kişisi</label><input value="${esc(o.irtibat)}" onchange="editHam.irtibat=this.value" placeholder="Kim irtibat kuruyor"></div></div>
+      <div class="fgrid"><div class="fld"><label>Telefon</label><input value="${esc(o.telefon)}" onchange="editHam.telefon=this.value"></div><div class="fld"><label>E-posta</label><input value="${esc(o.email)}" onchange="editHam.email=this.value"></div></div>
+      <div class="fld"><label>Not</label><input value="${esc(o.not)}" onchange="editHam.not=this.value"></div>
+    </div>
+    <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" style="color:var(--red-700)" onclick="delHam('${o.id}')">Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveHam()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+  </div></div>`;
+  document.getElementById('modalRoot').innerHTML=m;
+}
+function saveHam(){const o=editHam;if(!o.ad.trim()){toast('Hammadde adı girin');return}if(o.id){const i=DB.hammaddeler.findIndex(h=>h.id===o.id);DB.hammaddeler[i]=o}else{o.id=uid('h');DB.hammaddeler.push(o)}logAct('Hammadde: '+o.ad);saveDB();closeModal();toast('Kaydedildi');render()}
+function delHam(id){if(!confirm('Hammadde silinsin mi? Reçetelerden de çıkarılır.'))return;DB.hammaddeler=DB.hammaddeler.filter(h=>h.id!==id);Object.keys(DB.receteler||{}).forEach(pid=>{if(DB.receteler[pid]&&DB.receteler[pid].kalemler)DB.receteler[pid].kalemler=DB.receteler[pid].kalemler.filter(k=>k.hammaddeId!==id)});saveDB();closeModal();toast('Silindi');render()}
+function quickGiris(id){const h=hammaddeById(id);if(!h)return;const v=prompt('Stok girişi — '+h.ad+' ('+h.birim+'). Eklenecek miktar:','');if(v==null)return;const add=parseFloat(String(v).replace(',','.'))||0;if(!add)return;h.stok=(+h.stok||0)+add;logAct('Stok girişi: '+h.ad+' +'+add);saveDB();toast(h.ad+' +'+add+' '+h.birim);render()}
+// ---- 2) REÇETELER ----
+function ensureRecete(){if(!hamReceteProd)return null;if(!DB.receteler[hamReceteProd])DB.receteler[hamReceteProd]={baz:'ton',kalemler:[]};return DB.receteler[hamReceteProd]}
+function receteHTML(){
+  const prods=DB.products.filter(p=>p.active!==false).slice().sort((a,b)=>a.code.localeCompare(b.code,'tr'));
+  if(!hamReceteProd&&prods.length)hamReceteProd=prods[0].id;
+  const rec=DB.receteler[hamReceteProd]||{baz:'ton',kalemler:[]};
+  const hams=(DB.hammaddeler||[]).slice().sort((a,b)=>a.ad.localeCompare(b.ad,'tr'));
+  return `<div class="filters" style="margin-bottom:16px"><select onchange="hamReceteProd=this.value;render()" style="min-width:210px">${prods.map(p=>`<option value="${p.id}" ${hamReceteProd===p.id?'selected':''}>${esc(p.code)} — ${esc(p.name)}</option>`).join('')}</select><select onchange="setReceteBaz(this.value)" title="Reçete bazı">${RECETE_BAZ.map(b=>`<option value="${b.v}" ${rec.baz===b.v?'selected':''}>${b.l} için</option>`).join('')}</select></div>
+    ${hams.length===0?'<div class="tbl-empty card">Önce "Hammaddeler" sekmesinden hammadde ekleyin.</div>':
+    `<div class="card"><div class="card-hd"><h3>Reçete · <b>${bazLbl(rec.baz)}</b> başına</h3></div><div class="card-bd">
+      <table class="tbl"><thead><tr><th style="width:55%">Hammadde</th><th class="num" style="width:30%">Miktar</th><th></th></tr></thead><tbody>
+      ${(rec.kalemler||[]).map((k,i)=>{const h=hammaddeById(k.hammaddeId);return `<tr><td><select onchange="setReceteKalem(${i},'hammaddeId',this.value)"><option value="">— Hammadde —</option>${hams.map(hh=>`<option value="${hh.id}" ${k.hammaddeId===hh.id?'selected':''}>${esc(hh.ad)}</option>`).join('')}</select></td><td class="num"><input type="number" step="0.0001" value="${k.miktar||''}" onchange="setReceteKalem(${i},'miktar',this.value)" style="text-align:right;max-width:120px"> <span style="color:var(--slate-400);font-size:10px">${h?esc(h.birim):''}</span></td><td><button class="rm-btn" onclick="removeReceteKalem(${i})">✕</button></td></tr>`}).join('')||'<tr><td colspan="3" class="tbl-empty">Henüz kalem yok</td></tr>'}
+      </tbody></table><button class="btn btn-gray btn-sm" style="margin-top:10px" onclick="addReceteKalem()">+ Hammadde Kalemi Ekle</button>
+    </div></div>`}`;
+}
+function setReceteBaz(v){const r=ensureRecete();if(r){r.baz=v;saveDB();render()}}
+function addReceteKalem(){const r=ensureRecete();if(r){r.kalemler.push({hammaddeId:'',miktar:''});saveDB();render()}}
+function setReceteKalem(i,f,v){const r=ensureRecete();if(r){r.kalemler[i][f]=(f==='miktar'?(+v||0):v);saveDB();render()}}
+function removeReceteKalem(i){const r=ensureRecete();if(r){r.kalemler.splice(i,1);saveDB();render()}}
+// ---- 3) ÜRETİM ----
+function uretimHTML(){
+  const prods=DB.products.filter(p=>p.active!==false).slice().sort((a,b)=>a.code.localeCompare(b.code,'tr'));
+  if(!uForm.date)uForm.date=todayISO();
+  const rec=uForm.productId?DB.receteler[uForm.productId]:null;
+  const prod=uForm.productId?DB.products.find(p=>p.id===uForm.productId):null;
+  const mik=+uForm.miktar||0;
+  let preview='';
+  if(rec&&(rec.kalemler||[]).filter(k=>k.hammaddeId).length&&mik){
+    preview=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Düşülecek Hammaddeler · ${fmtN(mik)} × ${bazLbl(rec.baz)}</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Hammadde</th><th class="num">Düşülecek</th><th class="num">Mevcut</th><th class="num">Kalan</th></tr></thead><tbody>${rec.kalemler.filter(k=>k.hammaddeId).map(k=>{const h=hammaddeById(k.hammaddeId);if(!h)return '';const d=(+k.miktar||0)*mik;const kalan=(+h.stok||0)-d;return `<tr><td><b>${esc(h.ad)}</b></td><td class="num">${fmtN(d)} ${esc(h.birim)}</td><td class="num">${fmtN(h.stok)}</td><td class="num" style="font-weight:700;${kalan<0?'color:var(--red-700)':(hamLow({altLimit:h.altLimit,stok:kalan})?'color:var(--amber-700)':'')}">${fmtN(kalan)}${kalan<0?' ⚠':''}</td></tr>`}).join('')}</tbody></table></div></div>`;
+  }else if(uForm.productId&&(!rec||!(rec.kalemler||[]).filter(k=>k.hammaddeId).length)){
+    preview=`<div class="tbl-empty card" style="margin-top:14px">Bu ürünün reçetesi tanımlı değil. "Reçeteler" sekmesinden ekleyin.</div>`;
+  }
+  const canSave=rec&&(rec.kalemler||[]).filter(k=>k.hammaddeId).length&&mik>0;
+  const hist=(DB.uretimler||[]).slice(0,30);
+  return `<div class="card"><div class="card-hd"><h3>Yeni Üretim Kaydı</h3></div><div class="card-bd">
+      <div class="fgrid c3"><div class="fld"><label>Tarih</label><input type="date" value="${uForm.date}" onchange="uForm.date=this.value"></div><div class="fld"><label>Ürün</label><select onchange="uForm.productId=this.value;render()"><option value="">— Ürün Seçiniz —</option>${prods.map(p=>`<option value="${p.id}" ${uForm.productId===p.id?'selected':''}>${esc(p.code)} — ${esc(p.name)}</option>`).join('')}</select></div><div class="fld"><label>Üretim Miktarı${rec?' ('+rec.baz+')':''}</label><input type="number" step="0.01" value="${uForm.miktar}" placeholder="Örn: 10" onchange="uForm.miktar=this.value;render()"></div></div>
+      <div class="fld"><label>Not (opsiyonel)</label><input value="${esc(uForm.not||'')}" onchange="uForm.not=this.value"></div>
+      ${preview}
+      <button class="btn btn-pri" style="margin-top:14px" onclick="kaydetUretim()" ${canSave?'':'disabled'}>Üretimi Kaydet & Stok Düş</button>
+    </div></div>
+    <div class="card" style="margin-top:16px"><div class="card-hd"><h3>Son Üretimler</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th class="num">Miktar</th><th>Hammadde Düşümü</th><th></th></tr></thead><tbody>${hist.length?hist.map(u=>`<tr><td style="white-space:nowrap">${fmtDate(u.date)}</td><td><b>${esc(u.productCode||'')}</b></td><td class="num">${fmtN(u.miktar)} ${esc(u.baz||'')}</td><td style="font-size:11px;color:var(--slate-500)">${(u.kalemler||[]).map(k=>esc(k.ad)+' −'+fmtN(k.dusulen)+(k.birim||'')).join(', ')}</td><td><button class="btn-ic" title="Geri al" onclick="silUretim('${u.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg></button></td></tr>`).join(''):'<tr><td colspan="5" class="tbl-empty">Henüz üretim kaydı yok</td></tr>'}</tbody></table></div></div>`;
+}
+function kaydetUretim(){
+  const pid=uForm.productId,mik=+uForm.miktar||0;const rec=DB.receteler[pid];const prod=DB.products.find(p=>p.id===pid);
+  const kal=rec?(rec.kalemler||[]).filter(k=>k.hammaddeId):[];
+  if(!pid||!mik||!kal.length){toast('Ürün, miktar ve reçete gerekli');return}
+  const kalemler=kal.map(k=>{const h=hammaddeById(k.hammaddeId);return {hammaddeId:k.hammaddeId,ad:h?h.ad:'?',birim:h?h.birim:'',dusulen:(+k.miktar||0)*mik}});
+  kalemler.forEach(k=>{const h=hammaddeById(k.hammaddeId);if(h)h.stok=(+h.stok||0)-k.dusulen});
+  DB.uretimler.unshift({id:uid('u'),date:uForm.date||todayISO(),productId:pid,productCode:prod?prod.code:'',productName:prod?prod.name:'',miktar:mik,baz:rec.baz,kalemler,not:uForm.not||'',user:USER?USER.username:'',ts:Date.now()});
+  logAct('Üretim: '+(prod?prod.code:'')+' x'+mik);saveDB();hammaddeAlertCheck(kalemler);
+  uForm={date:todayISO(),productId:'',miktar:'',not:''};toast('Üretim kaydedildi, hammadde stoğu düşüldü');render();
+}
+function silUretim(id){const u=(DB.uretimler||[]).find(x=>x.id===id);if(!u)return;if(!confirm('Üretim geri alınsın mı? Düşülen hammaddeler stoğa iade edilir.'))return;(u.kalemler||[]).forEach(k=>{const h=hammaddeById(k.hammaddeId);if(h)h.stok=(+h.stok||0)+k.dusulen});DB.uretimler=DB.uretimler.filter(x=>x.id!==id);saveDB();toast('Üretim geri alındı');render()}
+function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k=>k.hammaddeId))].map(hammaddeById).filter(h=>hamLow(h));if(low.length)toast('⚠ Düşük stok: '+low.map(h=>h.ad).join(', '));/* TODO: Telegram entegrasyonu (alt limit altı bildirim) sonra eklenecek */}
+
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi'};
 const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
