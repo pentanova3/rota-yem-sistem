@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rota Yem · Sipariş Takip Sistemi</title>
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --blue-900:#0C2340;--blue-800:#103561;--blue-700:#174B82;--blue-600:#1D62A8;--blue-500:#2878C8;--blue-400:#4A9AE5;--blue-300:#8DC2F2;--blue-200:#C1DEF7;--blue-100:#E8F1FB;--blue-50:#F3F8FD;
   --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#334155;--slate-600:#475569;--slate-500:#64748B;--slate-400:#94A3B8;--slate-300:#CBD5E1;--slate-200:#E2E8F0;--slate-100:#F1F5F9;--slate-50:#F8FAFC;--white:#fff;
   --green-600:#16A34A;--green-100:#DCFCE7;--green-700:#15803D;--amber-500:#F59E0B;--amber-100:#FEF3C7;--amber-700:#B45309;--red-500:#EF4444;--red-100:#FEE2E2;--red-700:#B91C1C;--purple:#7C3AED;
-  --font-sans:'Figtree',system-ui,-apple-system,sans-serif;--font-serif:'Source Serif 4',Georgia,serif;
+  --font-sans:'Inter',system-ui,-apple-system,sans-serif;--font-serif:'Inter',system-ui,sans-serif;
   --sidebar-w:236px;
 }
 html,body{height:100%;font-family:var(--font-sans);font-size:13px;color:var(--slate-900);background:var(--slate-100);-webkit-font-smoothing:antialiased}
@@ -43,10 +44,12 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .sb-brand .bi{width:130px;height:auto;display:block;margin-bottom:8px;background:#fff;padding:8px 12px;border-radius:8px}
 .sb-brand .bs{font-size:9.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--blue-400);margin-top:2px}
 .sb-nav{flex:1;padding:8px 0}
-.nav-item{display:flex;align-items:center;gap:11px;padding:10px 20px;cursor:pointer;color:rgba(255,255,255,.6);font-size:12.5px;font-weight:500;border-left:3px solid transparent;transition:all .12s}
-.nav-item:hover{color:#fff;background:rgba(255,255,255,.05)}
-.nav-item.active{color:#fff;background:rgba(255,255,255,.08);border-left-color:var(--blue-400);font-weight:600}
-.nav-ic{width:18px;text-align:center;font-size:15px;flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:11px;padding:9px 18px;margin:1px 10px;border-radius:8px;cursor:pointer;color:rgba(225,236,250,.62);font-size:12.5px;font-weight:500;transition:color .15s,background .15s}
+.nav-item:hover{color:#fff;background:rgba(255,255,255,.06)}
+.nav-item.active{color:#fff;background:var(--blue-600);font-weight:600;box-shadow:0 2px 10px -2px rgba(40,120,200,.55)}
+.nav-ic{width:18px;height:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;opacity:.9}
+.nav-ic svg{width:18px;height:18px}
+.nav-item.active .nav-ic{opacity:1}
 .nav-badge{margin-left:auto;background:var(--amber-500);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:9px}
 .sb-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.08)}
 .sb-user{display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.85);font-size:12px;margin-bottom:10px}
@@ -101,7 +104,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .filters{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .filters input,.filters select{padding:8px 11px;border:1px solid var(--slate-300);border-radius:6px;font-size:12.5px;background:#fff;color:var(--slate-700)}
 .filters input:focus,.filters select:focus{outline:none;border-color:var(--blue-500)}
-.fsearch{flex:1;min-width:180px}
+.fsearch{flex:1;min-width:180px;padding-left:33px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:11px center}
 /* modal */
 .modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:flex-start;justify-content:center;z-index:200;padding:30px 16px;overflow-y:auto}
 .modal{background:#fff;border-radius:11px;width:100%;max-width:760px;box-shadow:0 25px 70px rgba(0,0,0,.35);margin:auto}
@@ -201,7 +204,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
   <div class="main">
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:12px">
-        <button class="btn-ic mob-menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+        <button class="btn-ic mob-menu" onclick="document.getElementById('sidebar').classList.toggle('open')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
         <div class="tb-title" id="viewTitle">Panel</div>
       </div>
       <div class="tb-actions" id="tbActions"></div>
@@ -429,23 +432,39 @@ function doLogin(e){e.preventDefault();
 }
 function logout(){sessionStorage.removeItem('rota_so_user');USER=null;location.reload()}
 function tryAutoLogin(){const u=sessionStorage.getItem('rota_so_user');if(u){const usr=DB.users.find(x=>x.username===u);if(usr){USER=usr;document.getElementById('loginWrap').classList.add('hidden');document.getElementById('app').classList.add('on');initApp();return true}}return false}
+// ============ İKONLAR (inline SVG, Lucide tarzı) ============
+const ICON_PATHS={
+  panel:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  siparisler:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+  musteriler:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  komisyoncular:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  komisyon:'<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  urunler:'<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  stok:'<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  raporlar:'<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  ayarlar:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  menu:'<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>',
+  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>'
+};
+function svgIcon(name,cls){return `<svg class="${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[name]||''}</svg>`}
 // ============ NAV ============
 const NAV=[
-  {v:'panel',ic:'▦',l:'Panel'},
-  {v:'siparisler',ic:'▤',l:'Siparişler'},
-  {v:'musteriler',ic:'◉',l:'Müşteriler'},
-  {v:'komisyoncular',ic:'🤝',l:'Bayi & Danışman'},
-  {v:'komisyon',ic:'₺',l:'Komisyon'},
-  {v:'urunler',ic:'⬡',l:'Ürünler & Fiyat'},
-  {v:'stok',ic:'▥',l:'Stok'},
-  {v:'raporlar',ic:'📊',l:'Raporlar'},
-  {v:'ayarlar',ic:'⚙',l:'Ayarlar'}
+  {v:'panel',ic:'panel',l:'Panel'},
+  {v:'siparisler',ic:'siparisler',l:'Siparişler'},
+  {v:'musteriler',ic:'musteriler',l:'Müşteriler'},
+  {v:'komisyoncular',ic:'komisyoncular',l:'Bayi & Danışman'},
+  {v:'komisyon',ic:'komisyon',l:'Komisyon'},
+  {v:'urunler',ic:'urunler',l:'Ürünler & Fiyat'},
+  {v:'stok',ic:'stok',l:'Stok'},
+  {v:'raporlar',ic:'raporlar',l:'Raporlar'},
+  {v:'ayarlar',ic:'ayarlar',l:'Ayarlar'}
 ];
 function renderNav(){
   const pending=DB.orders.filter(o=>o.status==='beklemede').length;
   document.getElementById('sbNav').innerHTML=NAV.filter(n=>n.v!=='ayarlar'||isAdmin()).map(n=>{
     const badge=(n.v==='siparisler'&&pending)?`<span class="nav-badge">${pending}</span>`:'';
-    return `<div class="nav-item ${n.v===VIEW?'active':''}" onclick="go('${n.v}')"><span class="nav-ic">${n.ic}</span><span>${n.l}</span>${badge}</div>`;
+    return `<div class="nav-item ${n.v===VIEW?'active':''}" onclick="go('${n.v}')"><span class="nav-ic">${svgIcon(n.ic)}</span><span>${n.l}</span>${badge}</div>`;
   }).join('');
 }
 function go(v){VIEW=v;document.getElementById('sidebar').classList.remove('open');render()}
@@ -548,7 +567,7 @@ function renderOrders(c,tb){
   const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'onay',l:'Onaylı'},{v:'hazir',l:'Hazır'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
   let h=`<div class="order-tabs">${tabDefs.map(t=>`<button class="otab ${filt.status===t.v?'active':''}" onclick="setStatusTab('${t.v}')">${t.l} <span class="otab-n">${cnt(t.v)}</span></button>`).join('')}</div>
   <div class="filters">
-    <input class="fsearch" placeholder="🔍 Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
+    <input class="fsearch" placeholder="Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
     <select onchange="filt.firma=this.value;refreshOrders()"><option value="">Tüm Firmalar</option>${optFirma().map(f=>`<option value="${esc(f)}" ${filt.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
     <input type="date" value="${filt.from}" onchange="filt.from=this.value;refreshOrders()" title="Başlangıç">
     <input type="date" value="${filt.to}" onchange="filt.to=this.value;refreshOrders()" title="Bitiş">
@@ -577,7 +596,7 @@ function orderTable(arr){
       ${priceCol?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
       <td style="font-size:11.5px">${esc(o.kargo||'—')}</td>
       <td>${statusBadge(o.status)}</td>
-      <td style="white-space:nowrap"><button class="btn-ic" onclick="openOrder('${o.id}')" title="Detay">✎</button>${custById(o.customerId)?.phone?`<button class="btn-ic" onclick="waOrder('${o.id}')" title="WhatsApp" style="color:#25D366">✆</button>`:''}</td>
+      <td style="white-space:nowrap"><button class="btn-ic" onclick="openOrder('${o.id}')" title="Detay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${custById(o.customerId)?.phone?`<button class="btn-ic" onclick="waOrder('${o.id}')" title="WhatsApp" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>
     </tr>`}).join('')}</tbody></table>`;
 }
 // ============ ORDER MODAL ============
@@ -624,9 +643,9 @@ function renderOrderModal(){
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
     </div>
     <div class="modal-ft">
-      <div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)">🗑 Sil</button>`:''}</div>
+      <div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
       <div style="display:flex;gap:8px">
-        ${o.id?`<button class="btn btn-wa" onclick="waOrderModal()">✆ WhatsApp Mesajı</button>`:''}
+        ${o.id?`<button class="btn btn-wa" onclick="waOrderModal()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp Mesajı</button>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
         <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
       </div>
@@ -672,7 +691,7 @@ function orderKomisyonRow(o,ro){
       <table class="tbl" style="font-size:11.5px"><thead><tr><th>Ürün</th><th class="num">Liste (Torbalı)</th><th class="num">Alış (−%${fmtN(r.rate)})</th><th class="num">Satış</th><th class="num">Miktar</th><th class="num">Prim</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="tbl-empty" style="padding:14px">Ürün ekleyin</td></tr>'}</tbody>
       <tfoot><tr style="background:var(--blue-50)"><td colspan="5" style="text-align:right;font-weight:700;padding:8px 12px">${r.kargo?'Ara Prim − Kargo ('+fmtTL(r.kargo)+') = ':''}Toplam Prim</td><td class="num" style="font-weight:800;font-size:14px;color:var(--blue-900);padding:8px 12px">${fmtTL(r.tutar)}</td></tr></tfoot></table>
     </div>
-    <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px">💡 Danışman primi: <b>(Satış − Alış) × Miktar − Kargo</b>. Satış fiyatı = sipariş kalemindeki birim ₺. Alış = Torbalı liste × (1 − iskonto).</div>`;
+    <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Danışman primi: <b>(Satış − Alış) × Miktar − Kargo</b>. Satış fiyatı = sipariş kalemindeki birim ₺. Alış = Torbalı liste × (1 − iskonto).</div>`;
   }
   return `<div class="sub-hd">Komisyon <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— yalnızca biri komisyon alır${isDan?' · Danışman: PRİM modeli':' · Bayi: % ciro'}</span></div>
   <div class="fgrid c3">
@@ -752,12 +771,12 @@ function custTableHTML(){
   let arr=DB.customers.slice();
   if(custQ){const q=custQ.toLowerCase();arr=arr.filter(x=>x.name.toLowerCase().includes(q)||(x.city||'').toLowerCase().includes(q))}
   arr.sort((a,b)=>(b.orderCount||0)-(a.orderCount||0)||a.name.localeCompare(b.name,'tr'));
-  return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th>Şehir/Konum</th><th>Firma</th><th>Telefon</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b></td><td style="font-size:11.5px;color:var(--slate-500)">${esc(x.city||'—')}</td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td>${x.phone?esc(x.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${x.orderCount||0}</td><td><button class="btn-ic" onclick="openCust('${x.id}')">✎</button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366">✆</button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
+  return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th>Şehir/Konum</th><th>Firma</th><th>Telefon</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b></td><td style="font-size:11.5px;color:var(--slate-500)">${esc(x.city||'—')}</td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td>${x.phone?esc(x.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${x.orderCount||0}</td><td><button class="btn-ic" onclick="openCust('${x.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshCust(){const el=document.getElementById('custCard');if(el)el.innerHTML=custTableHTML()}
 function renderCustomers(c,tb){
   if(canEdit())tb.innerHTML=`<button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>`;
-  let h=`<div class="filters"><input class="fsearch" placeholder="🔍 Müşteri / şehir ara..." value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
+  let h=`<div class="filters"><input class="fsearch" placeholder="Müşteri / şehir ara..." value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
   <div class="card" id="custCard">${custTableHTML()}</div>`;
   c.innerHTML=h;
 }
@@ -780,8 +799,8 @@ function openCust(id){
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editCust.note=this.value">${esc(o.note||'')}</textarea></div>
       ${o.id?`<div class="sub-hd">Sipariş Geçmişi (${orders.length})</div><div style="max-height:200px;overflow-y:auto"><table class="tbl"><tbody>${orders.slice(0,20).map(x=>`<tr onclick="closeModal();openOrder('${x.id}')" style="cursor:pointer"><td>${fmtDate(x.date)}</td><td>${(x.lines||[]).length} kalem</td>${canSeePrice()?`<td class="num">${fmtTL(orderTotal(x))}</td>`:''}<td>${statusBadge(x.status)}</td></tr>`).join('')||'<tr><td class="tbl-empty">Sipariş yok</td></tr>'}</tbody></table></div>`:''}
     </div>
-    <div class="modal-ft"><div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delCust('${o.id}')" style="color:var(--red-700)">🗑 Sil</button>`:''}</div>
-    <div style="display:flex;gap:8px">${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/${phoneClean(o.phone)}','_blank')">✆ WhatsApp</button>`:''}${ro?'':`<button class="btn btn-grn" onclick="saveCust()">Kaydet</button>`}<button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+    <div class="modal-ft"><div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delCust('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
+    <div style="display:flex;gap:8px">${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/${phoneClean(o.phone)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp</button>`:''}${ro?'':`<button class="btn btn-grn" onclick="saveCust()">Kaydet</button>`}<button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
@@ -799,7 +818,7 @@ function komFiltered(){
 function komTableHTML(){
   const arr=komFiltered();
   const assignCount={};DB.customers.forEach(c=>{if(c.bayiId)assignCount[c.bayiId]=(assignCount[c.bayiId]||0)+1;if(c.danismanId)assignCount[c.danismanId]=(assignCount[c.danismanId]||0)+1});
-  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td onclick="openKom(null,'${k.id}')" style="cursor:pointer"><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' komisyon':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="btn-ic" onclick="openKom(null,'${k.id}')">✎</button>${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp">✆</button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
+  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td onclick="openKom(null,'${k.id}')" style="cursor:pointer"><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' komisyon':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="btn-ic" onclick="openKom(null,'${k.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
 function renderKomisyoncular(c,tb){
@@ -807,11 +826,11 @@ function renderKomisyoncular(c,tb){
   const bayiCount=(DB.komisyoncular||[]).filter(k=>k.type==='bayi').length;
   const danCount=(DB.komisyoncular||[]).filter(k=>k.type==='danisman').length;
   let h=`<div class="filters">
-    <input class="fsearch" placeholder="🔍 İsim / şehir ara..." value="${esc(komQ)}" oninput="komQ=this.value;refreshKom()">
+    <input class="fsearch" placeholder="İsim / şehir ara..." value="${esc(komQ)}" oninput="komQ=this.value;refreshKom()">
     <select onchange="komTypeFilter=this.value;refreshKom()"><option value="">Tümü (${bayiCount+danCount})</option><option value="bayi" ${komTypeFilter==='bayi'?'selected':''}>Bayiler (${bayiCount})</option><option value="danisman" ${komTypeFilter==='danisman'?'selected':''}>Danışmanlar (${danCount})</option></select>
   </div>
   <div class="card" id="komCard">${komTableHTML()}</div>
-  <p style="font-size:11.5px;color:var(--slate-500)">💡 Komisyon oranlarını buradan girin. Sonra <b>Müşteriler</b> bölümünden her müşteriye bayi ve/veya danışman atayın. Siparişlerde komisyon otomatik hesaplanır.</p>`;
+  <p style="font-size:11.5px;color:var(--slate-500)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Komisyon oranlarını buradan girin. Sonra <b>Müşteriler</b> bölümünden her müşteriye bayi ve/veya danışman atayın. Siparişlerde komisyon otomatik hesaplanır.</p>`;
   c.innerHTML=h;
 }
 let editKom=null;
@@ -834,11 +853,11 @@ function renderKomModal(){
     <div class="modal-bd">
       <div class="fgrid"><div class="fld"><label>Ad Soyad / Ünvan</label><input value="${esc(o.name)}" onchange="editKom.name=this.value"></div><div class="fld"><label>Tip</label><select onchange="setKomType(this.value)"><option value="bayi" ${o.type==='bayi'?'selected':''}>Bayi</option><option value="danisman" ${o.type==='danisman'?'selected':''}>Teknik Danışman</option></select></div></div>
       <div class="fgrid">${rateField}<div class="fld"><label>Telefon (WhatsApp)</label><input value="${esc(o.phone)}" onchange="editKom.phone=this.value"></div></div>
-      <div class="fgrid"><div class="fld"><label>Şehir / Konum</label><input value="${esc(o.city||'')}" onchange="editKom.city=this.value"></div><div class="fld"><label></label>${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/'+'${phoneClean(o.phone)}','_blank')">✆ WhatsApp Aç</button>`:'<span></span>'}</div></div>
+      <div class="fgrid"><div class="fld"><label>Şehir / Konum</label><input value="${esc(o.city||'')}" onchange="editKom.city=this.value"></div><div class="fld"><label></label>${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/'+'${phoneClean(o.phone)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp Aç</button>`:'<span></span>'}</div></div>
       <div class="fld"><label>Not</label><textarea rows="2" onchange="editKom.note=this.value">${esc(o.note||'')}</textarea></div>
       <div class="fld"><label><input type="checkbox" ${o.active!==false?'checked':''} onchange="editKom.active=this.checked" style="width:auto;margin-right:6px">Aktif</label></div>
     </div>
-    <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delKom('${o.id}')" style="color:var(--red-700)">🗑 Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveKom()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+    <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delKom('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveKom()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
@@ -860,7 +879,7 @@ function renderKomisyon(c,tb){
   const rows=Object.values(agg).sort((a,b)=>b.komisyon-a.komisyon);
   const totKom=rows.reduce((s,r)=>s+r.komisyon,0);
   const totPaid=Object.values(paid).reduce((a,b)=>a+b,0);
-  tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()">🖨 Yazdır</button>`;
+  tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   let h=`<div class="filters">
     <span style="font-size:12px;color:var(--slate-500);font-weight:600">Dönem:</span>
     <input type="date" value="${komRepFrom}" onchange="komRepFrom=this.value;render()" title="Başlangıç">
@@ -874,7 +893,7 @@ function renderKomisyon(c,tb){
     <div class="kpi g"><div class="kl">Ödenen</div><div class="kv" style="font-size:18px">${fmtTL(totPaid)}</div></div>
     <div class="kpi r"><div class="kl">Kalan Bakiye</div><div class="kv" style="font-size:18px">${fmtTL(totKom-totPaid)}</div></div>
   </div>
-  <div class="card"><div class="card-hd"><h3>Komisyon Hakedişleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kişi</th><th>Tip</th><th class="num">Oran</th><th class="num">Sipariş</th><th class="num">Ciro</th><th class="num">Hak Edilen</th><th class="num">Ödenen</th><th class="num">Bakiye</th><th></th></tr></thead><tbody>${rows.length?rows.map(r=>{const pd=paid[r.kom.id]||0;const bal=r.komisyon-pd;return `<tr><td><b>${esc(r.kom.name)}</b></td><td>${r.kom.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td class="num">%${fmtN(r.kom.rate)}</td><td class="num">${r.adet}</td><td class="num">${fmtTL(r.ciro)}</td><td class="num"><b style="color:var(--blue-900)">${fmtTL(r.komisyon)}</b></td><td class="num" style="color:var(--green-700)">${fmtTL(pd)}</td><td class="num" style="font-weight:700;${bal>0?'color:var(--red-700)':'color:var(--green-700)'}">${fmtTL(bal)}</td><td style="white-space:nowrap"><button class="btn btn-gray btn-sm" onclick="openKomDetay('${r.kom.id}')" title="Prim/komisyon dökümü — Excel & PDF">📋 Döküm</button> <button class="btn btn-gray btn-sm" onclick="openKomOdeme('${r.kom.id}')">₺ Ödeme</button></td></tr>`}).join(''):`<tr><td colspan="9" class="tbl-empty">Bu dönemde komisyon kaydı yok. Siparişlere komisyoncu atayın.</td></tr>`}</tbody></table></div></div>`;
+  <div class="card"><div class="card-hd"><h3>Komisyon Hakedişleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kişi</th><th>Tip</th><th class="num">Oran</th><th class="num">Sipariş</th><th class="num">Ciro</th><th class="num">Hak Edilen</th><th class="num">Ödenen</th><th class="num">Bakiye</th><th></th></tr></thead><tbody>${rows.length?rows.map(r=>{const pd=paid[r.kom.id]||0;const bal=r.komisyon-pd;return `<tr><td><b>${esc(r.kom.name)}</b></td><td>${r.kom.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td class="num">%${fmtN(r.kom.rate)}</td><td class="num">${r.adet}</td><td class="num">${fmtTL(r.ciro)}</td><td class="num"><b style="color:var(--blue-900)">${fmtTL(r.komisyon)}</b></td><td class="num" style="color:var(--green-700)">${fmtTL(pd)}</td><td class="num" style="font-weight:700;${bal>0?'color:var(--red-700)':'color:var(--green-700)'}">${fmtTL(bal)}</td><td style="white-space:nowrap"><button class="btn btn-gray btn-sm" onclick="openKomDetay('${r.kom.id}')" title="Prim/komisyon dökümü — Excel & PDF"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> Döküm</button> <button class="btn btn-gray btn-sm" onclick="openKomOdeme('${r.kom.id}')">₺ Ödeme</button></td></tr>`}).join(''):`<tr><td colspan="9" class="tbl-empty">Bu dönemde komisyon kaydı yok. Siparişlere komisyoncu atayın.</td></tr>`}</tbody></table></div></div>`;
   c.innerHTML=h;
 }
 function setKomRange(t){const n=new Date();if(t==='ay'){komRepFrom=new Date(n.getFullYear(),n.getMonth(),1).toISOString().split('T')[0];komRepTo=todayISO()}else{komRepFrom=new Date(n.getFullYear(),0,1).toISOString().split('T')[0];komRepTo=todayISO()}render()}
@@ -952,7 +971,7 @@ function openKomDetay(komId){
   .bp{background:#7C3AED;color:#fff}.bx{background:#16A34A;color:#fff}.bc{background:#E2E8F0;color:#334155}
   @media print{body{background:#fff;padding:0}.pg{box-shadow:none;padding:0}.pbar{display:none}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-  <div class="pbar"><button class="bx" onclick="window.opener&&window.opener.komisyonCSVProxy&&window.opener.komisyonCSVProxy('${komId}')">⬇ Excel (CSV)</button><button class="bp" onclick="window.print()">🖨 Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button></div>
+  <div class="pbar"><button class="bx" onclick="window.opener&&window.opener.komisyonCSVProxy&&window.opener.komisyonCSVProxy('${komId}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Excel (CSV)</button><button class="bp" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button></div>
   <div class="pg">
     <div class="ph"><div><div class="badge">${isDan?'TEKNİK DANIŞMAN PRİM DÖKÜMÜ':'BAYİ KOMİSYON DÖKÜMÜ'}</div><h1>${esc(d.kom.name)}</h1><div class="s">ROTA YEM · Sipariş Takip Sistemi</div></div><div class="meta"><b>${donem}</b><br>${isDan?'İskonto: %'+fmtN((DB.meta&&DB.meta.tdIskonto)||6):'Komisyon: %'+fmtN(d.kom.rate)}<br>${d.rows.length} kalem</div></div>
     <table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>
@@ -993,7 +1012,7 @@ function openKomOdeme(komId){
       </div>
       <button class="btn btn-grn btn-sm" onclick="addKomOdeme('${komId}')">+ Ödeme Kaydet</button>
       <div class="sub-hd">Ödeme Geçmişi</div>
-      <table class="tbl"><thead><tr><th>Dönem</th><th>Tarih</th><th>Fatura</th><th class="num">Tutar</th><th></th></tr></thead><tbody>${ods.length?ods.map(p=>`<tr><td>${esc(p.donem||'—')}</td><td>${p.odemeTarihi?fmtDate(p.odemeTarihi):'—'}</td><td>${p.faturaNo?'📄 '+esc(p.faturaNo):'—'}</td><td class="num"><b>${fmtTL(p.odenenTutar)}</b></td><td><button class="btn-ic" onclick="delKomOdeme('${p.id}','${komId}')" style="color:var(--red-500)">🗑</button></td></tr>`).join(''):'<tr><td colspan="5" class="tbl-empty">Ödeme kaydı yok</td></tr>'}</tbody></table>
+      <table class="tbl"><thead><tr><th>Dönem</th><th>Tarih</th><th>Fatura</th><th class="num">Tutar</th><th></th></tr></thead><tbody>${ods.length?ods.map(p=>`<tr><td>${esc(p.donem||'—')}</td><td>${p.odemeTarihi?fmtDate(p.odemeTarihi):'—'}</td><td>${p.faturaNo?'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> '+esc(p.faturaNo):'—'}</td><td class="num"><b>${fmtTL(p.odenenTutar)}</b></td><td><button class="btn-ic" onclick="delKomOdeme('${p.id}','${komId}')" style="color:var(--red-500)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td></tr>`).join(''):'<tr><td colspan="5" class="tbl-empty">Ödeme kaydı yok</td></tr>'}</tbody></table>
     </div>
     <div class="modal-ft"><div></div><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div>
   </div></div>`;
@@ -1012,28 +1031,28 @@ let editProd=null;
 function renderProducts(c,tb){
   if(isAdmin())tb.innerHTML=`<button class="btn btn-pri" onclick="openProd()">+ Yeni Ürün</button>`;
   const showPrice=canSeePrice();
-  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Fiyat listesi: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num" style="background:#EDE9FE">Danışman Liste ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td><td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')">✎</button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
+  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Fiyat listesi: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num" style="background:#EDE9FE">Danışman Liste ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td><td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
   // Teknik Danışman Fiyat Listesi kartı (Torbalı + iskontolu alış)
   if(showPrice){
     const isk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
     const tdProds=DB.products.filter(p=>(+p.danismanListe||0)>0);
-    h+=`<div class="card"><div class="card-hd"><h3>🤝 Teknik Danışman Fiyat Listesi</h3><span style="font-size:11px;color:var(--slate-400)">Torbalı liste · Sabit %${fmtN(isk)} iskonto</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th>Ambalaj</th><th class="num">Liste Fiyatı (Torbalı) ₺</th><th class="num">İskonto</th><th class="num" style="background:#DCFCE7">Alış (İskontolu) ₺</th></tr></thead><tbody>${tdProds.map(p=>{const liste=+p.danismanListe||0;const alis=liste*(1-isk/100);return `<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td><td class="num">${fmtN(liste)}</td><td class="num" style="color:var(--red-700)">−%${fmtN(isk)}</td><td class="num" style="background:#F0FDF4;font-weight:700;color:var(--green-700)">${fmtN(alis)}</td></tr>`}).join('')}</tbody></table></div></div>
-    <p style="font-size:11.5px;color:var(--slate-500)">💡 Danışman bu liste üzerinden <b>%${fmtN(isk)} iskontolu (Alış)</b> alır. Müşteriye sattığı fiyat (Satış) sipariş ekranında girilir; <b>prim = (Satış − Alış) × miktar − kargo</b>.</p>`;
+    h+=`<div class="card"><div class="card-hd"><h3><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg> Teknik Danışman Fiyat Listesi</h3><span style="font-size:11px;color:var(--slate-400)">Torbalı liste · Sabit %${fmtN(isk)} iskonto</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th>Ambalaj</th><th class="num">Liste Fiyatı (Torbalı) ₺</th><th class="num">İskonto</th><th class="num" style="background:#DCFCE7">Alış (İskontolu) ₺</th></tr></thead><tbody>${tdProds.map(p=>{const liste=+p.danismanListe||0;const alis=liste*(1-isk/100);return `<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td><td class="num">${fmtN(liste)}</td><td class="num" style="color:var(--red-700)">−%${fmtN(isk)}</td><td class="num" style="background:#F0FDF4;font-weight:700;color:var(--green-700)">${fmtN(alis)}</td></tr>`}).join('')}</tbody></table></div></div>
+    <p style="font-size:11.5px;color:var(--slate-500)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Danışman bu liste üzerinden <b>%${fmtN(isk)} iskontolu (Alış)</b> alır. Müşteriye sattığı fiyat (Satış) sipariş ekranında girilir; <b>prim = (Satış − Alış) × miktar − kargo</b>.</p>`;
   }
   // Uzak iller bilgi/düzenleme kartı
   const ul=uzakList();
   h+=`<div class="card"><div class="card-hd"><h3>Fiyat Kademesi Mantığı & Uzak İller</h3><span style="font-size:11px;color:var(--slate-400)">${ul.length} uzak il</span></div><div class="card-bd" style="padding:18px">
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-      <div style="flex:1;min-width:200px;background:var(--blue-50);border:1px solid var(--blue-200);border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--blue-800);font-size:12px;margin-bottom:4px">🏭 Fabrika Teslim</div><div style="font-size:11.5px;color:var(--slate-600)">Müşteri ürünü fabrikadan kendi alır. Manuel seçilir, en uygun fiyat.</div></div>
-      <div style="flex:1;min-width:200px;background:var(--green-100);border:1px solid #BBF7D0;border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--green-700);font-size:12px;margin-bottom:4px">📍 Yakın Bayi Satış</div><div style="font-size:11.5px;color:var(--slate-600)">Varsayılan. Uzak iller dışındaki tüm müşterilere otomatik atanır.</div></div>
-      <div style="flex:1;min-width:200px;background:var(--amber-100);border:1px solid #FDE68A;border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--amber-700);font-size:12px;margin-bottom:4px">🚚 Uzak Bayi Satış</div><div style="font-size:11.5px;color:var(--slate-600)">Müşterinin şehri aşağıdaki uzak iller listesindeyse <b>otomatik</b> atanır.</div></div>
+      <div style="flex:1;min-width:200px;background:var(--blue-50);border:1px solid var(--blue-200);border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--blue-800);font-size:12px;margin-bottom:4px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M7 18h.01"/><path d="M12 18h.01"/><path d="M17 18h.01"/></svg> Fabrika Teslim</div><div style="font-size:11.5px;color:var(--slate-600)">Müşteri ürünü fabrikadan kendi alır. Manuel seçilir, en uygun fiyat.</div></div>
+      <div style="flex:1;min-width:200px;background:var(--green-100);border:1px solid #BBF7D0;border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--green-700);font-size:12px;margin-bottom:4px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Yakın Bayi Satış</div><div style="font-size:11.5px;color:var(--slate-600)">Varsayılan. Uzak iller dışındaki tüm müşterilere otomatik atanır.</div></div>
+      <div style="flex:1;min-width:200px;background:var(--amber-100);border:1px solid #FDE68A;border-radius:7px;padding:12px 14px"><div style="font-weight:700;color:var(--amber-700);font-size:12px;margin-bottom:4px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg> Uzak Bayi Satış</div><div style="font-size:11.5px;color:var(--slate-600)">Müşterinin şehri aşağıdaki uzak iller listesindeyse <b>otomatik</b> atanır.</div></div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
       <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--amber-700)">Uzak İller Sayılan Şehirler (${ul.length})</div>
       ${isAdmin()?`<div style="display:flex;gap:6px"><input id="newUzak" placeholder="İl adı ekle..." style="padding:6px 10px;border:1px solid var(--slate-300);border-radius:6px;font-size:12px;width:160px" onkeydown="if(event.key==='Enter')addUzak()"><button class="btn btn-pri btn-sm" onclick="addUzak()">+ Ekle</button></div>`:''}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px">${ul.slice().sort((a,b)=>a.localeCompare(b,'tr')).map(ci=>`<span style="background:var(--amber-100);color:var(--amber-700);font-size:11px;font-weight:600;padding:3px 4px 3px 9px;border-radius:11px;display:inline-flex;align-items:center;gap:4px">${esc(ci)}${isAdmin()?`<button onclick="removeUzak('${esc(ci).replace(/'/g,"\\'")}')" title="Çıkar" style="background:none;border:none;color:var(--amber-700);cursor:pointer;font-size:13px;line-height:1;padding:0 3px;opacity:.6">×</button>`:''}</span>`).join('')}</div>
-    <div style="font-size:11px;color:var(--slate-500);margin-top:14px;padding-top:12px;border-top:1px solid var(--slate-100)">💡 Müşteri kartındaki <b>şehir</b> bilgisine göre kademe otomatik belirlenir. Bu listede olmayan iller "Yakın" sayılır. Sipariş ekranında kademe manuel değiştirilebilir.${isAdmin()?' Değişiklikler otomatik kaydedilir.':''}</div>
+    <div style="font-size:11px;color:var(--slate-500);margin-top:14px;padding-top:12px;border-top:1px solid var(--slate-100)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Müşteri kartındaki <b>şehir</b> bilgisine göre kademe otomatik belirlenir. Bu listede olmayan iller "Yakın" sayılır. Sipariş ekranında kademe manuel değiştirilebilir.${isAdmin()?' Değişiklikler otomatik kaydedilir.':''}</div>
   </div></div>`;
   c.innerHTML=h;
 }
@@ -1053,7 +1072,7 @@ function openProd(id){if(!isAdmin()){toast('Sadece yönetici');return}
       <div class="fgrid"><div class="fld"><label>Danışman Liste Fiyatı</label><input type="number" value="${o.danismanListe||0}" onchange="editProd.danismanListe=+this.value"><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Danışman alış = bu × (1 − iskonto). Prim hesabında kullanılır.</div></div></div>
       <div class="fld"><label><input type="checkbox" ${o.active!==false?'checked':''} onchange="editProd.active=this.checked" style="width:auto;margin-right:6px">Aktif (sipariş alınabilir)</label></div>
     </div>
-    <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delProd('${o.id}')" style="color:var(--red-700)">🗑 Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveProd()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+    <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delProd('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveProd()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
@@ -1061,15 +1080,15 @@ function saveProd(){const o=editProd;if(!o.code.trim()){toast('Kod giriniz');ret
 function delProd(id){if(!confirm('Ürün silinsin mi?'))return;DB.products=DB.products.filter(p=>p.id!==id);saveDB();closeModal();toast('Silindi');render()}
 // ============ STOCK ============
 function renderStock(c,tb){
-  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">Son güncelleme verisi (Excel'den)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${DB.products.map(p=>{const s=DB.stock[p.code]||{};const kalan=+s.kalan||0;const warn=kalan>0&&kalan<20;return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(s.stok)}</td><td class="num">${fmtN(s.uretim)}</td><td class="num">${fmtN(s.cikis)}</td><td class="num" style="font-weight:700;${warn?'color:var(--red-700)':kalan===0?'color:var(--slate-400)':''}">${fmtN(kalan)}${warn?' ⚠':''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`}).join('')}</tbody></table></div></div>
-  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">⚠ Kalan stok 20'nin altındaki ürünler kırmızı gösterilir. Detaylı stok yönetimi (giriş/çıkış hareketleri) bir sonraki sürümde eklenecek.</p>`;
+  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">Son güncelleme verisi (Excel'den)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${DB.products.map(p=>{const s=DB.stock[p.code]||{};const kalan=+s.kalan||0;const warn=kalan>0&&kalan<20;return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(s.stok)}</td><td class="num">${fmtN(s.uretim)}</td><td class="num">${fmtN(s.cikis)}</td><td class="num" style="font-weight:700;${warn?'color:var(--red-700)':kalan===0?'color:var(--slate-400)':''}">${fmtN(kalan)}${warn?' <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>':''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`}).join('')}</tbody></table></div></div>
+  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> Kalan stok 20'nin altındaki ürünler kırmızı gösterilir. Detaylı stok yönetimi (giriş/çıkış hareketleri) bir sonraki sürümde eklenecek.</p>`;
   c.innerHTML=h;
 }
 // ============ REPORTS ============
 let repView='aylik',repCharts=[];
 function renderReports(c,tb){
   if(!canSeePrice()){c.innerHTML=`<div class="tbl-empty card" style="padding:50px">Raporları görüntüleme yetkiniz bulunmuyor.</div>`;return}
-  tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()">🖨 Yazdır</button>`;
+  tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   // aggregate
   const byProduct={},byCustomer={},byFirma={SMI:0,ROTA:0},byMonth={};
   DB.orders.forEach(o=>{
@@ -1146,7 +1165,7 @@ function removeOpt(key,i){
 }
 function renderSettings(c,tb){
   if(!isAdmin()){c.innerHTML='<div class="card tbl-empty" style="padding:50px">Sadece yönetici erişebilir.</div>';return}
-  let h=`<div class="card"><div class="card-hd"><h3>Kullanıcılar & Roller</h3><button class="btn btn-pri btn-sm" onclick="openUser()">+ Kullanıcı</button></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kullanıcı Adı</th><th>Ad</th><th>Rol</th><th></th></tr></thead><tbody>${DB.users.map((u,i)=>`<tr><td><b>${esc(u.username)}</b></td><td>${esc(u.name)}</td><td>${ROLES[u.role]||u.role}</td><td><button class="btn-ic" onclick="openUser(${i})">✎</button></td></tr>`).join('')}</tbody></table></div></div>
+  let h=`<div class="card"><div class="card-hd"><h3>Kullanıcılar & Roller</h3><button class="btn btn-pri btn-sm" onclick="openUser()">+ Kullanıcı</button></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kullanıcı Adı</th><th>Ad</th><th>Rol</th><th></th></tr></thead><tbody>${DB.users.map((u,i)=>`<tr><td><b>${esc(u.username)}</b></td><td>${esc(u.name)}</td><td>${ROLES[u.role]||u.role}</td><td><button class="btn-ic" onclick="openUser(${i})"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td></tr>`).join('')}</tbody></table></div></div>
   <div class="card"><div class="card-hd"><h3>Seçenek Listeleri</h3><span style="font-size:11px;color:var(--slate-400)">Sipariş formundaki açılır menüleri yönet</span></div><div class="card-bd" style="padding:18px" id="optsCard">${optsManagerHTML()}</div></div>
   <div class="card"><div class="card-hd"><h3>Veri Yedekleme</h3></div><div class="card-bd" style="padding:18px">
     <p style="font-size:12.5px;color:var(--slate-600);margin-bottom:14px">Tüm verileri (siparişler, müşteriler, ürünler) JSON dosyası olarak yedekleyin veya geri yükleyin. <b>Düzenli yedek alın</b> — tarayıcı verisi silinirse yedekten geri yüklenebilir.</p>
@@ -1169,7 +1188,7 @@ function openUser(i){
   <div class="modal-bd"><div class="fgrid"><div class="fld"><label>Kullanıcı Adı</label><input value="${esc(o.username)}" onchange="editUser.username=this.value"></div><div class="fld"><label>Şifre</label><input value="${esc(o.password)}" onchange="editUser.password=this.value"></div></div>
   <div class="fgrid"><div class="fld"><label>Ad Soyad</label><input value="${esc(o.name)}" onchange="editUser.name=this.value"></div><div class="fld"><label>Rol</label><select onchange="editUser.role=this.value">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${o.role===k?'selected':''}>${v}</option>`).join('')}</select></div></div>
   <p style="font-size:11px;color:var(--slate-500)">Sipariş Personeli rolü <b>fiyatları göremez</b>. Görüntüleyici sadece okur.</p></div>
-  <div class="modal-ft"><div>${o._i!=null&&o.username!=='admin'?`<button class="btn btn-gray btn-sm" onclick="delUser(${o._i})" style="color:var(--red-700)">🗑 Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveUser()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+  <div class="modal-ft"><div>${o._i!=null&&o.username!=='admin'?`<button class="btn btn-gray btn-sm" onclick="delUser(${o._i})" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveUser()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
@@ -1200,7 +1219,7 @@ localStorage.removeItem=function(k){_rem(k);if(!suppress&&!window.__fbSuppress&&
 function schedulePush(){clearTimeout(timer);timer=setTimeout(push,900);}
 async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated});fbDot('#16A34A','Senkron');}catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');}}
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isSyncKey(k))_set(k,d[k]);});}finally{suppress=false;}}
-let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Figtree,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c}"></span>☁ ${t}`;}
+let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Inter,system-ui,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c}"></span><svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"margin-left:1px\"><path d=\"M17.5 19a4.5 4.5 0 0 0 0-9h-1.8A7 7 0 1 0 4 16.7\"/></svg> ${t}`;}
 (async function(){
   fbDot('#F59E0B','Bağlanıyor');
   try{const snap=await getDoc(dref);
