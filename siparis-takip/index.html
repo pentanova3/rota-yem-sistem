@@ -190,7 +190,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 @media(max-width:760px){.day-grid{grid-template-columns:repeat(2,1fr)}.week-nav .wk-range{order:-1;flex-basis:100%}}
 .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .report-grid .full{grid-column:span 2}
+.report-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;grid-column:span 2}
 .chart-cv{position:relative;height:260px}
+.chart-cv.sm{height:210px}
+.rep-filter{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:18px;background:var(--blue-50);border:1px solid var(--blue-100);padding:11px 14px;border-radius:10px}
+.rep-filter .rf-lbl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--blue-700)}
+.rep-filter select{padding:8px 11px;border:1px solid var(--slate-300);border-radius:6px;font-size:12.5px;background:#fff;color:var(--slate-700)}
 .priceHidden{color:var(--slate-300)!important;font-style:italic}
 @media(max-width:980px){.app.on{grid-template-columns:1fr}.sidebar{position:fixed;left:-260px;transition:left .25s;z-index:300;width:250px}.sidebar.open{left:0}.report-grid{grid-template-columns:1fr}.report-grid .full{grid-column:span 1}.fgrid,.fgrid.c3{grid-template-columns:1fr}.mob-menu{display:inline-flex!important}}
 .mob-menu{display:none}
@@ -1147,46 +1152,99 @@ function renderStock(c,tb){
   c.innerHTML=h;
 }
 // ============ REPORTS ============
-let repView='aylik',repCharts=[];
+let repView='aylik',repCharts=[],repFilt={year:'',month:''};
+const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi'};
+const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 function renderReports(c,tb){
   if(!canSeePrice()){c.innerHTML=`<div class="tbl-empty card" style="padding:50px">Raporları görüntüleme yetkiniz bulunmuyor.</div>`;return}
   tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
-  // aggregate
-  const byProduct={},byCustomer={},byFirma={SMI:0,ROTA:0},byMonth={};
-  DB.orders.forEach(o=>{
-    const tot=orderTotal(o);
-    (o.lines||[]).forEach(l=>{byProduct[l.code]=(byProduct[l.code]||0)+(+l.qty||0)});
+  // ---- dönem filtresi ----
+  let orders=DB.orders.slice();
+  if(repFilt.year)orders=orders.filter(o=>(o.date||'').slice(0,4)===repFilt.year);
+  if(repFilt.month)orders=orders.filter(o=>(o.date||'').slice(5,7)===repFilt.month);
+  const years=[...new Set(DB.orders.map(o=>(o.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const byDay=!!repFilt.month;                         // tek ay seçiliyse günlük kır
+  const gkey=o=>byDay?(o.date||''):(o.date||'').slice(0,7);
+  const periodLbl=g=>byDay?g.slice(8,10)+'.'+g.slice(5,7):(AY_KISA[+g.slice(5,7)-1]+' '+g.slice(2,4));
+  // ---- agregasyon ----
+  const byProductQty={},byCustomer={},byFirma={},byTrend={},byTrendCnt={},byNakliye={},byKademe={},byStatus={},byKom={},byPP={};
+  let totCiro=0,totSacks=0,totNakliye=0,totKom=0;
+  orders.forEach(o=>{
+    const tot=orderTotal(o);totCiro+=tot;
+    const nak=+o.nakliye||0;totNakliye+=nak;
+    const kp=(orderKomisyon(o)||{}).tutar||0;totKom+=kp;
+    const g=gkey(o);byTrend[g]=(byTrend[g]||0)+tot;byTrendCnt[g]=(byTrendCnt[g]||0)+1;byNakliye[g]=(byNakliye[g]||0)+nak;
+    if(!byPP[g])byPP[g]={};
+    (o.lines||[]).forEach(l=>{const q=+l.qty||0;byProductQty[l.code]=(byProductQty[l.code]||0)+q;byPP[g][l.code]=(byPP[g][l.code]||0)+q;totSacks+=q;});
     byCustomer[o.customer]=(byCustomer[o.customer]||0)+tot;
     if(o.firma)byFirma[o.firma]=(byFirma[o.firma]||0)+tot;
-    const mk=o.date.slice(0,7);byMonth[mk]=(byMonth[mk]||0)+tot;
+    const kd=o.fiyatKademe||'fabrika';byKademe[kd]=(byKademe[kd]||0)+tot;
+    const st=o.status||'beklemede';byStatus[st]=(byStatus[st]||0)+1;
+    if(o.komisyoncuId){const k=komById(o.komisyoncuId);if(k){if(!byKom[k.id])byKom[k.id]={name:k.name,type:k.type,ciro:0,kom:0,adet:0};byKom[k.id].ciro+=tot;byKom[k.id].kom+=kp;byKom[k.id].adet++;}}
   });
+  const orderCount=orders.length;
+  const avgOrder=orderCount?totCiro/orderCount:0;
+  const tk=Object.keys(byTrend).sort();
   const topCust=Object.entries(byCustomer).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const months=Object.keys(byMonth).sort();
-  let h=`<div class="kpis">
-    <div class="kpi"><div class="kl">Toplam Sipariş</div><div class="kv">${DB.orders.length}</div></div>
-    <div class="kpi g"><div class="kl">Toplam Ciro</div><div class="kv" style="font-size:18px">${fmtTL(DB.orders.reduce((s,o)=>s+orderTotal(o),0))}</div></div>
-    <div class="kpi p"><div class="kl">Toplam Çuval</div><div class="kv">${fmtN(Object.values(byProduct).reduce((a,b)=>a+b,0))}</div></div>
-    <div class="kpi a"><div class="kl">Aktif Müşteri</div><div class="kv">${Object.keys(byCustomer).length}</div></div>
+  const topProds=Object.entries(byProductQty).sort((a,b)=>b[1]-a[1]);
+  const breakProds=topProds.slice(0,6).map(p=>p[0]);
+  const komRows=Object.values(byKom).sort((a,b)=>b.ciro-a.ciro).slice(0,10);
+  const periodTxt=((repFilt.month?AYLAR_TR[+repFilt.month-1]+' ':'')+(repFilt.year||'')).trim()||'Tüm Zamanlar';
+  // chart verisini global'e koy
+  _rep={tk,periodLbl,byTrend,byTrendCnt,byNakliye,topProds,byKademe,byFirma,byStatus};
+  // ---- KPI ----
+  let h=`<div class="rep-filter">
+    <span class="rf-lbl">Dönem</span>
+    <select onchange="repFilt.year=this.value;render()"><option value="">Tüm Yıllar</option>${years.map(y=>`<option value="${y}" ${repFilt.year===y?'selected':''}>${y}</option>`).join('')}</select>
+    <select onchange="repFilt.month=this.value;render()"><option value="">Tüm Aylar</option>${AYLAR_TR.map((m,i)=>{const mv=String(i+1).padStart(2,'0');return `<option value="${mv}" ${repFilt.month===mv?'selected':''}>${m}</option>`}).join('')}</select>
+    ${(repFilt.year||repFilt.month)?`<button class="btn btn-gray btn-sm" onclick="repFilt={year:'',month:''};render()">✕ Temizle</button>`:''}
+    <span style="margin-left:auto;font-size:12px;font-weight:600;color:var(--blue-800)">${esc(periodTxt)}</span>
+  </div>
+  <div class="kpis">
+    <div class="kpi g"><div class="kl">Toplam Ciro</div><div class="kv" style="font-size:18px">${fmtTL(totCiro)}</div></div>
+    <div class="kpi"><div class="kl">Toplam Sipariş</div><div class="kv">${orderCount}</div></div>
+    <div class="kpi p"><div class="kl">Toplam Çuval</div><div class="kv">${fmtN(totSacks)}</div></div>
+    <div class="kpi"><div class="kl">Ort. Sipariş Tutarı</div><div class="kv" style="font-size:18px">${fmtTL(avgOrder)}</div></div>
+    <div class="kpi a"><div class="kl">Nakliye Gideri</div><div class="kv" style="font-size:18px">${fmtTL(totNakliye)}</div></div>
+    <div class="kpi r"><div class="kl">Komisyon + Prim</div><div class="kv" style="font-size:18px">${fmtTL(totKom)}</div></div>
   </div>
   <div class="report-grid">
-    <div class="card"><div class="card-hd"><h3>Aylık Ciro Trendi</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcMonth"></canvas></div></div></div>
+    <div class="card full"><div class="card-hd"><h3>${byDay?'Günlük':'Aylık'} Ciro & Sipariş Adedi</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcTrend"></canvas></div></div></div>
     <div class="card"><div class="card-hd"><h3>Ürün Bazlı Satış (çuval)</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcProd"></canvas></div></div></div>
-    <div class="card"><div class="card-hd"><h3>Firma Dağılımı (SMI / ROTA)</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcFirma"></canvas></div></div></div>
-    <div class="card"><div class="card-hd"><h3>En Çok Sipariş Veren 10 Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th class="num">Ciro</th></tr></thead><tbody>${topCust.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="num"><b>${fmtTL(v)}</b></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card"><div class="card-hd"><h3>${byDay?'Günlük':'Aylık'} Nakliye Ödemesi</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcNak"></canvas></div></div></div>
+    <div class="report-grid3">
+      <div class="card"><div class="card-hd"><h3>Teslim Noktası</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv sm"><canvas id="rcKademe"></canvas></div></div></div>
+      <div class="card"><div class="card-hd"><h3>Firma Dağılımı</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv sm"><canvas id="rcFirma"></canvas></div></div></div>
+      <div class="card"><div class="card-hd"><h3>Sipariş Durumu</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv sm"><canvas id="rcStatus"></canvas></div></div></div>
+    </div>
+    <div class="card full"><div class="card-hd"><h3>${byDay?'Günlük':'Aylık'} Ürün Kırılımı (çuval)</h3></div><div class="card-bd" style="overflow-x:auto">${breakProds.length?`<table class="tbl"><thead><tr><th>Dönem</th>${breakProds.map(p=>`<th class="num">${esc(p)}</th>`).join('')}<th class="num">Toplam</th></tr></thead><tbody>${tk.map(g=>{const row=byPP[g]||{};const rt=Object.values(row).reduce((a,b)=>a+b,0);return `<tr><td><b>${esc(periodLbl(g))}</b></td>${breakProds.map(p=>`<td class="num">${row[p]?fmtN(row[p]):'<span style=\\"color:var(--slate-300)\\">—</span>'}</td>`).join('')}<td class="num"><b>${fmtN(rt)}</b></td></tr>`}).join('')}</tbody></table>`:'<div class="tbl-empty">Veri yok</div>'}</div></div>
+    <div class="card"><div class="card-hd"><h3>En Çok Ciro Yapan 10 Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th class="num">Ciro</th></tr></thead><tbody>${topCust.length?topCust.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="num"><b>${fmtTL(v)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="tbl-empty">Veri yok</td></tr>'}</tbody></table></div></div>
+    <div class="card"><div class="card-hd"><h3>Bayi & Danışman Performansı</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th class="num">Adet</th><th class="num">Ciro</th><th class="num">Prim/Kom.</th></tr></thead><tbody>${komRows.length?komRows.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td><span class="kom-chip kom-${k.type}">${k.type==='danisman'?'Danışman':'Bayi'}</span></td><td class="num">${k.adet}</td><td class="num"><b>${fmtTL(k.ciro)}</b></td><td class="num">${fmtTL(k.kom)}</td></tr>`).join(''):'<tr><td colspan="5" class="tbl-empty">Bu dönemde bayi/danışmanlı sipariş yok</td></tr>'}</tbody></table></div></div>
   </div>`;
   c.innerHTML=h;
-  setTimeout(()=>drawReportCharts(byProduct,byFirma,byMonth),30);
+  setTimeout(()=>drawReportCharts(),30);
 }
-function drawReportCharts(byProduct,byFirma,byMonth){
+let _rep={};
+function drawReportCharts(){
   if(typeof Chart==='undefined')return;
   repCharts.forEach(c=>{try{c.destroy()}catch(e){}});repCharts=[];
-  const opt={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}}};
-  const months=Object.keys(byMonth).sort();
-  const mk=(id,cfg)=>{const el=document.getElementById(id);if(el)repCharts.push(new Chart(el,cfg))};
-  mk('rcMonth',{type:'line',data:{labels:months.map(m=>{const[y,mo]=m.split('-');return ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'][+mo-1]+' '+y.slice(2)}),datasets:[{label:'Ciro ₺',data:months.map(m=>byMonth[m]),borderColor:'#1D62A8',backgroundColor:'rgba(29,98,168,.1)',fill:true,tension:.3}]},options:{...opt,scales:{y:{ticks:{callback:v=>(v/1e6).toFixed(1)+'M'}}}}});
-  const prods=Object.entries(byProduct).sort((a,b)=>b[1]-a[1]);
-  mk('rcProd',{type:'bar',data:{labels:prods.map(p=>p[0]),datasets:[{label:'Çuval',data:prods.map(p=>p[1]),backgroundColor:'#2878C8'}]},options:{...opt,plugins:{legend:{display:false}}}});
-  mk('rcFirma',{type:'doughnut',data:{labels:['SMI','ROTA'],datasets:[{data:[byFirma.SMI||0,byFirma.ROTA||0],backgroundColor:['#7C3AED','#0E7490']}]},options:opt});
+  const opt={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11},boxWidth:12}}}};
+  const R=_rep;const mk=(id,cfg)=>{const el=document.getElementById(id);if(el)repCharts.push(new Chart(el,cfg))};
+  const labels=R.tk.map(R.periodLbl);
+  mk('rcTrend',{type:'bar',data:{labels,datasets:[
+    {type:'line',label:'Ciro ₺',data:R.tk.map(g=>R.byTrend[g]),borderColor:'#1D62A8',backgroundColor:'rgba(29,98,168,.12)',fill:true,tension:.3,yAxisID:'y',order:0,pointRadius:2},
+    {type:'bar',label:'Sipariş Adedi',data:R.tk.map(g=>R.byTrendCnt[g]),backgroundColor:'rgba(40,120,200,.32)',yAxisID:'y1',order:1,borderRadius:4}
+  ]},options:{...opt,scales:{y:{position:'left',ticks:{callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':(v/1e3).toFixed(0)+'B'}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{precision:0}}}}});
+  const prods=R.topProds.slice(0,14);
+  mk('rcProd',{type:'bar',data:{labels:prods.map(p=>p[0]),datasets:[{label:'Çuval',data:prods.map(p=>p[1]),backgroundColor:'#2878C8',borderRadius:4}]},options:{...opt,plugins:{legend:{display:false}}}});
+  mk('rcNak',{type:'bar',data:{labels,datasets:[{label:'Nakliye ₺',data:R.tk.map(g=>R.byNakliye[g]),backgroundColor:'#F59E0B',borderRadius:4}]},options:{...opt,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':(v/1e3).toFixed(0)+'B'}}}}});
+  const kdK=Object.keys(R.byKademe);
+  mk('rcKademe',{type:'doughnut',data:{labels:kdK.map(k=>KADEME_LBL[k]||k),datasets:[{data:kdK.map(k=>R.byKademe[k]),backgroundColor:['#0E7490','#2878C8','#7C3AED','#94A3B8']}]},options:opt});
+  const fK=Object.keys(R.byFirma);
+  mk('rcFirma',{type:'doughnut',data:{labels:fK,datasets:[{data:fK.map(k=>R.byFirma[k]),backgroundColor:['#7C3AED','#0E7490','#2878C8','#16A34A','#F59E0B']}]},options:opt});
+  const stK=Object.keys(R.byStatus);
+  mk('rcStatus',{type:'doughnut',data:{labels:stK.map(s=>statusLabel(s)),datasets:[{data:stK.map(s=>R.byStatus[s]),backgroundColor:stK.map(s=>ST_COLOR[s]||'#64748B')}]},options:opt});
 }
 // ============ SETTINGS ============
 function optsManagerHTML(){
