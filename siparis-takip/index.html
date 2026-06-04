@@ -112,6 +112,16 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .tbl tbody tr.row-bayi:hover{background:rgba(37,99,235,.11)}
 .tbl tbody tr.row-danisman{background:rgba(124,58,237,.06)}
 .tbl tbody tr.row-danisman:hover{background:rgba(124,58,237,.12)}
+.kom-summary{margin-bottom:14px;padding:15px 18px;border-radius:12px;border:1px solid}
+.kom-summary-bayi{background:#EFF6FF;border-color:#BFDBFE}
+.kom-summary-danisman{background:#F5F3FF;border-color:#DDD6FE}
+.ks-head{display:flex;align-items:center;gap:11px;margin-bottom:13px;flex-wrap:wrap}
+.ks-type{font-size:11.5px;font-weight:600;color:var(--slate-500)}
+.ks-period{margin-left:auto;font-size:12px;font-weight:700;color:var(--slate-700);background:#fff;padding:4px 12px;border-radius:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.ks-metrics{display:flex;gap:30px;flex-wrap:wrap}
+.ks-metrics>div{display:flex;flex-direction:column;gap:2px}
+.ks-n{font-size:21px;font-weight:800;color:var(--blue-900);letter-spacing:-.02em;line-height:1.1}
+.ks-l{font-size:11px;font-weight:600;color:var(--slate-500)}
 /* filters */
 .filters{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .filters input,.filters select{padding:8px 11px;border:1px solid var(--slate-300);border-radius:6px;font-size:12.5px;background:#fff;color:var(--slate-700)}
@@ -603,11 +613,27 @@ function renderOrders(c,tb){
     <input type="date" value="${filt.to}" onchange="filt.to=this.value;refreshOrders()" title="Bitiş">
     ${(filt.q||filt.status||filt.firma||filt.from||filt.to||filt.kom||filt.year||filt.month)?`<button class="btn btn-gray btn-sm" onclick="filt={q:'',status:'',firma:'',from:'',to:'',kom:'',year:'',month:''};refreshOrders()">✕ Temizle</button>`:''}
   </div>
+  <div id="komSummary">${komSummaryHTML()}</div>
   <div class="card"><div class="card-hd"><h3 id="ordCount">${arr.length} Sipariş</h3>${canSeePrice()?`<span id="ordTotal" style="font-size:12px;color:var(--slate-500)">Toplam: <b style="color:var(--blue-900)">${fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))}</b></span>`:''}</div><div class="card-bd" id="ordersTable">${orderTable(arr)}</div></div>`;
   c.innerHTML=h;
 }
+function komSummaryHTML(){
+  if(!filt.kom||filt.kom==='all-bayi'||filt.kom==='all-danisman')return '';
+  const kom=komById(filt.kom);if(!kom)return '';
+  const arr=filteredOrders();
+  const adet=arr.length;
+  const ciro=arr.reduce((s,o)=>s+orderTotal(o),0);
+  const prim=arr.reduce((s,o)=>s+((orderKomisyon(o)||{}).tutar||0),0);
+  const period=((filt.month?AYLAR_TR[+filt.month-1]+' ':'')+(filt.year||'')).trim()||'Tüm zamanlar';
+  const isDan=kom.type==='danisman';
+  return `<div class="kom-summary kom-summary-${kom.type}">
+    <div class="ks-head"><span class="kom-chip kom-${kom.type}">${esc(kom.name)}</span><span class="ks-type">${isDan?'Teknik Danışman':'Bayi'}${kom.city?' · '+esc(kom.city):''}</span><span class="ks-period">${esc(period)}</span></div>
+    <div class="ks-metrics"><div><span class="ks-n">${adet}</span><span class="ks-l">Sipariş</span></div><div><span class="ks-n">${fmtTL(ciro)}</span><span class="ks-l">Toplam Ciro</span></div>${canSeePrice()?`<div><span class="ks-n">${fmtTL(prim)}</span><span class="ks-l">${isDan?'Toplam Prim':'Toplam Komisyon'}</span></div>`:''}</div>
+  </div>`;
+}
 function refreshOrders(){
   const arr=filteredOrders();
+  const ks=document.getElementById('komSummary');if(ks)ks.innerHTML=komSummaryHTML();
   const el=document.getElementById('ordersTable');if(el)el.innerHTML=orderTable(arr);
   const cnt=document.getElementById('ordCount');if(cnt)cnt.textContent=arr.length+' Sipariş';
   const tot=document.getElementById('ordTotal');if(tot&&canSeePrice())tot.innerHTML='Toplam: <b style="color:var(--blue-900)">'+fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))+'</b>';
