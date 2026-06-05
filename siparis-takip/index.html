@@ -298,6 +298,7 @@ function optFirma(){return (DB.opts&&DB.opts.firma)||['SMI','ROTA']}
 function optKargo(){return (DB.opts&&DB.opts.kargo)||KARGO}
 function optOdeme(){return (DB.opts&&DB.opts.odeme)||ODEME_SEED}
 function optDurum(){return (DB.opts&&DB.opts.durum)||STATUSES}
+function optAlan(){return (DB.opts&&DB.opts.alan)||[]}
 // Güncel fiyat listesi (23.03.2026) — Fabrika / Yakın / Uzak
 const PRICE_VERSION='2026-03-23c';
 const TD_ISKONTO_DEFAULT=6; // teknik danışman varsayılan iskonto %
@@ -680,7 +681,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -706,7 +707,7 @@ function renderOrderModal(){
       <div class="fgrid c3">
         <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
         <div class="fld"><label>Ödeme Tarihi</label>${odemeFieldHTML(o,ro)}</div>
-        <div class="fld"></div>
+        <div class="fld"><label>Sipariş Alan</label><select ${ro?'disabled':''} onchange="editOrder.alan=this.value"><option value="">— Seçiniz —</option>${optAlan().map(a=>`<option value="${esc(a)}" ${o.alan===a?'selected':''}>${esc(a)}</option>`).join('')}${o.alan&&!optAlan().includes(o.alan)?`<option value="${esc(o.alan)}" selected>${esc(o.alan)}</option>`:''}</select>${optAlan().length?'':'<div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Ayarlar → Sipariş Alan Kişiler\'den ekleyin</div>'}</div>
       </div>
       ${orderKomisyonRow(o,ro)}
       <div class="sub-hd">Sipariş Kalemleri</div>
@@ -1406,6 +1407,7 @@ function drawReportCharts(){
 // ============ SETTINGS ============
 function optsManagerHTML(){
   const blocks=[
+    {key:'alan',title:'Sipariş Alan Kişiler',hint:'Siparişi alan personel isimleri'},
     {key:'firma',title:'Firmalar',hint:'SMI, ROTA vb.'},
     {key:'odeme',title:'Ödeme / Vade Türleri',hint:'Peşin, 30 gün vade vb.'},
     {key:'kargo',title:'Kargo Tipleri',hint:'Kendi aracı, nakliye vb.'},
