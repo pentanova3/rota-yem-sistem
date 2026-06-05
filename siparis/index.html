@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sipariş Takip · TMR / Yem</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#081c36;--ink-2:#0c2744;--line:rgba(173,201,234,.14);--line-soft:rgba(173,201,234,.08);
+  --text:#eaf1f9;--text-dim:#9fb4cd;--text-faint:#6f88a6;
+  --tmr:#46a07a;--tmr-soft:rgba(70,160,122,.16);--yem:#d8a23f;--yem-soft:rgba(216,162,63,.15);
+  --radius:16px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;min-height:100vh;color:var(--text);background:var(--ink);display:flex;align-items:center;justify-content:center;padding:40px 24px;position:relative;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(1100px 560px at 50% -8%, rgba(63,134,214,.20), transparent 60%),radial-gradient(800px 500px at 88% 108%, rgba(70,160,122,.12), transparent 55%)}
+body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;background-image:radial-gradient(var(--line-soft) 1px, transparent 1px);background-size:26px 26px;-webkit-mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 75%);mask-image:radial-gradient(circle at 50% 35%, #000 0%, transparent 75%)}
+.wrap{width:100%;max-width:620px;position:relative;z-index:1}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--text-faint);font-size:12.5px;font-weight:600;text-decoration:none;margin-bottom:22px;transition:color .2s}
+.back:hover{color:var(--text-dim)}
+.back svg{width:15px;height:15px}
+.head{text-align:center;margin-bottom:38px}
+.logo-plate{display:inline-flex;background:#fff;padding:12px 17px;border-radius:12px;box-shadow:0 18px 40px -12px rgba(0,0,0,.55);margin-bottom:20px}
+.logo-plate img{width:150px;max-width:54vw;height:auto;display:block}
+.head h1{font-size:13px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;color:var(--text-dim);margin-bottom:9px;padding-left:.32em}
+.head .tag{font-size:13px;color:var(--text-faint);font-weight:450}
+.apps{display:flex;flex-direction:column;gap:14px}
+.app{--c:var(--tmr);--cs:var(--tmr-soft);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:20px 22px;text-decoration:none;color:inherit;position:relative;background:linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02));border:1px solid var(--line);border-radius:var(--radius);transition:transform .4s cubic-bezier(.16,1,.3,1), border-color .25s, background .25s;overflow:hidden}
+.app::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);transform:scaleY(0);transform-origin:top;transition:transform .4s cubic-bezier(.16,1,.3,1)}
+.app:hover{transform:translateY(-3px);border-color:color-mix(in oklab, var(--c) 55%, transparent);background:linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03))}
+.app:hover::before{transform:scaleY(1)}
+.app.yem{--c:var(--yem);--cs:var(--yem-soft)}
+.app-ic{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:var(--cs);color:var(--c);flex-shrink:0}
+.app-ic svg{width:26px;height:26px;stroke-width:1.9}
+.app-body{min-width:0}
+.app-body .kicker{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--c);margin-bottom:5px}
+.app-body h2{font-size:19px;font-weight:700;letter-spacing:-.01em;color:#fff;margin-bottom:5px;line-height:1.2}
+.app-body p{font-size:12.5px;line-height:1.5;color:var(--text-dim)}
+.app-go{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);color:var(--text-dim);transition:transform .4s cubic-bezier(.16,1,.3,1), background .25s, color .25s}
+.app-go svg{width:18px;height:18px}
+.app:hover .app-go{background:var(--c);color:#fff;transform:translateX(4px)}
+/* kapalı (yakında) */
+.app.soon{cursor:default;opacity:.6}
+.app.soon:hover{transform:none;border-color:var(--line);background:linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02))}
+.app.soon:hover::before{transform:scaleY(0)}
+.app.soon .app-ic{background:rgba(255,255,255,.04);color:color-mix(in oklab, var(--c) 50%, var(--text-faint))}
+.app.soon h2{color:var(--text-dim)}
+.soon-badge{position:absolute;top:13px;right:15px;z-index:2;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);background:rgba(255,255,255,.06);border:1px solid var(--line);padding:4px 10px;border-radius:20px;white-space:nowrap}
+.foot{text-align:center;margin-top:34px;color:var(--text-faint);font-size:11px;letter-spacing:.06em}
+@media(max-width:560px){.app{grid-template-columns:auto 1fr;gap:15px;padding:17px 18px}.app-go{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg> Portala dön</a>
+  <header class="head">
+    <span class="logo-plate"><img src="../rota-logo.png" alt="Rota SMI"></span>
+    <h1>Sipariş Takip Sistemi</h1>
+    <p class="tag">TMR ve Yem sipariş yönetimi · bölüm seçin</p>
+  </header>
+
+  <main class="apps">
+    <a class="app tmr" href="../siparis-takip/">
+      <span class="app-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+      <span class="app-body"><span class="kicker">Operasyon</span><h2>TMR</h2><p>TMR sipariş yönetimi, müşteri &amp; bayi takibi, iskonto/komisyon, stok ve raporlar.</p></span>
+      <span class="app-go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+    </a>
+
+    <div class="app yem soon" aria-disabled="true">
+      <span class="app-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg></span>
+      <span class="app-body"><span class="kicker">Operasyon</span><h2>Yem</h2><p>Yem sipariş yönetimi. Yakında devreye alınacak.</p></span>
+      <span class="soon-badge">Yakında</span>
+    </div>
+  </main>
+
+  <footer class="foot">Rota SMI Tarım · Sipariş Takip</footer>
+</div>
+</body>
+</html>
