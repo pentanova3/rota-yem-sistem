@@ -436,6 +436,7 @@ function fmtN(n){n=+n||0;return n.toLocaleString('tr-TR',{maximumFractionDigits:
 function fmtDate(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'})}
 function fmtDateShort(d){if(!d)return '';const dt=new Date(d);return `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}`}
 function todayISO(){return new Date().toISOString().split('T')[0]}
+function addDaysISO(iso,days){const d=new Date(iso||todayISO());if(isNaN(d))return iso;d.setDate(d.getDate()+(+days||0));return d.toISOString().split('T')[0]}
 function canSeePrice(){return USER && (USER.role==='admin'||USER.role==='sevkiyat'||USER.role==='goruntule')}
 function canEdit(){return USER && (USER.role==='admin'||USER.role==='siparis'||USER.role==='sevkiyat')}
 function isAdmin(){return USER&&USER.role==='admin'}
@@ -684,14 +685,14 @@ function renderOrderModal(){
     <div class="modal-hd"><h2>${o.id?'Sipariş Detayı':'Yeni Sipariş'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
     <div class="modal-bd">
       <div class="fgrid c3">
-        <div class="fld"><label>Tarih</label><input type="date" value="${o.date}" ${ro?'disabled':''} min="${o.id?'':todayISO()}" onchange="editOrder.date=this.value"></div>
+        <div class="fld"><label>Tarih</label><input type="date" value="${o.date}" ${ro?'disabled':''} min="${o.id?'':todayISO()}" onchange="onChangeOrderDate(this.value)"></div>
         <div class="fld"><label>Müşteri</label><select ${ro?'disabled':''} onchange="onPickCustomer(this.value)"><option value="">— Seçiniz —</option>${custOpts}</select></div>
         <div class="fld"><label>Firma</label><select ${ro?'disabled':''} onchange="editOrder.firma=this.value"><option value="">—</option>${optFirma().map(f=>`<option value="${esc(f)}" ${o.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
         <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="editOrder.status=this.value">${optDurum().map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
         <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
-        <div class="fld"><label>Ödeme</label>${odemeFieldHTML(o,ro)}</div>
+        <div class="fld"><label>Ödeme Tarihi</label>${odemeFieldHTML(o,ro)}</div>
       </div>
       ${orderKomisyonRow(o,ro)}
       <div class="sub-hd">Sipariş Kalemleri</div>
@@ -789,13 +790,23 @@ function pickKomField(type,name){
 function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma&&!editOrder.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);editOrder.komisyoncuId=c.bayiId||c.danismanId||'';}clearLinePrices();renderOrderModal()}
 function clearLinePrices(){(editOrder.lines||[]).forEach(l=>{if(!l._locked)l.price='';})}
 function onChangeKademe(v){editOrder.fiyatKademe=v;if(v==='fabrika'){editOrder.kargo='';editOrder.nakliye=0;editOrder.plaka='';editOrder.sofor='';editOrder.palet='';editOrder.strec='';}clearLinePrices();renderOrderModal()}
+function isISODate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s||'')}
 function odemeFieldHTML(o,ro){
-  const opts=optOdeme();
-  let sel=`<select ${ro?'disabled':''} onchange="onPickOdeme(this.value)"><option value="">— Seçiniz —</option>${opts.map(v=>`<option value="${esc(v)}" ${o.odeme===v?'selected':''}>${esc(v)}</option>`).join('')}${ro?'':'<option value="__new__">+ Yeni Vade Oluştur…</option>'}</select>`;
-  if(o._newVade&&!ro)sel+=`<div style="display:flex;gap:6px;margin-top:6px"><input id="newVadeInput" placeholder="Örn: 90 gün vade" style="flex:1" autofocus><button class="btn btn-grn btn-sm" onclick="addNewVade()">Ekle</button><button class="btn btn-gray btn-sm" onclick="editOrder._newVade=false;renderOrderModal()">İptal</button></div>`;
-  return sel;
+  const isDate=isISODate(o.odeme);
+  const legacy=(o.odeme&&!isDate)?o.odeme:'';
+  let h=`<input type="date" value="${isDate?o.odeme:''}" min="${o.date||''}" ${ro?'disabled':''} onchange="onChangeOdeme(this.value)" style="width:100%" title="Ödeme tarihi">`;
+  if(!ro){
+    h+=`<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">`+
+       `<button type="button" class="btn btn-gray btn-sm" onclick="setOdemePesin()">Peşin (sipariş günü)</button>`+
+       (isDate?`<button type="button" class="btn btn-gray btn-sm" onclick="editOrder.odeme='';renderOrderModal()">Temizle</button>`:'')+
+       (legacy?`<span style="font-size:10px;color:var(--amber-700)">Önceki kayıt: ${esc(legacy)}</span>`:'')+
+       `</div><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Müşterinin ödeyeceği tarih · sipariş tarihinden önce olamaz</div>`;
+  }else if(legacy){h+=`<div style="font-size:10px;color:var(--slate-400);margin-top:3px">${esc(legacy)}</div>`}
+  return h;
 }
-function onPickOdeme(v){if(v==='__new__'){editOrder._newVade=true;renderOrderModal();return}editOrder.odeme=v}
+function onChangeOdeme(v){const o=editOrder;if(v&&o.date&&v<o.date){toast('Ödeme tarihi sipariş tarihinden önce olamaz');o.odeme=o.date;renderOrderModal();return}o.odeme=v}
+function setOdemePesin(){editOrder.odeme=editOrder.date||todayISO();renderOrderModal()}
+function onChangeOrderDate(v){const o=editOrder;o.date=v;if(isISODate(o.odeme)&&o.odeme<v)o.odeme=v;renderOrderModal()}
 function addNewVade(){const inp=document.getElementById('newVadeInput');const v=(inp?inp.value:'').trim();if(!v){toast('Vade adı girin');return}DB.opts.odeme=DB.opts.odeme||[];if(!DB.opts.odeme.some(x=>x.toLowerCase()===v.toLowerCase()))DB.opts.odeme.push(v);saveDB();editOrder.odeme=v;editOrder._newVade=false;renderOrderModal();toast('Vade eklendi: '+v)}
 function addLine(){editOrder.lines.push({code:'',qty:'',price:''});renderOrderModal()}
 function rmLine(i){editOrder.lines.splice(i,1);if(!editOrder.lines.length)editOrder.lines.push({code:'',qty:''});renderOrderModal()}
