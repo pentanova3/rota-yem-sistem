@@ -437,6 +437,9 @@ function fmtDate(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return 
 function fmtDateShort(d){if(!d)return '';const dt=new Date(d);return `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}`}
 function todayISO(){return new Date().toISOString().split('T')[0]}
 function addDaysISO(iso,days){const d=new Date(iso||todayISO());if(isNaN(d))return iso;d.setDate(d.getDate()+(+days||0));return d.toISOString().split('T')[0]}
+function fmtDateTime(d){if(!d)return '—';const x=new Date(d);if(isNaN(x))return fmtDate(d);return x.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function nextOrderNo(){return (DB.orders||[]).reduce((m,o)=>Math.max(m,+o.no||0),0)+1}
+function kanbanDate(o){return (o&&(o.teslimTarihi||o.date))||''}  // kanban teslim tarihine göre (yoksa alım tarihi)
 function canSeePrice(){return USER && (USER.role==='admin'||USER.role==='sevkiyat'||USER.role==='goruntule')}
 function canEdit(){return USER && (USER.role==='admin'||USER.role==='siparis'||USER.role==='sevkiyat')}
 function isAdmin(){return USER&&USER.role==='admin'}
@@ -535,7 +538,7 @@ function renderPanel(c,tb){
   const monday=new Date(panelWeekStart);
   const days=[];for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);days.push(d)}
   const weekStart=isoOf(days[0]),weekEnd=isoOf(days[6]);
-  const weekOrders=DB.orders.filter(o=>o.date>=weekStart&&o.date<=weekEnd);
+  const weekOrders=DB.orders.filter(o=>{const d=kanbanDate(o);return d>=weekStart&&d<=weekEnd});
   const weekTotal=weekOrders.reduce((s,o)=>s+orderTotal(o),0);
   const pending=weekOrders.filter(o=>o.status==='beklemede').length;
   const ready=weekOrders.filter(o=>o.status==='hazir').length;
@@ -562,7 +565,7 @@ function renderPanel(c,tb){
   h+=`<div class="day-grid">`;
   days.forEach((d,i)=>{
     const ds=isoOf(d);
-    const dayO=weekOrders.filter(o=>o.date===ds).sort((a,b)=>(a.status==='beklemede'?-1:1));
+    const dayO=weekOrders.filter(o=>kanbanDate(o)===ds).sort((a,b)=>(a.status==='beklemede'?-1:1));
     const dayTotal=dayO.reduce((s,o)=>s+orderTotal(o),0);
     const isToday=ds===todayISO();
     const ordList=dayO.length?dayO.map(o=>`<div class="day-ord st-dot-${o.status}" onclick="openOrder('${o.id}')" title="${esc(o.customer)} · ${statusLabel(o.status)}"><span class="do-name">${esc(o.customer)}</span><span class="do-meta">${o.firma?o.firma+' · ':''}${(o.lines||[]).length} kalem${canSeePrice()&&orderTotal(o)?' · '+fmtTL(orderTotal(o)):''}</span></div>`).join(''):`<div class="day-empty">—</div>`;
@@ -578,7 +581,7 @@ function renderPanel(c,tb){
   if(canSeePrice()&&typeof Chart!=='undefined')setTimeout(()=>{
     if(panelChart){try{panelChart.destroy()}catch(e){}}
     const el=document.getElementById('panelDayChart');if(!el)return;
-    panelChart=new Chart(el,{type:'bar',data:{labels:days.map((d,i)=>GUN_TR[i].slice(0,3)+' '+d.getDate()),datasets:[{label:'Ciro ₺',data:days.map(d=>{const ds=isoOf(d);return weekOrders.filter(o=>o.date===ds).reduce((s,o)=>s+orderTotal(o),0)}),backgroundColor:days.map(d=>isoOf(d)===todayISO()?'#1D62A8':'#8DC2F2'),borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v>=1000?(v/1000)+'B':v}}}}});
+    panelChart=new Chart(el,{type:'bar',data:{labels:days.map((d,i)=>GUN_TR[i].slice(0,3)+' '+d.getDate()),datasets:[{label:'Ciro ₺',data:days.map(d=>{const ds=isoOf(d);return weekOrders.filter(o=>kanbanDate(o)===ds).reduce((s,o)=>s+orderTotal(o),0)}),backgroundColor:days.map(d=>isoOf(d)===todayISO()?'#1D62A8':'#8DC2F2'),borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v>=1000?(v/1000)+'B':v}}}}});
   },40);
 }
 // ============ ORDERS ============
@@ -651,11 +654,13 @@ function refreshOrders(){
 function orderTable(arr){
   if(!arr.length)return `<div class="tbl-empty">Sipariş bulunamadı</div>`;
   const priceCol=canSeePrice();
-  return `<table class="tbl"><thead><tr><th>Tarih</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
+  return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
     const prods=(o.lines||[]).map(l=>l.code).join(', ');
     const kom=o.komisyoncuId?komById(o.komisyoncuId):null;
     return `<tr class="${kom?('row-'+kom.type):''}">
+      <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap;font-weight:700;color:var(--blue-700)">${o.no?('#'+o.no):'—'}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap">${fmtDate(o.date)}</td>
+      <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap;font-weight:600;color:var(--blue-700)">${o.teslimTarihi?fmtDate(o.teslimTarihi):'<span style="color:var(--slate-300)">—</span>'}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer"><b>${esc(o.customer)}</b></td>
       <td>${o.firma?`<span class="firma-${o.firma}">${o.firma}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
       <td>${kom?`<span class="kom-chip kom-${kom.type}" title="${kom.type==='danisman'?'Teknik Danışman':'Bayi'}">${esc(kom.name)}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
@@ -671,7 +676,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,date:todayISO(),customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -685,14 +690,19 @@ function renderOrderModal(){
     <div class="modal-hd"><h2>${o.id?'Sipariş Detayı':'Yeni Sipariş'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
     <div class="modal-bd">
       <div class="fgrid c3">
-        <div class="fld"><label>Tarih</label><input type="date" value="${o.date}" ${ro?'disabled':''} min="${o.id?'':todayISO()}" onchange="onChangeOrderDate(this.value)"></div>
+        <div class="fld"><label>Sipariş No</label><input value="${o.no?('#'+o.no):('#'+nextOrderNo()+' · otomatik')}" disabled style="font-weight:700;color:var(--blue-800)"></div>
         <div class="fld"><label>Müşteri</label><select ${ro?'disabled':''} onchange="onPickCustomer(this.value)"><option value="">— Seçiniz —</option>${custOpts}</select></div>
         <div class="fld"><label>Firma</label><select ${ro?'disabled':''} onchange="editOrder.firma=this.value"><option value="">—</option>${optFirma().map(f=>`<option value="${esc(f)}" ${o.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
+        <div class="fld"><label>Sipariş Alındı</label><input value="${o.id?fmtDateTime(o.createdAt||o.date):'Kayıtta otomatik atanır'}" disabled title="Sistem tarafından otomatik"></div>
+        <div class="fld"><label>Teslim Tarihi <span style="color:var(--red-500)">*</span></label><input type="date" value="${o.teslimTarihi||''}" min="${o.date||todayISO()}" ${ro?'disabled':''} onchange="editOrder.teslimTarihi=this.value" style="${!o.teslimTarihi&&!ro?'border-color:var(--amber-500);background:#FFFBEB':''}"></div>
         <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="editOrder.status=this.value">${optDurum().map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
+      </div>
+      <div class="fgrid c3">
         <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
         <div class="fld"><label>Ödeme Tarihi</label>${odemeFieldHTML(o,ro)}</div>
+        <div class="fld"></div>
       </div>
       ${orderKomisyonRow(o,ro)}
       <div class="sub-hd">Sipariş Kalemleri</div>
@@ -813,8 +823,9 @@ function rmLine(i){editOrder.lines.splice(i,1);if(!editOrder.lines.length)editOr
 function setLine(i,f,v){editOrder.lines[i][f]=v;if(f==='price')editOrder.lines[i]._locked=(v!==''&&v!=null);if(f==='code'||f==='qty'||f==='price')renderOrderModal()}
 function saveOrder(){
   const o=editOrder;
-  if(!o.id&&o.date<todayISO()){toast('Geçmiş tarihe sipariş girilemez');return}
   if(!o.customerId){toast('Müşteri seçiniz');return}
+  if(!o.teslimTarihi){toast('Teslim tarihi seçiniz (zorunlu)');return}
+  if(o.date&&o.teslimTarihi<o.date){toast('Teslim tarihi, sipariş alım tarihinden önce olamaz');return}
   o.lines=(o.lines||[]).filter(l=>l.code&&(+l.qty>0));
   if(!o.lines.length){toast('En az bir ürün ekleyin');return}
   // Birim fiyatı kullanıcı elle girer; boş bırakılanı 0 olarak kaydet (otomatik liste fiyatı atanmaz)
@@ -823,7 +834,7 @@ function saveOrder(){
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
   if(o.komisyoncuId){const kom=komById(o.komisyoncuId);if(kom&&o.komisyonRate==null)o.komisyonRate=+kom.rate||(kom.type==='danisman'?((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT):0);const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonRate=null;o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);DB.orders[idx]=o;logAct('Sipariş güncellendi: '+o.customer);}
-  else{o.id=uid('o');DB.orders.push(o);logAct('Yeni sipariş: '+o.customer);}
+  else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);}
   saveDB();closeModal();toast('Sipariş kaydedildi');render();
 }
 function delOrder(id){if(!confirm('Bu sipariş silinsin mi?'))return;DB.orders=DB.orders.filter(o=>o.id!==id);logAct('Sipariş silindi');saveDB();closeModal();toast('Silindi');render()}
