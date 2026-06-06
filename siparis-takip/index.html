@@ -87,7 +87,7 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .kpi .kl{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--slate-500);margin-bottom:7px}
 .kpi .kv{font-family:var(--font-serif);font-size:23px;font-weight:700;color:var(--slate-900);line-height:1}
 .kpi .ks{font-size:11px;color:var(--slate-500);margin-top:5px}
-.kpi.g{border-top-color:var(--green-600)}.kpi.a{border-top-color:var(--amber-500)}.kpi.r{border-top-color:var(--red-500)}.kpi.p{border-top-color:var(--purple)}
+.kpi.g{border-top-color:var(--green-600)}.kpi.a{border-top-color:var(--amber-500)}.kpi.r{border-top-color:var(--red-500)}.kpi.p{border-top-color:var(--purple)}.kpi.s{border-top-color:#0EA5E9}
 /* cards & tables */
 .card{background:#fff;border:1px solid var(--slate-200);border-radius:9px;box-shadow:0 1px 2px rgba(0,0,0,.03);margin-bottom:18px}
 .card-hd{padding:13px 18px;border-bottom:1px solid var(--slate-200);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -184,16 +184,21 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .day-tot{font-size:11px;color:var(--green-700);font-weight:700;margin-top:3px}
 .day-list{flex:1;overflow-y:auto;max-height:240px;padding:5px}
 .day-list::-webkit-scrollbar{width:4px}.day-list::-webkit-scrollbar-thumb{background:var(--slate-200);border-radius:2px}
-.day-ord{padding:5px 7px;border-radius:5px;cursor:pointer;margin-bottom:3px;border-left:3px solid var(--slate-300);background:var(--slate-50);transition:background .1s}
-.day-ord:hover{background:var(--blue-50)}
+.day-ord{padding:5px 7px;border-radius:5px;cursor:pointer;margin-bottom:3px;border-left:4px solid var(--slate-300);background:var(--slate-50);transition:filter .1s}
+.day-ord:hover{filter:brightness(.96)}
 .day-ord .do-name{display:block;font-size:11px;font-weight:600;color:var(--slate-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .day-ord .do-meta{display:block;font-size:9.5px;color:var(--slate-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.day-ord.st-dot-beklemede{border-left-color:var(--slate-400)}
-.day-ord.st-dot-onay{border-left-color:var(--blue-500)}
-.day-ord.st-dot-hazir{border-left-color:var(--amber-500)}
-.day-ord.st-dot-sevk{border-left-color:#0EA5E9}
-.day-ord.st-dot-teslim{border-left-color:var(--green-600)}
-.day-ord.st-dot-iptal{border-left-color:var(--red-500)}
+.day-ord.st-dot-beklemede{border-left-color:#94A3B8;background:#F1F5F9}
+.day-ord.st-dot-onay{border-left-color:#2878C8;background:#EAF2FB}
+.day-ord.st-dot-hazir{border-left-color:#F59E0B;background:#FEF6E7}
+.day-ord.st-dot-sevk{border-left-color:#0EA5E9;background:#E8F6FE}
+.day-ord.st-dot-teslim{border-left-color:#16A34A;background:#E9F8EF}
+.day-ord.st-dot-iptal{border-left-color:#EF4444;background:#FCEBEB}
+/* durum renk açıklaması (legend) */
+.st-legend{display:flex;flex-wrap:wrap;gap:7px 14px;align-items:center;margin:0 0 13px;padding:10px 14px;background:#fff;border:1px solid var(--slate-200);border-radius:9px}
+.st-legend .lg-ttl{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--slate-500);margin-right:2px}
+.st-lg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--slate-700)}
+.st-lg i{width:11px;height:11px;border-radius:3px;display:inline-block;flex:none}
 .day-empty{text-align:center;color:var(--slate-300);padding:24px 0;font-size:14px}
 @media(max-width:1200px){.day-grid{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:760px){.day-grid{grid-template-columns:repeat(2,1fr)}.week-nav .wk-range{order:-1;flex-basis:100%}}
@@ -563,6 +568,7 @@ function renderPanel(c,tb){
   const weekTotal=weekOrders.reduce((s,o)=>s+orderTotal(o),0);
   const pending=weekOrders.filter(o=>o.status==='beklemede').length;
   const ready=weekOrders.filter(o=>o.status==='hazir').length;
+  const shipped=weekOrders.filter(o=>o.status==='sevk').length;
   const sameMonth=days[0].getMonth()===days[6].getMonth();
   const rangeLabel=sameMonth?`${days[0].getDate()} - ${days[6].getDate()} ${AYLAR_TR[days[6].getMonth()]} ${days[6].getFullYear()}`:`${days[0].getDate()} ${AYLAR_TR[days[0].getMonth()]} - ${days[6].getDate()} ${AYLAR_TR[days[6].getMonth()]} ${days[6].getFullYear()}`;
   const isThisWeek=weekStart===isoOf(mondayOf(todayISO()));
@@ -579,9 +585,13 @@ function renderPanel(c,tb){
     ${canSeePrice()?`<div class="kpi g"><div class="kl">Bu Hafta Ciro</div><div class="kv" style="font-size:19px">${fmtTL(weekTotal)}</div></div>`:''}
     <div class="kpi a"><div class="kl">Bekleyen</div><div class="kv">${pending}</div><div class="ks">işlem bekliyor</div></div>
     <div class="kpi p"><div class="kl">Hazır</div><div class="kv">${ready}</div><div class="ks">sevke hazır</div></div>
+    <div class="kpi s"><div class="kl">Sevk Edildi</div><div class="kv">${shipped}</div><div class="ks">yola çıktı</div></div>
   </div>`;
   // günlük ciro grafiği
   if(canSeePrice())h+=`<div class="card" style="margin-bottom:18px"><div class="card-hd"><h3>Günlük Ciro (Hafta)</h3></div><div class="card-bd" style="padding:14px 16px"><div style="position:relative;height:150px"><canvas id="panelDayChart"></canvas></div></div></div>`;
+  // durum renk açıklaması (legend)
+  const ST_HEX={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
+  h+=`<div class="st-legend"><span class="lg-ttl">Durum Renkleri</span>${STATUSES.map(s=>`<span class="st-lg"><i style="background:${ST_HEX[s.v]}"></i>${esc(s.l)}</span>`).join('')}</div>`;
   // gün kutuları
   h+=`<div class="day-grid">`;
   days.forEach((d,i)=>{
