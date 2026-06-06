@@ -433,7 +433,9 @@ function loadDB(){
   DB.hammaddeler=DB.hammaddeler||[];DB.receteler=DB.receteler||{};DB.uretimler=DB.uretimler||[];
   if(!DB.uzakCities)DB.uzakCities=UZAK_CITIES.filter(c=>c!=='URFA'&&c!=='ANTEP');
   // Fiyat listesi güncellemesi (versiyon değiştiyse mevcut kurulumu da güncelle)
-  if(DB.meta.priceVersion!==PRICE_VERSION){applyPriceList();saveDB();}
+  const _hadLists=!!(DB.priceLists&&DB.priceLists.length);
+  if(DB.meta.priceVersion!==PRICE_VERSION){applyPriceList();if(_hadLists){publishSnapshot(isoFromTR(DB.meta.priceDate)||todayISO(),'Sistem fiyat güncellemesi');}saveDB();}
+  ensurePriceLists();  // ilk kurulum / eski DB migrasyonu için tarife arşivini garanti et
   seedKomisyon();seedOpts();saveDB();
 }
 function saveDB(){localStorage.setItem(LSKEY,JSON.stringify(DB))}
@@ -459,6 +461,16 @@ function custById(id){return DB.customers.find(c=>c.id===id)}
 function prodByCode(code){return DB.products.find(p=>p.code===code)}
 function prodPrice(p,kademe){if(!p)return 0;return p[kademe||'fabrika']||p.fabrika||0}
 function lineUnit(l,kademe){if(l.price==='')return 0;if(l.price!=null)return +l.price||0;const p=prodByCode(l.code);return prodPrice(p,kademe)}
+// ===== FİYAT TARİFE ARŞİVİ =====
+function priceLists(){return (DB.priceLists=DB.priceLists||[])}
+function activePriceList(){const ls=priceLists();return ls.find(p=>p.id===(DB.meta&&DB.meta.activePriceListId))||ls.find(p=>p.active)||ls[ls.length-1]||null}
+function priceListById(id){return id?(priceLists().find(p=>p.id===id)||null):null}
+function orderPL(o){return priceListById(o&&o.priceListId)||activePriceList()}
+function tariffPrice(pl,code,kademe){if(!pl||!code)return 0;const it=(pl.items||[]).find(x=>trNorm(x.code)===trNorm(code));return it?(+it[kademe||'fabrika']||0):0}
+function snapshotProducts(){return DB.products.map(p=>({code:p.code,pkg:p.pkg||'25 kg',fabrika:+p.fabrika||0,yakin:+p.yakin||0,uzak:+p.uzak||0,danismanListe:+p.danismanListe||0}))}
+function isoFromTR(t){const m=/^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(t||''));return m?(m[3]+'-'+m[2]+'-'+m[1]):''}
+function publishSnapshot(dateISO,note){const id=uid('pl');priceLists().forEach(p=>p.active=false);priceLists().push({id,date:dateISO||todayISO(),note:note||'',createdAt:new Date().toISOString(),active:true,items:snapshotProducts()});DB.meta.activePriceListId=id;DB.meta.priceDate=fmtDate(dateISO||todayISO());return id;}
+function ensurePriceLists(){DB.priceLists=DB.priceLists||[];if(!DB.priceLists.length){const id=uid('pl');DB.priceLists.push({id,date:isoFromTR(DB.meta.priceDate)||todayISO(),note:'İlk fiyat listesi',createdAt:new Date().toISOString(),active:true,items:snapshotProducts()});DB.meta.activePriceListId=id;}if(!DB.meta.activePriceListId){const a=DB.priceLists.find(p=>p.active)||DB.priceLists[DB.priceLists.length-1];if(a)DB.meta.activePriceListId=a.id;}}
 function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0}return o.total||0}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 function phoneClean(p){return String(p||'').replace(/[^0-9]/g,'').replace(/^0/,'90')}
@@ -685,7 +697,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -714,7 +726,7 @@ function renderOrderModal(){
         <div class="fld"><label>Sipariş Alan</label><select ${ro?'disabled':''} onchange="editOrder.alan=this.value"><option value="">— Seçiniz —</option>${optAlan().map(a=>`<option value="${esc(a)}" ${o.alan===a?'selected':''}>${esc(a)}</option>`).join('')}${o.alan&&!optAlan().includes(o.alan)?`<option value="${esc(o.alan)}" selected>${esc(o.alan)}</option>`:''}</select>${optAlan().length?'':'<div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Ayarlar → Sipariş Alan Kişiler\'den ekleyin</div>'}</div>
       </div>
       ${orderKomisyonRow(o,ro)}
-      <div class="sub-hd">Sipariş Kalemleri</div>
+      <div class="sub-hd">Sipariş Kalemleri${showPrice?priceListSelectorHTML(o,ro):''}</div>
       <table class="line-tbl"><thead><tr><th style="width:42%">Ürün</th><th style="width:18%">Miktar (çuval)</th>${showPrice?'<th style="width:18%">Birim ₺</th><th style="width:18%">Tutar</th>':''}<th></th></tr></thead><tbody id="lineRows">${lines}</tbody></table>
       ${ro?'':`<button class="btn btn-gray btn-sm" style="margin-top:8px" onclick="addLine()">+ Ürün Ekle</button>`}
       ${showPrice?`<div class="line-total">Genel Toplam: ${fmtTL(orderTotal(o))}</div>`:''}
@@ -748,7 +760,7 @@ function orderLineRow(l,i,ro){
   const showPrice=canSeePrice();
   const p=prodByCode(l.code);
   const priceVal=(l.price!=null&&l.price!=='')?l.price:'';   // elle girilen fiyat, yoksa boş (otomatik doldurma yok)
-  const hint=prodPrice(p,editOrder.fiyatKademe);              // liste fiyatı sadece ipucu (placeholder)
+  const hint=tariffPrice(orderPL(editOrder),l.code,editOrder.fiyatKademe);  // seçili tarifeden ipucu
   const tot=(+l.qty||0)*lineUnit(l,editOrder.fiyatKademe);
   const opts=DB.products.filter(x=>x.active!==false).map(x=>`<option value="${x.code}" ${l.code===x.code?'selected':''}>${esc(x.code)}</option>`).join('');
   return `<tr>
@@ -817,7 +829,22 @@ function pickKomField(type,name){
   renderOrderModal();
 }
 function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma&&!editOrder.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);editOrder.komisyoncuId=c.bayiId||c.danismanId||'';}clearLinePrices();renderOrderModal()}
-function clearLinePrices(){(editOrder.lines||[]).forEach(l=>{if(!l._locked)l.price='';})}
+// Elle girilmemiş (kilitsiz) satırların birim fiyatını seçili tarifeden doldurur — "güncel tutarlar default gelsin"
+function applyTariffToLines(){const pl=orderPL(editOrder);(editOrder.lines||[]).forEach(l=>{if(!l._locked&&l.code){const v=tariffPrice(pl,l.code,editOrder.fiyatKademe);l.price=v||'';}})}
+function clearLinePrices(){applyTariffToLines();}
+function onChangePriceList(id){editOrder.priceListId=id;applyTariffToLines();renderOrderModal()}
+// Sipariş modalı tarife seçici (güncel = default, eski tarifeler arşivden)
+function priceListSelectorHTML(o,ro){
+  const ls=priceLists().slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!ls.length)return '';
+  const cur=orderPL(o);const curId=cur?cur.id:'';
+  const isOld=!!(cur&&cur.id!==DB.meta.activePriceListId);
+  const opts=ls.map(pl=>{const act=pl.id===DB.meta.activePriceListId;return `<option value="${pl.id}" ${pl.id===curId?'selected':''}>${fmtDate(pl.date)}${act?' · Güncel':''}${pl.note?' ('+esc(pl.note)+')':''}</option>`}).join('');
+  return `<span style="float:right;font-weight:400;text-transform:none;display:inline-flex;align-items:center;gap:6px">
+    <span style="font-size:11px;color:${isOld?'var(--amber-700)':'var(--slate-500)'}">${isOld?'⏱ Eski tarife':'Tarife'}</span>
+    <select ${ro?'disabled':''} style="font-size:12px;padding:3px 6px;max-width:230px" onchange="onChangePriceList(this.value)">${opts}</select>
+  </span>`;
+}
 function onChangeKademe(v){editOrder.fiyatKademe=v;if(v==='fabrika'){editOrder.kargo='';editOrder.nakliye=0;editOrder.plaka='';editOrder.sofor='';editOrder.palet='';editOrder.strec='';}clearLinePrices();renderOrderModal()}
 function isISODate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s||'')}
 function odemeFieldHTML(o,ro){
@@ -839,7 +866,7 @@ function onChangeOrderDate(v){const o=editOrder;o.date=v;if(isISODate(o.odeme)&&
 function addNewVade(){const inp=document.getElementById('newVadeInput');const v=(inp?inp.value:'').trim();if(!v){toast('Vade adı girin');return}DB.opts.odeme=DB.opts.odeme||[];if(!DB.opts.odeme.some(x=>x.toLowerCase()===v.toLowerCase()))DB.opts.odeme.push(v);saveDB();editOrder.odeme=v;editOrder._newVade=false;renderOrderModal();toast('Vade eklendi: '+v)}
 function addLine(){editOrder.lines.push({code:'',qty:'',price:''});renderOrderModal()}
 function rmLine(i){editOrder.lines.splice(i,1);if(!editOrder.lines.length)editOrder.lines.push({code:'',qty:''});renderOrderModal()}
-function setLine(i,f,v){editOrder.lines[i][f]=v;if(f==='price')editOrder.lines[i]._locked=(v!==''&&v!=null);if(f==='code'||f==='qty'||f==='price')renderOrderModal()}
+function setLine(i,f,v){editOrder.lines[i][f]=v;if(f==='price')editOrder.lines[i]._locked=(v!==''&&v!=null);if(f==='code'&&v&&!editOrder.lines[i]._locked){editOrder.lines[i].price=tariffPrice(orderPL(editOrder),v,editOrder.fiyatKademe)||'';}if(f==='code'||f==='qty'||f==='price')renderOrderModal()}
 function saveOrder(){
   const o=editOrder;
   if(!o.customerId){toast('Müşteri seçiniz');return}
@@ -1148,9 +1175,9 @@ function delKomOdeme(id,komId){if(!confirm('Ödeme kaydı silinsin mi?'))return;
 // ============ PRODUCTS ============
 let editProd=null;
 function renderProducts(c,tb){
-  if(isAdmin())tb.innerHTML=`<button class="btn btn-pri" onclick="openProd()">+ Yeni Ürün</button>`;
+  if(isAdmin())tb.innerHTML=`<button class="btn btn-gray" onclick="openPublishTariff()" style="margin-right:8px">📋 Yeni Tarife Yayınla</button><button class="btn btn-pri" onclick="openProd()">+ Yeni Ürün</button>`;
   const showPrice=canSeePrice();
-  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Fiyat listesi: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num" style="background:#EDE9FE">Danışman Liste ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td><td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
+  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Güncel tarife: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num" style="background:#EDE9FE">Danışman Liste ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td><td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
   // Teknik Danışman Fiyat Listesi kartı (Torbalı + iskontolu alış)
   if(showPrice){
     const isk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
@@ -1173,6 +1200,7 @@ function renderProducts(c,tb){
     <div style="display:flex;flex-wrap:wrap;gap:6px">${ul.slice().sort((a,b)=>a.localeCompare(b,'tr')).map(ci=>`<span style="background:var(--amber-100);color:var(--amber-700);font-size:11px;font-weight:600;padding:3px 4px 3px 9px;border-radius:11px;display:inline-flex;align-items:center;gap:4px">${esc(ci)}${isAdmin()?`<button onclick="removeUzak('${esc(ci).replace(/'/g,"\\'")}')" title="Çıkar" style="background:none;border:none;color:var(--amber-700);cursor:pointer;font-size:13px;line-height:1;padding:0 3px;opacity:.6">×</button>`:''}</span>`).join('')}</div>
     <div style="font-size:11px;color:var(--slate-500);margin-top:14px;padding-top:12px;border-top:1px solid var(--slate-100)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Müşteri kartındaki <b>şehir</b> bilgisine göre kademe otomatik belirlenir. Bu listede olmayan iller "Yakın" sayılır. Sipariş ekranında kademe manuel değiştirilebilir.${isAdmin()?' Değişiklikler otomatik kaydedilir.':''}</div>
   </div></div>`;
+  h+=tariffArchiveCardHTML();
   c.innerHTML=h;
 }
 function addUzak(){const inp=document.getElementById('newUzak');if(!inp)return;const v=inp.value.trim().toUpperCase();if(!v)return;DB.uzakCities=DB.uzakCities||[];if(DB.uzakCities.some(c=>trNorm(c)===trNorm(v))){toast('Bu il zaten listede');inp.value='';return}DB.uzakCities.push(v);logAct('Uzak il eklendi: '+v);saveDB();toast(v+' eklendi');render()}
@@ -1197,6 +1225,97 @@ function openProd(id){if(!isAdmin()){toast('Sadece yönetici');return}
 }
 function saveProd(){const o=editProd;if(!o.code.trim()){toast('Kod giriniz');return}o.name=o.code;if(o.id){const i=DB.products.findIndex(p=>p.id===o.id);DB.products[i]=o}else{o.id=uid('p');DB.products.push(o)}logAct('Ürün kaydı: '+o.code);saveDB();closeModal();toast('Ürün kaydedildi');render()}
 function delProd(id){if(!confirm('Ürün silinsin mi?'))return;DB.products=DB.products.filter(p=>p.id!==id);saveDB();closeModal();toast('Silindi');render()}
+// ============ TARİFE: YAYINLA / ARŞİV / PDF ============
+function openPublishTariff(){
+  if(!isAdmin()){toast('Sadece yönetici');return}
+  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd"><h2>Yeni Fiyat Tarifesi Yayınla</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
+    <div class="modal-bd">
+      <p style="font-size:12.5px;color:var(--slate-600);margin-top:0;line-height:1.5">Ürünler sayfasındaki <b>güncel fiyatların</b> bir kopyası arşivlenir ve bu tarihten itibaren <b>siparişlerde varsayılan</b> olur. Önceki tarife arşivde kalır, istediğinde <b>PDF</b> olarak indirilebilir ve siparişte geçmiş tarife olarak uygulanabilir.</p>
+      <div class="fgrid c2">
+        <div class="fld"><label>Yürürlük Tarihi</label><input type="date" id="plDate" value="${todayISO()}"></div>
+        <div class="fld"><label>Not / Açıklama</label><input type="text" id="plNote" placeholder="örn. Mart zammı"></div>
+      </div>
+    </div>
+    <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="publishTariff()">Yayınla & Arşivle</button><button class="btn btn-gray" onclick="closeModal()">Vazgeç</button></div></div>
+  </div></div>`;
+  document.getElementById('modalRoot').innerHTML=m;
+}
+function publishTariff(){
+  if(!isAdmin())return;
+  const date=(document.getElementById('plDate')||{}).value||todayISO();
+  const note=((document.getElementById('plNote')||{}).value||'').trim();
+  const prevId=DB.meta.activePriceListId;
+  publishSnapshot(date,note);
+  logAct('Yeni fiyat tarifesi yayınladı: '+fmtDate(date));
+  saveDB();closeModal();toast('Tarife yayınlandı ve arşivlendi');render();
+  if(prevId)tariffPDF(prevId);   // değişiklik anında eski fiyatları PDF olarak aç
+}
+function tariffArchiveCardHTML(){
+  if(!canSeePrice())return '';
+  const ls=priceLists().slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||'').localeCompare(a.createdAt||''));
+  const rows=ls.map(pl=>{
+    const act=pl.id===DB.meta.activePriceListId;
+    return `<tr>
+      <td><b>${fmtDate(pl.date)}</b>${act?' <span class="badge st-teslim">Güncel</span>':''}</td>
+      <td>${esc(pl.note||'—')}</td>
+      <td class="num">${(pl.items||[]).length} ürün</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-gray btn-sm" onclick="viewTariff('${pl.id}')">Görüntüle</button>
+        <button class="btn btn-gray btn-sm" onclick="tariffPDF('${pl.id}')">PDF</button>
+        ${(isAdmin()&&!act)?`<button class="btn btn-gray btn-sm" onclick="setActiveTariff('${pl.id}')">Güncel Yap</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+  return `<div class="card"><div class="card-hd"><h3>🗄️ Fiyat Arşivi</h3><span style="font-size:11px;color:var(--slate-400)">${ls.length} tarife · her fiyat değişikliği saklanır</span></div>
+    <div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Not</th><th class="num">Kapsam</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--slate-400)">Henüz tarife yok</td></tr>'}</tbody></table></div></div>`;
+}
+function setActiveTariff(id){
+  if(!isAdmin())return;
+  const pl=priceListById(id);if(!pl)return;
+  if(!confirm(fmtDate(pl.date)+' tarifesini GÜNCEL yapmak istiyor musunuz? Ürün fiyatları bu tarifeye göre güncellenecek.'))return;
+  priceLists().forEach(p=>p.active=false);pl.active=true;DB.meta.activePriceListId=id;DB.meta.priceDate=fmtDate(pl.date);
+  (pl.items||[]).forEach(it=>{const prod=DB.products.find(p=>trNorm(p.code)===trNorm(it.code));if(prod){prod.fabrika=it.fabrika;prod.yakin=it.yakin;prod.uzak=it.uzak;prod.danismanListe=it.danismanListe;}});
+  logAct('Güncel tarife değiştirildi: '+fmtDate(pl.date));saveDB();render();toast('Güncel tarife güncellendi');
+}
+function viewTariff(id){
+  const pl=priceListById(id);if(!pl)return;
+  const rows=(pl.items||[]).map(it=>`<tr><td><b>${esc(it.code)}</b></td><td>${esc(it.pkg||'')}</td><td class="num">${fmtN(it.fabrika)}</td><td class="num">${fmtN(it.yakin)}</td><td class="num">${fmtN(it.uzak)}</td><td class="num">${it.danismanListe?fmtN(it.danismanListe):'—'}</td></tr>`).join('');
+  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide" onclick="event.stopPropagation()">
+    <div class="modal-hd"><h2>Tarife · ${fmtDate(pl.date)}${pl.id===DB.meta.activePriceListId?' (Güncel)':''}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
+    <div class="modal-bd">
+      ${pl.note?`<p style="font-size:12.5px;color:var(--slate-600);margin-top:0">${esc(pl.note)}</p>`:''}
+      <table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th><th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num">Danışman ₺</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-pri" onclick="tariffPDF('${pl.id}')">PDF İndir</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+  </div></div>`;
+  document.getElementById('modalRoot').innerHTML=m;
+}
+function tariffPDF(id){
+  const pl=priceListById(id);if(!pl)return;
+  const act=pl.id===DB.meta.activePriceListId;
+  const rows=(pl.items||[]).map(it=>`<tr><td><b>${esc(it.code)}</b></td><td>${esc(it.pkg||'')}</td><td class="num">${fmtN(it.fabrika)}</td><td class="num">${fmtN(it.yakin)}</td><td class="num">${fmtN(it.uzak)}</td><td class="num">${it.danismanListe?fmtN(it.danismanListe):'—'}</td></tr>`).join('');
+  const w=window.open('','_blank');if(!w){toast('Açılır pencere engellendi (PDF)');return}
+  w.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Rota Yem Fiyat Tarifesi ${fmtDate(pl.date)}</title>
+  <style>*{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;padding:32px;margin:0}
+  .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1d4ed8;padding-bottom:12px;margin-bottom:18px}
+  .hd h1{margin:0;font-size:20px;color:#1d4ed8;letter-spacing:.5px}.hd .sub{font-size:12px;color:#64748b}
+  .meta{font-size:12px;color:#475569;margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{border:1px solid #e2e8f0;padding:7px 10px;text-align:left}
+  th{background:#1d4ed8;color:#fff;font-weight:600}td.num,th.num{text-align:right}
+  tbody tr:nth-child(even){background:#f8fafc}
+  .ft{margin-top:18px;font-size:10.5px;color:#94a3b8;text-align:center}
+  @media print{body{padding:0}}</style></head><body>
+    <div class="hd"><div><h1>ROTA YEM</h1><div class="sub">Fiyat Tarifesi · Arşiv Belgesi</div></div>
+      <div style="text-align:right"><div style="font-size:15px;font-weight:700">${fmtDate(pl.date)}</div><div class="sub">${act?'GÜNCEL TARİFE':'ARŞİV'}</div></div></div>
+    <div class="meta">${pl.note?'<b>Not:</b> '+esc(pl.note)+' · ':''}Ambalaj: 25 kg · Fiyatlar ₺/çuval · Fabrika / Yakın / Uzak bayi + Danışman liste</div>
+    <table><thead><tr><th>Kod</th><th>Ambalaj</th><th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th><th class="num">Danışman ₺</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="ft">Rota Yem Sipariş Takip Sistemi · Belge oluşturma: ${fmtDate(todayISO())} · Bu belge arşiv amaçlıdır.</div>
+    <scr`+`ipt>window.onload=function(){setTimeout(function(){window.print()},250)}</scr`+`ipt>
+  </body></html>`);
+  w.document.close();
+}
 // ============ STOCK ============
 function renderStock(c,tb){
   let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">Son güncelleme verisi (Excel'den)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${DB.products.map(p=>{const s=DB.stock[p.code]||{};const kalan=+s.kalan||0;const warn=kalan>0&&kalan<20;return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(s.stok)}</td><td class="num">${fmtN(s.uretim)}</td><td class="num">${fmtN(s.cikis)}</td><td class="num" style="font-weight:700;${warn?'color:var(--red-700)':kalan===0?'color:var(--slate-400)':''}">${fmtN(kalan)}${warn?' <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>':''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`}).join('')}</tbody></table></div></div>
