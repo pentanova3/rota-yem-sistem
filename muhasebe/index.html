@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mali İşler · Nakit Akış · Rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --blue-900:#0C2340;--blue-800:#103561;--blue-700:#174B82;--blue-600:#1D62A8;--blue-500:#2878C8;--blue-400:#4A9AE5;--blue-300:#8DC2F2;--blue-200:#C1DEF7;--blue-100:#E8F1FB;--blue-50:#F3F8FD;
+  --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#334155;--slate-600:#475569;--slate-500:#64748B;--slate-400:#94A3B8;--slate-300:#CBD5E1;--slate-200:#E2E8F0;--slate-100:#F1F5F9;--slate-50:#F8FAFC;
+  --green-600:#16A34A;--green-100:#DCFCE7;--green-700:#15803D;--green-50:#F0FDF4;
+  --amber-500:#F59E0B;--amber-100:#FEF3C7;--amber-700:#B45309;--amber-50:#FFFBEB;
+  --red-500:#EF4444;--red-100:#FEE2E2;--red-700:#B91C1C;--red-50:#FEF2F2;
+  --purple:#7C3AED;
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:var(--slate-100);color:var(--slate-800);line-height:1.4}
+.num{font-variant-numeric:tabular-nums;text-align:right}
+.hidden{display:none!important}
+button{font-family:inherit}
+/* ===== Giriş ekranı ===== */
+#gate{position:fixed;inset:0;z-index:100;background:linear-gradient(160deg,#0C2340,#103561);display:flex;align-items:center;justify-content:center;padding:24px}
+.gate-card{background:#fff;border-radius:16px;padding:34px 30px;width:100%;max-width:360px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5);text-align:center}
+.gate-card .logo{width:140px;margin:0 auto 18px;display:block}
+.gate-card h1{font-size:15px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--slate-700);margin-bottom:4px}
+.gate-card .sub{font-size:12.5px;color:var(--slate-500);margin-bottom:22px}
+.gate-card input{width:100%;padding:12px 14px;border:1px solid var(--slate-300);border-radius:9px;font-size:15px;text-align:center;letter-spacing:.1em;margin-bottom:12px}
+.gate-card input:focus{outline:none;border-color:var(--blue-500);box-shadow:0 0 0 3px var(--blue-100)}
+.gate-card button{width:100%;padding:12px;background:var(--blue-600);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer}
+.gate-card button:hover{background:var(--blue-700)}
+.gate-err{color:var(--red-600,#dc2626);font-size:12px;margin-top:8px;min-height:16px}
+/* ===== Topbar ===== */
+.topbar{background:#fff;border-bottom:1px solid var(--slate-200);padding:12px 22px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.topbar .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.topbar .brand img{height:34px}
+.topbar .brand .t1{font-size:15px;font-weight:700;color:var(--slate-900);line-height:1.1}
+.topbar .brand .t2{font-size:11px;color:var(--slate-500)}
+.back-link{font-size:12px;color:var(--slate-500);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.back-link:hover{color:var(--blue-600)}
+.btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--slate-300);background:#fff;color:var(--slate-700);display:inline-flex;align-items:center;gap:6px;transition:.12s}
+.btn:hover{background:var(--slate-50)}
+.btn-pri{background:var(--blue-600);color:#fff;border-color:var(--blue-600)}
+.btn-pri:hover{background:var(--blue-700)}
+.btn-sm{padding:5px 10px;font-size:12px}
+/* ===== Layout ===== */
+.wrap{max-width:1320px;margin:0 auto;padding:20px 22px 60px}
+.week-nav{display:flex;align-items:center;gap:14px;justify-content:center;margin-bottom:18px;flex-wrap:wrap}
+.wk-range{font-size:20px;font-weight:700;color:var(--slate-900)}
+.wk-now{font-size:10px;font-weight:700;letter-spacing:.06em;background:var(--green-100);color:var(--green-700);padding:3px 9px;border-radius:20px;vertical-align:middle;margin-left:8px}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid var(--slate-200);border-radius:10px;padding:14px 16px;border-top:3px solid var(--blue-600)}
+.kpi .kl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--slate-500);margin-bottom:7px}
+.kpi .kv{font-size:21px;font-weight:700;color:var(--slate-900);line-height:1}
+.kpi .ks{font-size:11px;color:var(--slate-500);margin-top:5px}
+.kpi.g{border-top-color:var(--green-600)}.kpi.r{border-top-color:var(--red-500)}.kpi.a{border-top-color:var(--amber-500)}.kpi.s{border-top-color:#0EA5E9}.kpi.p{border-top-color:var(--purple)}
+/* verdict banner */
+.verdict{border-radius:12px;padding:18px 22px;margin-bottom:18px;display:flex;align-items:flex-start;gap:16px;border:1px solid}
+.verdict .vic{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
+.verdict .vic svg{width:26px;height:26px}
+.verdict .vt{font-size:17px;font-weight:800;margin-bottom:3px}
+.verdict .vd{font-size:13px;line-height:1.5}
+.v-ok{background:var(--green-50);border-color:#bbf7d0}.v-ok .vic{background:var(--green-100);color:var(--green-700)}.v-ok .vt{color:var(--green-700)}
+.v-warn{background:var(--amber-50);border-color:#fde68a}.v-warn .vic{background:var(--amber-100);color:var(--amber-700)}.v-warn .vt{color:var(--amber-700)}
+.v-bad{background:var(--red-50);border-color:#fecaca}.v-bad .vic{background:var(--red-100);color:var(--red-700)}.v-bad .vt{color:var(--red-700)}
+/* card */
+.card{background:#fff;border:1px solid var(--slate-200);border-radius:11px;margin-bottom:18px;overflow:hidden}
+.card-hd{padding:13px 18px;border-bottom:1px solid var(--slate-100);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-hd h3{font-size:14px;font-weight:700;color:var(--slate-800)}
+.card-hd .hint{font-size:11px;color:var(--slate-400)}
+.card-bd{padding:0}
+.grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+/* cashflow table */
+.cf-scroll{overflow-x:auto}
+table.cf{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px}
+table.cf th,table.cf td{padding:8px 10px;border-bottom:1px solid var(--slate-100);text-align:right;white-space:nowrap}
+table.cf th:first-child,table.cf td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1;min-width:160px}
+table.cf thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--slate-200)}
+table.cf thead th.today{background:var(--blue-100);color:var(--blue-800)}
+table.cf .grp td{background:var(--slate-50);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--slate-500)}
+table.cf .grp.in td{color:var(--green-700);background:#f0fdf4}
+table.cf .grp.out td{color:var(--red-700);background:#fef2f2}
+table.cf td .cell-inp{width:90px;border:1px solid transparent;background:transparent;border-radius:5px;padding:3px 5px;text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--slate-700);font-family:inherit}
+table.cf td .cell-inp:hover{border-color:var(--slate-200)}
+table.cf td .cell-inp:focus{outline:none;border-color:var(--blue-400);background:var(--blue-50)}
+table.cf tr.tot td{font-weight:700;border-top:1px solid var(--slate-200)}
+table.cf tr.net td{font-weight:700;background:var(--slate-50)}
+table.cf tr.bal td{font-weight:800;background:var(--blue-50);color:var(--blue-900);border-top:2px solid var(--blue-200)}
+table.cf .pos{color:var(--green-700)}table.cf .neg{color:var(--red-700)}
+.catname{display:flex;align-items:center;gap:6px}
+.catname .del{opacity:0;cursor:pointer;color:var(--slate-300);font-size:14px;line-height:1}
+.catname:hover .del{opacity:1}
+.catname .del:hover{color:var(--red-500)}
+.addcat{font-size:11.5px;color:var(--blue-600);cursor:pointer;font-weight:600;padding:6px 10px;display:inline-block}
+.addcat:hover{text-decoration:underline}
+/* score ring */
+.score-wrap{display:flex;align-items:center;gap:18px;padding:18px}
+.ring{--p:0;--c:var(--green-600);width:96px;height:96px;border-radius:50%;flex:none;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--slate-100) 0);display:flex;align-items:center;justify-content:center}
+.ring .inner{width:74px;height:74px;background:#fff;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .sv{font-size:24px;font-weight:800;color:var(--slate-900);line-height:1}
+.ring .sl{font-size:9px;font-weight:700;letter-spacing:.05em;color:var(--slate-400);text-transform:uppercase}
+.score-meta .sm-t{font-size:15px;font-weight:700;margin-bottom:4px}
+.score-meta .sm-d{font-size:12.5px;color:var(--slate-600);line-height:1.5}
+.factors{padding:0 18px 16px}
+.factor{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px}
+.factor .fl{width:130px;color:var(--slate-600);flex:none}
+.factor .fbar{flex:1;height:7px;background:var(--slate-100);border-radius:5px;overflow:hidden}
+.factor .fbar i{display:block;height:100%;border-radius:5px}
+.factor .fv{width:42px;text-align:right;font-weight:700;color:var(--slate-700)}
+/* exec summary */
+.exec{padding:16px 18px;font-size:13px;line-height:1.65;color:var(--slate-700)}
+.exec b{color:var(--slate-900)}
+.exec .tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin:0 2px}
+/* upcoming payments */
+.pay{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--slate-100)}
+.pay:last-child{border-bottom:none}
+.pay .pd{width:52px;text-align:center;flex:none}
+.pay .pd .dd{font-size:18px;font-weight:800;color:var(--slate-800);line-height:1}
+.pay .pd .dm{font-size:10px;text-transform:uppercase;color:var(--slate-400);font-weight:700}
+.pay .pi{flex:1;min-width:0}
+.pay .pi .pn{font-size:13px;font-weight:600;color:var(--slate-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pay .pi .pc{font-size:11px;color:var(--slate-500)}
+.pay .pa{font-weight:700;font-size:13.5px;color:var(--slate-800);white-space:nowrap}
+.pay .pstat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.ps-soon{background:var(--amber-100);color:var(--amber-700)}.ps-late{background:var(--red-100);color:var(--red-700)}.ps-ok{background:var(--slate-100);color:var(--slate-500)}.ps-paid{background:var(--green-100);color:var(--green-700)}
+.empty{padding:26px;text-align:center;color:var(--slate-400);font-size:13px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--slate-900);color:#fff;padding:10px 18px;border-radius:9px;font-size:13px;z-index:200;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1}
+@media print{.topbar,.week-nav .btn,.no-print,.addcat,.cell-inp{display:none!important} body{background:#fff} .card{break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<!-- Giriş kapısı -->
+<div id="gate">
+  <div class="gate-card">
+    <img src="../rota smı.png" class="logo" alt="Rota" onerror="this.style.display='none'">
+    <h1>Mali İşler</h1>
+    <div class="sub">Nakit Akış &amp; Finans Yönetimi</div>
+    <input id="gpass" type="password" placeholder="Erişim şifresi" autocomplete="current-password">
+    <button onclick="unlock()">Giriş</button>
+    <div class="gate-err" id="gerr"></div>
+  </div>
+</div>
+
+<!-- Uygulama -->
+<div id="app" class="hidden">
+  <div class="topbar">
+    <a class="back-link" href="../">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Portal
+    </a>
+    <div class="brand">
+      <img src="../rota smı.png" alt="Rota" onerror="this.style.display='none'">
+      <div><div class="t1">Nakit Akış</div><div class="t2">Mali İşler · Haftalık Likidite</div></div>
+    </div>
+    <button class="btn btn-sm" onclick="setAcilis()">Açılış Bakiye</button>
+    <button class="btn btn-sm" onclick="window.print()">Yazdır / PDF</button>
+  </div>
+
+  <div class="wrap" id="content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ VERİ ============
+const LSKEY='rota_nakit_v1';
+const GATE_PASS='rota2026';
+const AYLAR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const GUNLER=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
+let DB=null, weekOffset=0, cfChart=null;
+
+function seed(){
+  return {
+    meta:{ acilisBakiye:812817, acilisTarih:'2026-06-01', updated:'' },
+    girisKat:[
+      {id:'k_hesapta',ad:'Hesap / Kasa'},
+      {id:'k_pos',ad:'POS Tahsilat'},
+      {id:'k_garanti',ad:'Garanti Alacak'},
+      {id:'k_alacak',ad:'Alacak Tahsilatı'},
+      {id:'k_cek',ad:'Çek Tahsilatı'}
+    ],
+    cikisKat:[
+      {id:'c_borc',ad:'Borç Ödemesi'},
+      {id:'c_gecikmis',ad:'Gecikmiş Borç'},
+      {id:'c_kkart',ad:'Kredi Kartı'},
+      {id:'c_kredi',ad:'Kredi Taksiti'},
+      {id:'c_fabrika',ad:'Fabrika Gideri'},
+      {id:'c_vergi',ad:'Vergiler'},
+      {id:'c_maas',ad:'Maaş / SGK'}
+    ],
+    entries:{
+      '2026-06-04':{k_hesapta:1484828},
+      '2026-06-05':{k_garanti:673568,c_borc:392465,c_kkart:1250000,c_fabrika:179794.03,c_vergi:40000},
+      '2026-06-08':{c_borc:677961.92,c_gecikmis:16318717.58},
+      '2026-06-12':{c_fabrika:175000},
+      '2026-06-15':{k_garanti:688350,k_alacak:720964.89,c_kredi:637974.44},
+      '2026-06-18':{c_borc:32000,c_fabrika:250000},
+      '2026-06-22':{c_kredi:3921086.88},
+      '2026-06-24':{c_fabrika:80000},
+      '2026-06-25':{c_fabrika:675000},
+      '2026-06-30':{k_garanti:220000},
+      '2026-07-01':{k_garanti:1323170}
+    },
+    odemeler:[
+      {id:'o1',ad:'Kuveyttürk SMI Kredi 20.',tarih:'2026-06-15',tutar:488291.52,kat:'Kredi',odendi:false},
+      {id:'o2',ad:'Kuveyttürk SMI Kredi 21.',tarih:'2026-07-16',tutar:488291.52,kat:'Kredi',odendi:false},
+      {id:'o3',ad:'OSB Taksit',tarih:'2026-07-25',tutar:675000,kat:'Taksit',odendi:false},
+      {id:'o4',ad:'Kuveyttürk SMI Kredi 22.',tarih:'2026-08-17',tutar:488291.52,kat:'Kredi',odendi:false},
+      {id:'o5',ad:'Kuveyttürk SMI Kredi 23.',tarih:'2026-09-15',tutar:488291.52,kat:'Kredi',odendi:false},
+      {id:'o6',ad:'Kuveyttürk SMI Kredi 24.',tarih:'2026-10-15',tutar:488291.52,kat:'Kredi',odendi:false},
+      {id:'o7',ad:'Kuveyttürk SMI Kredi 25.',tarih:'2026-12-15',tutar:488791.54,kat:'Kredi',odendi:false}
+    ]
+  };
+}
+function loadDB(){ try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):seed();}catch(e){DB=seed();} }
+function saveDB(){ DB.meta.updated=new Date().toISOString(); localStorage.setItem(LSKEY,JSON.stringify(DB)); }
+
+// ============ YARDIMCI ============
+function fmtTL(n){n=+n||0;return '₺'+n.toLocaleString('tr-TR',{maximumFractionDigits:0})}
+function fmtK(n){n=+n||0;const a=Math.abs(n);if(a>=1e6)return (n/1e6).toLocaleString('tr-TR',{maximumFractionDigits:1})+'M';if(a>=1e3)return (n/1e3).toLocaleString('tr-TR',{maximumFractionDigits:0})+'B';return n.toLocaleString('tr-TR')}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function isoOf(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parseISO(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function mondayOf(d){const x=new Date(d);const g=(x.getDay()+6)%7;x.setDate(x.getDate()-g);x.setHours(0,0,0,0);return x}
+function fmtDate(s){if(!s)return '';const d=parseISO(s);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear()}
+function daysBetween(aISO,bISO){return Math.round((parseISO(bISO)-parseISO(aISO))/864e5)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1900)}
+
+// ============ HESAPLAMA ============
+function dayGiris(date){const e=DB.entries[date]||{};return DB.girisKat.reduce((s,k)=>s+(+e[k.id]||0),0)}
+function dayCikis(date){const e=DB.entries[date]||{};return DB.cikisKat.reduce((s,k)=>s+(+e[k.id]||0),0)}
+function dayNet(date){return dayGiris(date)-dayCikis(date)}
+// haftaya kadar olan tüm net (devreden açılış)
+function openingFor(weekStartISO){
+  let bal=+DB.meta.acilisBakiye||0;
+  Object.keys(DB.entries).forEach(d=>{ if(d>=DB.meta.acilisTarih && d<weekStartISO) bal+=dayNet(d); });
+  return bal;
+}
+function weekData(){
+  const monday=mondayOf(new Date(parseISO(todayISO())));
+  monday.setDate(monday.getDate()+weekOffset*7);
+  const days=[];for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);days.push(isoOf(d));}
+  const opening=openingFor(days[0]);
+  let run=opening;const rows=days.map(ds=>{const g=dayGiris(ds),c=dayCikis(ds),net=g-c;run+=net;return {ds,g,c,net,bal:run};});
+  const inflow=rows.reduce((s,r)=>s+r.g,0), outflow=rows.reduce((s,r)=>s+r.c,0);
+  const closing=rows[6].bal, minBal=Math.min(...rows.map(r=>r.bal));
+  return {days,opening,rows,inflow,outflow,net:inflow-outflow,closing,minBal,monday};
+}
+function verdict(w){
+  // tampon eşiği: haftalık çıkışın %15'i (veya min 250k)
+  const cushion=Math.max(w.outflow*0.15,250000);
+  if(w.minBal<0)return {cls:'v-bad',t:'AÇIK — Nakit Yetersiz',
+    d:`Hafta içinde bakiye <b>${fmtTL(w.minBal)}</b> seviyesine, yani eksiye düşüyor. Bu, planlanan ödemelerin karşılığının olmadığı anlamına gelir. Ödeme erteleme, tahsilat hızlandırma veya kısa vadeli kaynak gerekiyor.`,ico:'bad'};
+  if(w.minBal<cushion)return {cls:'v-warn',t:'DİKKAT — Düşük Tampon',
+    d:`Bakiye pozitif kalıyor ama en düşük gün <b>${fmtTL(w.minBal)}</b> ile güvenli tamponun (${fmtTL(cushion)}) altında. Beklenmedik bir gider nakit sıkışıklığı yaratabilir. Tahsilatları öne çekmek yerinde olur.`,ico:'warn'};
+  return {cls:'v-ok',t:'DENGELİ — Nakit Akışı Sağlıklı',
+    d:`Hafta boyunca bakiye en düşük <b>${fmtTL(w.minBal)}</b> seviyesinde kalıyor; tüm ödemeler güvenle karşılanıyor. ${w.net>=0?'Üstelik hafta <b>nakit fazlası</b> ile kapanıyor.':'Hafta nakit kullanıyor ancak bakiye güvenli aralıkta.'}`,ico:'ok'};
+}
+function healthScore(w){
+  // 3 faktör: karşılama, tampon, gecikmiş borç yükü
+  const coverage=w.outflow>0?Math.min(w.inflow/w.outflow,1.2)/1.2:1; // 0..1
+  const cushionRef=Math.max(w.outflow*0.25,500000);
+  const cushion=Math.max(0,Math.min(w.minBal/cushionRef,1)); // 0..1
+  let gecikmis=0;w.days.forEach(d=>{const e=DB.entries[d]||{};gecikmis+=(+e.c_gecikmis||0);});
+  const overdueLoad=w.outflow>0?gecikmis/w.outflow:0;
+  const overdueScore=1-Math.min(overdueLoad,1); // 0..1
+  const score=Math.round((coverage*0.4+cushion*0.4+overdueScore*0.2)*100);
+  return {score,coverage:Math.round(coverage*100),cushion:Math.round(cushion*100),overdue:Math.round(overdueScore*100),gecikmis};
+}
+
+// ============ RENDER ============
+function render(){
+  const w=weekData(), v=verdict(w), hs=healthScore(w);
+  const sameMonth=parseISO(w.days[0]).getMonth()===parseISO(w.days[6]).getMonth();
+  const d0=parseISO(w.days[0]),d6=parseISO(w.days[6]);
+  const range=sameMonth?`${d0.getDate()} - ${d6.getDate()} ${AYLAR[d6.getMonth()]} ${d6.getFullYear()}`:`${d0.getDate()} ${AYLAR[d0.getMonth()]} - ${d6.getDate()} ${AYLAR[d6.getMonth()]} ${d6.getFullYear()}`;
+  const isThisWeek=weekOffset===0;
+  const VIC={ok:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>',warn:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',bad:'<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'};
+
+  let h=`<div class="week-nav">
+    <button class="btn btn-sm no-print" onclick="shiftWeek(-1)">← Önceki</button>
+    <div class="wk-range">${range}${isThisWeek?'<span class="wk-now">BU HAFTA</span>':''}</div>
+    <button class="btn btn-sm no-print" onclick="shiftWeek(1)">Sonraki →</button>
+    ${!isThisWeek?'<button class="btn btn-pri btn-sm no-print" onclick="thisWeek()">Bu Haftaya Dön</button>':''}
+  </div>`;
+
+  // KPI
+  h+=`<div class="kpis">
+    <div class="kpi"><div class="kl">Açılış Bakiye</div><div class="kv">${fmtTL(w.opening)}</div><div class="ks">haftaya devreden</div></div>
+    <div class="kpi g"><div class="kl">Hafta Girişi</div><div class="kv">${fmtTL(w.inflow)}</div><div class="ks">tahsilat &amp; gelir</div></div>
+    <div class="kpi r"><div class="kl">Hafta Çıkışı</div><div class="kv">${fmtTL(w.outflow)}</div><div class="ks">ödeme &amp; gider</div></div>
+    <div class="kpi ${w.net>=0?'g':'r'}"><div class="kl">Hafta Net</div><div class="kv" style="color:${w.net>=0?'var(--green-700)':'var(--red-700)'}">${w.net>=0?'+':''}${fmtTL(w.net)}</div><div class="ks">${w.net>=0?'nakit fazlası':'nakit kullanımı'}</div></div>
+    <div class="kpi ${w.closing>=0?'s':'r'}"><div class="kl">Kapanış Bakiye</div><div class="kv">${fmtTL(w.closing)}</div><div class="ks">hafta sonu</div></div>
+    <div class="kpi ${w.minBal<0?'r':w.minBal<w.outflow*0.15?'a':'p'}"><div class="kl">En Düşük Gün</div><div class="kv">${fmtTL(w.minBal)}</div><div class="ks">likidite dibi</div></div>
+  </div>`;
+
+  // Verdict
+  h+=`<div class="verdict ${v.cls}"><div class="vic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${VIC[v.ico]}</svg></div>
+    <div><div class="vt">${v.t}</div><div class="vd">${v.d}</div></div></div>`;
+
+  // Grafik
+  h+=`<div class="card"><div class="card-hd"><h3>Likidite Eğrisi</h3><span class="hint">Günlük net (bar) &amp; kümülatif bakiye (çizgi)</span></div>
+    <div class="card-bd" style="padding:14px 16px"><div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div></div></div>`;
+
+  // Günlük tablo
+  h+=`<div class="card"><div class="card-hd"><h3>Günlük Nakit Akış Tablosu</h3><span class="hint">Hücreye tıklayıp tutar girin · boş = 0</span></div>
+    <div class="card-bd"><div class="cf-scroll"><table class="cf"><thead><tr><th>Kategori</th>`;
+  w.days.forEach((ds,i)=>{const d=parseISO(ds);const isT=ds===todayISO();h+=`<th class="${isT?'today':''}">${GUNLER[i].slice(0,3)}<br><span style="font-weight:600;color:var(--slate-400)">${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}</span></th>`;});
+  h+=`<th>Hafta</th></tr></thead><tbody>`;
+  // GİRİŞ grubu
+  h+=`<tr class="grp in"><td>▸ Girişler</td>${w.days.map(()=>'<td></td>').join('')}<td></td></tr>`;
+  DB.girisKat.forEach(k=>{
+    let rowTot=0;
+    h+=`<tr><td><span class="catname">${esc(k.ad)}<span class="del no-print" onclick="delKat('giris','${k.id}')" title="Sil">×</span></span></td>`;
+    w.days.forEach(ds=>{const val=(DB.entries[ds]||{})[k.id]||'';rowTot+=+val||0;h+=`<td><input class="cell-inp" data-d="${ds}" data-k="${k.id}" value="${val?fmtNum(val):''}" onchange="setCell(this)" onfocus="rawCell(this)" inputmode="decimal"></td>`;});
+    h+=`<td class="num pos">${rowTot?fmtTL(rowTot):'—'}</td></tr>`;
+  });
+  h+=`<tr><td colspan="9" class="no-print"><span class="addcat" onclick="addKat('giris')">+ Giriş kategorisi ekle</span></td></tr>`;
+  h+=`<tr class="tot"><td>Toplam Giriş</td>${w.rows.map(r=>`<td class="num pos">${r.g?fmtTL(r.g):'—'}</td>`).join('')}<td class="num pos">${fmtTL(w.inflow)}</td></tr>`;
+  // ÇIKIŞ grubu
+  h+=`<tr class="grp out"><td>▸ Çıkışlar</td>${w.days.map(()=>'<td></td>').join('')}<td></td></tr>`;
+  DB.cikisKat.forEach(k=>{
+    let rowTot=0;
+    h+=`<tr><td><span class="catname">${esc(k.ad)}<span class="del no-print" onclick="delKat('cikis','${k.id}')" title="Sil">×</span></span></td>`;
+    w.days.forEach(ds=>{const val=(DB.entries[ds]||{})[k.id]||'';rowTot+=+val||0;h+=`<td><input class="cell-inp" data-d="${ds}" data-k="${k.id}" value="${val?fmtNum(val):''}" onchange="setCell(this)" onfocus="rawCell(this)" inputmode="decimal"></td>`;});
+    h+=`<td class="num neg">${rowTot?fmtTL(rowTot):'—'}</td></tr>`;
+  });
+  h+=`<tr><td colspan="9" class="no-print"><span class="addcat" onclick="addKat('cikis')">+ Çıkış kategorisi ekle</span></td></tr>`;
+  h+=`<tr class="tot"><td>Toplam Çıkış</td>${w.rows.map(r=>`<td class="num neg">${r.c?fmtTL(r.c):'—'}</td>`).join('')}<td class="num neg">${fmtTL(w.outflow)}</td></tr>`;
+  // NET
+  h+=`<tr class="net"><td>Günlük Net</td>${w.rows.map(r=>`<td class="num ${r.net>=0?'pos':'neg'}">${r.net?(r.net>0?'+':'')+fmtTL(r.net):'—'}</td>`).join('')}<td class="num ${w.net>=0?'pos':'neg'}">${(w.net>0?'+':'')+fmtTL(w.net)}</td></tr>`;
+  // BAKİYE
+  h+=`<tr class="bal"><td>Gün Sonu Bakiye</td>${w.rows.map(r=>`<td class="num" style="color:${r.bal<0?'var(--red-700)':'var(--blue-900)'}">${fmtTL(r.bal)}</td>`).join('')}<td class="num">${fmtTL(w.closing)}</td></tr>`;
+  h+=`</tbody></table></div></div></div>`;
+
+  // Alt grid: Sağlık skoru + Gelecek ödemeler
+  h+=`<div class="grid-2">`;
+  // Sağlık skoru + exec
+  const ringC=hs.score>=70?'var(--green-600)':hs.score>=45?'var(--amber-500)':'var(--red-500)';
+  const skorLabel=hs.score>=70?'Sağlıklı':hs.score>=45?'Orta':'Riskli';
+  h+=`<div><div class="card"><div class="card-hd"><h3>Nakit Sağlık Skoru</h3><span class="hint">karşılama · tampon · borç yükü</span></div>
+    <div class="score-wrap"><div class="ring" style="--p:${hs.score};--c:${ringC}"><div class="inner"><div class="sv">${hs.score}</div><div class="sl">/100</div></div></div>
+      <div class="score-meta"><div class="sm-t" style="color:${ringC}">${skorLabel}</div><div class="sm-d">Bu hafta nakit akışının genel sağlığı. Gelir/gider karşılama oranı, likidite tamponu ve gecikmiş borç yükü birlikte değerlendirilir.</div></div></div>
+    <div class="factors">
+      ${factorBar('Gelir/Gider Karşılama',hs.coverage,'var(--green-600)')}
+      ${factorBar('Likidite Tamponu',hs.cushion,'var(--blue-500)')}
+      ${factorBar('Borç Yükü (temizlik)',hs.overdue,'var(--purple)')}
+    </div></div>
+    <div class="card"><div class="card-hd"><h3>Yönetici Özeti</h3><span class="hint">otomatik</span></div>
+    <div class="exec">${execSummary(w,v,hs,range)}</div></div></div>`;
+  // Gelecek ödemeler
+  h+=`<div><div class="card"><div class="card-hd"><h3>Gelecek Ödemeler</h3><button class="btn btn-sm no-print" onclick="addOdeme()">+ Ekle</button></div>
+    <div class="card-bd">${renderOdemeler()}</div></div></div>`;
+  h+=`</div>`;
+
+  document.getElementById('content').innerHTML=h;
+  drawChart(w);
+}
+function factorBar(label,val,c){return `<div class="factor"><span class="fl">${label}</span><span class="fbar"><i style="width:${val}%;background:${c}"></i></span><span class="fv">${val}%</span></div>`}
+function fmtNum(n){n=+n||0;return n.toLocaleString('tr-TR',{maximumFractionDigits:2})}
+
+function execSummary(w,v,hs,range){
+  const tagOk='<span class="tag" style="background:var(--green-100);color:var(--green-700)">olumlu</span>';
+  const tagBad='<span class="tag" style="background:var(--red-100);color:var(--red-700)">risk</span>';
+  let p=`<b>${range}</b> haftasında şirket nakit pozisyonu <b>${fmtTL(w.opening)}</b> ile açıldı. `;
+  p+=`Hafta boyunca <b>${fmtTL(w.inflow)}</b> giriş, <b>${fmtTL(w.outflow)}</b> çıkış gerçekleşti ve net <b style="color:${w.net>=0?'var(--green-700)':'var(--red-700)'}">${w.net>=0?'+':''}${fmtTL(w.net)}</b> ile hafta <b>${fmtTL(w.closing)}</b> bakiye seviyesinde kapandı. `;
+  if(w.minBal<0){p+=`Kritik uyarı: hafta içinde bakiye <b style="color:var(--red-700)">${fmtTL(w.minBal)}</b> ile eksiye düşüyor ${tagBad}. Ödeme takviminin yeniden sıralanması veya köprü finansman değerlendirilmeli. `;}
+  else if(w.minBal<w.outflow*0.15){p+=`Bakiye pozitif kalsa da en düşük gün <b>${fmtTL(w.minBal)}</b> ile dar tampon bölgesinde ${tagBad?'':''}. Tahsilat hızlandırma önerilir. `;}
+  else {p+=`Likidite hafta boyunca güvenli aralıkta seyretti ${tagOk}. `;}
+  if(hs.gecikmis>0){p+=`Çıkışların <b>${fmtTL(hs.gecikmis)}</b>'lik kısmı <b>gecikmiş borç</b> kaynaklı; bu kalemin eritilmesi sağlık skorunu doğrudan yükseltecektir. `;}
+  p+=`Genel nakit sağlık skoru <b style="color:${hs.score>=70?'var(--green-700)':hs.score>=45?'var(--amber-700)':'var(--red-700)'}">${hs.score}/100</b>.`;
+  return p;
+}
+
+function renderOdemeler(){
+  const today=todayISO();
+  const list=[...(DB.odemeler||[])].sort((a,b)=>a.tarih.localeCompare(b.tarih));
+  if(!list.length)return '<div class="empty">Planlı ödeme yok.</div>';
+  return list.map(o=>{
+    const d=parseISO(o.tarih);const diff=daysBetween(today,o.tarih);
+    let stat,scls;
+    if(o.odendi){stat='Ödendi';scls='ps-paid';}
+    else if(diff<0){stat=Math.abs(diff)+' gün gecikti';scls='ps-late';}
+    else if(diff<=14){stat=diff===0?'Bugün':diff+' gün kaldı';scls='ps-soon';}
+    else {stat=diff+' gün';scls='ps-ok';}
+    return `<div class="pay"><div class="pd"><div class="dd">${String(d.getDate()).padStart(2,'0')}</div><div class="dm">${AYLAR[d.getMonth()].slice(0,3)}</div></div>
+      <div class="pi"><div class="pn">${esc(o.ad)}</div><div class="pc">${esc(o.kat||'')} · ${fmtDate(o.tarih)}</div></div>
+      <div style="text-align:right"><div class="pa">${fmtTL(o.tutar)}</div><span class="pstat ${scls}">${stat}</span></div>
+      <span class="del no-print" style="opacity:.4;cursor:pointer;color:var(--slate-400)" onclick="delOdeme('${o.id}')" title="Sil">×</span></div>`;
+  }).join('');
+}
+
+function drawChart(w){
+  if(typeof Chart==='undefined')return;
+  if(cfChart){try{cfChart.destroy()}catch(e){}}
+  const el=document.getElementById('cfChart');if(!el)return;
+  cfChart=new Chart(el,{data:{labels:w.days.map((d,i)=>GUNLER[i].slice(0,3)+' '+parseISO(d).getDate()),
+    datasets:[
+      {type:'bar',label:'Günlük Net',data:w.rows.map(r=>r.net),backgroundColor:w.rows.map(r=>r.net>=0?'rgba(22,163,74,.55)':'rgba(239,68,68,.55)'),borderColor:w.rows.map(r=>r.net>=0?'#16A34A':'#EF4444'),borderWidth:1,borderRadius:4,order:2,yAxisID:'y'},
+      {type:'line',label:'Bakiye',data:w.rows.map(r=>r.bal),borderColor:'#1D62A8',backgroundColor:'rgba(29,98,168,.08)',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:'#1D62A8',borderWidth:2.5,order:1,yAxisID:'y'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtTL(c.parsed.y)}}},
+      scales:{y:{ticks:{callback:v=>fmtK(v)},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+}
+
+// ============ ETKİLEŞİM ============
+function rawCell(inp){const d=inp.dataset.d,k=inp.dataset.k;const v=(DB.entries[d]||{})[k];inp.value=v?String(v):'';inp.select();}
+function setCell(inp){
+  const d=inp.dataset.d,k=inp.dataset.k;
+  const val=parseFloat(String(inp.value).replace(/\./g,'').replace(',','.'))||0;
+  DB.entries[d]=DB.entries[d]||{};
+  if(val)DB.entries[d][k]=val; else delete DB.entries[d][k];
+  if(!Object.keys(DB.entries[d]).length)delete DB.entries[d];
+  saveDB();render();
+}
+function addKat(tip){
+  const ad=prompt((tip==='giris'?'Yeni giriş':'Yeni çıkış')+' kategorisi adı:','');
+  if(!ad||!ad.trim())return;
+  const id=(tip==='giris'?'k_':'c_')+'x'+Math.random().toString(36).slice(2,7);
+  (tip==='giris'?DB.girisKat:DB.cikisKat).push({id,ad:ad.trim()});
+  saveDB();render();toast('Kategori eklendi');
+}
+function delKat(tip,id){
+  const arr=tip==='giris'?DB.girisKat:DB.cikisKat;
+  const k=arr.find(x=>x.id===id);if(!k)return;
+  if(!confirm('"'+k.ad+'" kategorisi ve bu kategorideki tüm tutarlar silinsin mi?'))return;
+  if(tip==='giris')DB.girisKat=arr.filter(x=>x.id!==id);else DB.cikisKat=arr.filter(x=>x.id!==id);
+  Object.keys(DB.entries).forEach(d=>{delete DB.entries[d][id];if(!Object.keys(DB.entries[d]).length)delete DB.entries[d];});
+  saveDB();render();toast('Kategori silindi');
+}
+function setAcilis(){
+  const v=prompt('Açılış bakiyesi (₺) — '+fmtDate(DB.meta.acilisTarih)+' tarihli başlangıç nakit:',DB.meta.acilisBakiye);
+  if(v==null)return;
+  DB.meta.acilisBakiye=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;
+  saveDB();render();toast('Açılış bakiye güncellendi');
+}
+function addOdeme(){
+  const ad=prompt('Ödeme adı:','');if(!ad)return;
+  const tarih=prompt('Tarih (GG.AA.YYYY):','');if(!tarih)return;
+  const p=tarih.split('.');if(p.length!==3){toast('Tarih formatı hatalı');return;}
+  const iso=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
+  const tutar=parseFloat(prompt('Tutar (₺):','')||'0')||0;
+  DB.odemeler=DB.odemeler||[];
+  DB.odemeler.push({id:'o'+Math.random().toString(36).slice(2,7),ad:ad.trim(),tarih:iso,tutar,kat:'Ödeme',odendi:false});
+  saveDB();render();toast('Ödeme eklendi');
+}
+function delOdeme(id){if(!confirm('Bu ödeme silinsin mi?'))return;DB.odemeler=DB.odemeler.filter(o=>o.id!==id);saveDB();render();}
+function shiftWeek(n){weekOffset+=n;render();}
+function thisWeek(){weekOffset=0;render();}
+
+// ============ GİRİŞ KAPISI ============
+function unlock(){
+  const p=document.getElementById('gpass').value;
+  if(p===GATE_PASS){sessionStorage.setItem('rota_nakit_ok','1');showApp();}
+  else {document.getElementById('gerr').textContent='Şifre hatalı.';}
+}
+function showApp(){
+  document.getElementById('gate').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  loadDB();render();
+}
+document.getElementById('gpass').addEventListener('keydown',e=>{if(e.key==='Enter')unlock();});
+if(sessionStorage.getItem('rota_nakit_ok')==='1')showApp();
+else document.getElementById('gpass').focus();
+</script>
+</body>
+</html>
