@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bakım / Arıza Takip · Rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue-900:#0C2340;--blue-800:#103561;--blue-700:#174B82;--blue-600:#1D62A8;--blue-500:#2878C8;--blue-400:#4A9AE5;--blue-300:#8DC2F2;--blue-200:#C1DEF7;--blue-100:#E8F1FB;--blue-50:#F3F8FD;
+  --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#334155;--slate-600:#475569;--slate-500:#64748B;--slate-400:#94A3B8;--slate-300:#CBD5E1;--slate-200:#E2E8F0;--slate-100:#F1F5F9;--slate-50:#F8FAFC;
+  --green-600:#16A34A;--green-100:#DCFCE7;--green-700:#15803D;--green-50:#F0FDF4;
+  --amber-500:#F59E0B;--amber-100:#FEF3C7;--amber-700:#B45309;--amber-50:#FFFBEB;
+  --red-500:#EF4444;--red-100:#FEE2E2;--red-700:#B91C1C;--red-50:#FEF2F2;
+  --purple:#7C3AED;--orange:#EA580C;
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:var(--slate-100);color:var(--slate-800);line-height:1.4}
+.num{font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+button,input,select,textarea{font-family:inherit}
+/* topbar */
+.topbar{background:#fff;border-bottom:1px solid var(--slate-200);padding:12px 22px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.topbar .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.topbar .brand img{height:34px}
+.topbar .brand .t1{font-size:15px;font-weight:700;color:var(--slate-900);line-height:1.1}
+.topbar .brand .t2{font-size:11px;color:var(--slate-500)}
+.back-link{font-size:12px;color:var(--slate-500);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.back-link:hover{color:var(--blue-600)}
+.btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--slate-300);background:#fff;color:var(--slate-700);display:inline-flex;align-items:center;gap:6px;transition:.12s}
+.btn:hover{background:var(--slate-50)}
+.btn-pri{background:var(--blue-600);color:#fff;border-color:var(--blue-600)}
+.btn-pri:hover{background:var(--blue-700)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.wrap{max-width:1320px;margin:0 auto;padding:20px 22px 60px}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid var(--slate-200);border-radius:10px;padding:14px 16px;border-top:3px solid var(--blue-600)}
+.kpi .kl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--slate-500);margin-bottom:7px}
+.kpi .kv{font-size:21px;font-weight:700;color:var(--slate-900);line-height:1.05}
+.kpi .ks{font-size:11px;color:var(--slate-500);margin-top:5px}
+.kpi.g{border-top-color:var(--green-600)}.kpi.r{border-top-color:var(--red-500)}.kpi.a{border-top-color:var(--amber-500)}.kpi.p{border-top-color:var(--purple)}.kpi.o{border-top-color:var(--orange)}
+/* card */
+.card{background:#fff;border:1px solid var(--slate-200);border-radius:11px;margin-bottom:18px;overflow:hidden}
+.card-hd{padding:13px 18px;border-bottom:1px solid var(--slate-100);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-hd h3{font-size:14px;font-weight:700;color:var(--slate-800)}
+.card-hd .hint{font-size:11px;color:var(--slate-400)}
+.grid-2{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+@media(max-width:980px){.grid-2{grid-template-columns:1fr}}
+/* filters */
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filters input,.filters select{padding:8px 11px;border:1px solid var(--slate-300);border-radius:8px;font-size:13px;color:var(--slate-700);background:#fff}
+.filters input:focus,.filters select:focus{outline:none;border-color:var(--blue-500);box-shadow:0 0 0 3px var(--blue-100)}
+.filters .search{flex:1;min-width:200px}
+/* table */
+.tbl-scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;min-width:920px;font-size:12.5px}
+table.t th,table.t td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--slate-100);vertical-align:top}
+table.t thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;position:sticky;top:0;white-space:nowrap;cursor:default}
+table.t tbody tr:hover{background:var(--blue-50)}
+table.t .c-tarih{white-space:nowrap;color:var(--slate-600);font-weight:600}
+table.t .c-sorun{max-width:280px}
+table.t .c-yapilan{max-width:300px;color:var(--slate-600)}
+table.t .c-mal{white-space:nowrap;font-weight:600;color:var(--slate-700)}
+.mtag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;background:var(--blue-100);color:var(--blue-800)}
+.badge{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.b-tam{background:var(--green-100);color:var(--green-700)}.b-dev{background:var(--amber-100);color:var(--amber-700)}.b-bek{background:var(--slate-200);color:var(--slate-600)}
+.rowact{display:flex;gap:4px;opacity:0;transition:.1s}
+table.t tbody tr:hover .rowact{opacity:1}
+.iconbtn{border:none;background:transparent;cursor:pointer;color:var(--slate-400);padding:3px;border-radius:5px;line-height:0}
+.iconbtn:hover{background:var(--slate-100);color:var(--slate-700)}
+.iconbtn.del:hover{color:var(--red-600,#dc2626)}
+.empty{padding:30px;text-align:center;color:var(--slate-400);font-size:13px}
+/* makine özet */
+.mbar{display:flex;align-items:center;gap:10px;padding:6px 18px;font-size:12px}
+.mbar .ml{width:140px;flex:none;color:var(--slate-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mbar .mb{flex:1;height:8px;background:var(--slate-100);border-radius:5px;overflow:hidden}
+.mbar .mb i{display:block;height:100%;background:var(--blue-500);border-radius:5px}
+.mbar .mv{width:30px;text-align:right;font-weight:700;color:var(--slate-600)}
+/* parça */
+.parca{padding:11px 18px;border-bottom:1px solid var(--slate-100);display:flex;align-items:flex-start;gap:10px}
+.parca:last-child{border-bottom:none}
+.parca .pm{font-size:12.5px;font-weight:700;color:var(--slate-800)}
+.parca .pa{font-size:11.5px;color:var(--slate-500);margin-top:2px}
+.parca .pi{flex:1;min-width:0}
+.ps{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.ps-stok{background:var(--green-100);color:var(--green-700)}.ps-kul{background:var(--slate-200);color:var(--slate-500)}.ps-gon{background:var(--blue-100);color:var(--blue-700)}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:40px 18px;overflow-y:auto}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:580px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5)}
+.modal-hd{padding:16px 22px;border-bottom:1px solid var(--slate-100);display:flex;align-items:center;justify-content:space-between}
+.modal-hd h3{font-size:16px;font-weight:700;color:var(--slate-900)}
+.modal-bd{padding:18px 22px}
+.modal-ft{padding:14px 22px;border-top:1px solid var(--slate-100);display:flex;justify-content:flex-end;gap:10px}
+.fld{margin-bottom:14px}
+.fld label{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--slate-500);margin-bottom:5px}
+.fld input,.fld select,.fld textarea{width:100%;padding:9px 12px;border:1px solid var(--slate-300);border-radius:8px;font-size:13.5px;color:var(--slate-800)}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--blue-500);box-shadow:0 0 0 3px var(--blue-100)}
+.fld textarea{resize:vertical;min-height:58px}
+.fld-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.xbtn{border:none;background:transparent;font-size:22px;color:var(--slate-400);cursor:pointer;line-height:1}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--slate-900);color:#fff;padding:10px 18px;border-radius:9px;font-size:13px;z-index:200;opacity:0;transition:.25s;pointer-events:none}
+.toast.on{opacity:1}
+@media print{.topbar .btn,.filters,.rowact,.no-print{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back-link" href="../">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Portal
+  </a>
+  <div class="brand">
+    <img src="../rota-smi.png" alt="Rota SMI" onerror="this.style.display='none'">
+    <div><div class="t1">Bakım / Arıza Takip</div><div class="t2">Bakım · Makine &amp; Ekipman Servis Kayıtları</div></div>
+  </div>
+  <button class="btn btn-sm" onclick="window.print()">Yazdır / PDF</button>
+  <button class="btn btn-pri" onclick="openKayit()">+ Yeni Kayıt</button>
+</div>
+
+<div class="wrap" id="content"></div>
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const LSKEY='rota_bakim_v1';
+const AYLAR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const DURUMLAR=['Tamamlandı','Devam Ediyor','Beklemede'];
+const SEED={"kayitlar": [{"id": "b1", "tarih": "2022-12-26", "makine": "Genel", "firma": "ÖNDER LİFT ASANSÖR KURULUMU", "sorun": "", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b2", "tarih": "2023-07-25", "makine": "Mikser / Karıştırıcı", "firma": "YEMTAR", "sorun": "MİKSER ALT KAPAK KAPATMAMASI", "yapilan": "MİKSER ALT KAPAK AYARI VE KENAR TORTULARININ TEMİZLENMESİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b3", "tarih": "2023-07-27", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELEZONUNUN BALANS AYARI KAÇMASI", "yapilan": "BALANS AYARI YAPILDI HELEZON YENİLENDİ, ESKİ HELEZON TETA'YA GÖNDERİLDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b4", "tarih": "2023-07-27", "makine": "Paketleme", "firma": "ROTA", "sorun": "HELEZON BİLEZİK SES ÇIKARMA", "yapilan": "ESKİ HELEZON GÖNDERİLDİ YENİ BİLEZİK KASNAK VE KAMA İSTENDİ", "maliyet": "", "durum": "Beklemede"}, {"id": "b5", "tarih": "2023-07-29", "makine": "Hazırlık Makinası", "firma": "EMS MAKİNA", "sorun": "HAZIRLIK MAKİNASI KURULUMU VE MONTAJI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b6", "tarih": "2023-10-06", "makine": "Forklift", "firma": "TRİO FORKLİFT", "sorun": "FORKLİFT İN ENVANTERE GİRİŞİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b7", "tarih": "2023-09-14", "makine": "Otomasyon / Elektrik", "firma": "OTOMASYONCU RAMAZAN", "sorun": "ÇUVAL TUTMA PİSTON DEĞİŞİMİ 2 ADET ÜRETİM", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b8", "tarih": "2023-09-14", "makine": "Paketleme", "firma": "OTOMASYONCU RAMAZAN", "sorun": "PAKETLEME MANOMETRE DEĞİŞİMİ 4 BAR(2,5 BAR NORMALİ)", "yapilan": "ÜRETİM", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b9", "tarih": "2023-09-16", "makine": "Otomasyon / Elektrik", "firma": "OTOMASYONCU RAMAZAN", "sorun": "KAPAK PİSTON KEÇELERİNİN DEĞİŞİMİ ÜRETİM", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b10", "tarih": "2023-10-03", "makine": "Tartım Ünitesi", "firma": "OTOMASYONCU RAMAZAN", "sorun": "HAZIRLIK MAKİNASI ÜST BUNKER SEVİYE VE TİTREŞİM, ALT BUNKER TİTREŞİM", "yapilan": "ÜRETİM M", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b11", "tarih": "2023-10-19", "makine": "Otomasyon / Elektrik", "firma": "OTOMASYONCU RAMAZAN", "sorun": "ALT KAPAK-SENSÖR IŞIĞI YANMAMASI", "yapilan": "VALF DEĞİŞTİRİLDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b12", "tarih": "2023-10-19", "makine": "Genel", "firma": "TRİO FORKLİFT", "sorun": "DİFRENSİYEL YAĞ KAÇAĞI", "yapilan": "YAĞ TAPASI SIKILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b13", "tarih": "2023-10-30", "makine": "Mikser / Karıştırıcı", "firma": "ROTA", "sorun": "ÜRETİM KARIŞTIRICI TEMİZLİK VE YAĞLAMA", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b14", "tarih": "2023-10-30", "makine": "Genel", "firma": "ROTA", "sorun": "KABİN ARKA TAKILIMI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b15", "tarih": "2023-11-15", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELEZON DEĞİŞİMİ ESKİSİ TETAYA GÖNDERİLDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b16", "tarih": "2023-12-16", "makine": "Hazırlık Makinası", "firma": "OTOMASYONCU RAMAZAN", "sorun": "HAZIRLIK MAKİNASI KEFE PİSTONU DEĞİŞMESİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b17", "tarih": "2023-12-16", "makine": "Paketleme", "firma": "OTOMASYONCU RAMAZAN", "sorun": "TETA PAKETLEME VALF VE BLOK DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b18", "tarih": "2024-01-02", "makine": "Forklift", "firma": "TRİO FORKLİFT", "sorun": "GENEL BAKIM FORKLİFT", "yapilan": "450 EURO İLK BAKIM 250 SAAT", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b19", "tarih": "2024-01-05", "makine": "Tartım Ünitesi", "firma": "YAVUZ KANTARCILIK", "sorun": "TERAZİ EKRAN BAKIMI, KALİBRASYON AYARI YAPILDI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b20", "tarih": "2024-01-06", "makine": "Padıl", "firma": "YEMTAR", "sorun": "PADIL ZİNCİR AYARI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b21", "tarih": "2024-01-08", "makine": "Genel", "firma": "TRİO FORKLİFT", "sorun": "KARBURATÖR ARIZA AYARI", "yapilan": "KARBÜRATÖR MALZEMESİ DEĞİŞTİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b22", "tarih": "2024-01-26", "makine": "Tartım Ünitesi", "firma": "TETA", "sorun": "TARTIM TEPSİSİ ARIZASI-", "yapilan": "ÜST TEPSİ TAKIMI YENİLENDİ,ALT TEPSİ TAKIMI YENİLENDİ,SALLAMA YATAKLARI YENİLENDİ KAYIŞ GERGİNLİKLERİNE BAKILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b23", "tarih": "2024-01-29", "makine": "Mikser / Karıştırıcı", "firma": "EMS MAKİNA", "sorun": "KARIŞIM ELEVATÖR YATAK ARIZASI", "yapilan": "BALCI ELEVATÖR MOTOR. ALT YATAKLAR DEĞİŞTİ", "maliyet": "8000+ KDV (tarih: 05.06.2026)", "durum": "Tamamlandı"}, {"id": "b24", "tarih": "2024-01-25", "makine": "Otomasyon / Elektrik", "firma": "BOBİNAJCI ADNAN", "sorun": "BANT MOTOR ARIZASI", "yapilan": "SARIM YAPILDI ÇARK DİŞLİSİ ARIZALI OLDUĞU İÇİN YENİ MOTOR VE R ALINDI", "maliyet": "19000+ İŞÇİLİK HARİÇ (tarih: 05.02.2024)", "durum": "Tamamlandı"}, {"id": "b25", "tarih": "2024-02-04", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "TARTIM ELEVATÖR KAYIŞ", "yapilan": "DEĞİŞTİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b26", "tarih": "2024-02-07", "makine": "Genel", "firma": "İlhan Kompresör", "sorun": "GENEL BAKIM YAPILDI- KURULAMA SİSTEMİ FİLTRELERİ DEĞİŞTİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b27", "tarih": "2024-03-28", "makine": "Genel", "firma": "ÖNDER LİFT ASANSÖR", "sorun": "PERİYODİK BAKIM", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b28", "tarih": "2024-03-16", "makine": "Fan / Soğutma", "firma": "3S mekanik", "sorun": "FİLTRE DEĞİŞİMİ YAPILDI PATLAYICI ÇATLAĞI GİDERİLDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b29", "tarih": "2024-04-04", "makine": "Genel", "firma": "3S mekanik", "sorun": "hava kaçak", "yapilan": "soket değiştirildi", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b30", "tarih": "2024-05-02", "makine": "Genel", "firma": "YEMTAR", "sorun": "PADİL MİL ARIZASI", "yapilan": "YEDEK MİL TAKILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b31", "tarih": "2024-05-03", "makine": "Padıl", "firma": "YEMTAR", "sorun": "PADIL VURMA ARIZASI", "yapilan": "YATAK ARASI PARÇA EKLENDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b32", "tarih": "2024-05-13", "makine": "Forklift", "firma": "TRİO FORKLİFT", "sorun": "FORKLİFT PERİYODİK BAKIM", "yapilan": "525 SAAT", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b33", "tarih": "2024-05-21", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELEZON KAYIŞ DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b34", "tarih": "2024-05-13", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "TARTIM TEPSİSİ ARIZASI-", "yapilan": "YABANCI CİSİM KAÇMA SONUCU TEPSİ MOTORUNUN ZORLANMASI", "maliyet": "MOTOR ÇARPI 1,8=MOTOR GÜCÜ ÖLÇÜSÜNÜ VERİR", "durum": "Tamamlandı"}, {"id": "b35", "tarih": "2024-05-22", "makine": "Kompresör", "firma": "İlhan Kompresör", "sorun": "KOMPESÖR ACİL STOP BUTTON ARIZASI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b36", "tarih": "2024-05-22", "makine": "Kompresör", "firma": "İlhan Kompresör", "sorun": "KOMPESÖR HAVA FİLTRESİ DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b37", "tarih": "2024-06-12", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELİS DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b38", "tarih": "2024-06-12", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME TEPSİ DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b39", "tarih": "2024-06-21", "makine": "Genel", "firma": "ROTA", "sorun": "KAPI ÖNÜ RAMPA YAPIMI TAMAMLANDI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b40", "tarih": "2024-07-10", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELİS DEĞİŞİMİ", "yapilan": "HARDOX", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b41", "tarih": "2024-07-16", "makine": "Paketleme", "firma": "ROTA", "sorun": "TETA HELİS KARGOLANDI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b42", "tarih": "2024-08-08", "makine": "Fan / Soğutma", "firma": "3S Mekanik", "sorun": "FAN ARIZASI İLE BİRLİKTE AŞIRI ISINMA", "yapilan": "FAN BEYİN SOĞUTMA FANI DEĞİŞİMİ 13 CM", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b43", "tarih": "2024-08-08", "makine": "Fan / Soğutma", "firma": "3S Mekanik", "sorun": "PATLAMAYA GİDEN HAVA İLE ÇIKAN ISLIK SESİ", "yapilan": "PATLAMA HAVASININ SU TUTUCU BOŞALTILMASI VE MEKANŞK TEMİZLİK", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b44", "tarih": "2024-08-27", "makine": "Otomasyon / Elektrik", "firma": "RAMAZAN ABİ", "sorun": "Q2 ROLE DEĞİŞİMİ VE Q3 ELEKTRİK BAKIMI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b45", "tarih": "2024-10-21", "makine": "Genel", "firma": "YEMTAR", "sorun": "ALT KAPAK KAÇIRMA YATAKLAR DOLMASI-", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b46", "tarih": "2024-11-07", "makine": "Tartım Ünitesi", "firma": "YAVUZ KANTARCILIK", "sorun": "KALİBRASYON İŞLEMLERİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b47", "tarih": "2024-11-12", "makine": "Transpalet", "firma": "KRİKOCU SONER", "sorun": "JETCO VE ESKİ SARI TRANSPALET BAKIMI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b48", "tarih": "2024-11-29", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME YARDIMCI KONTATTÖR DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b49", "tarih": "2024-12-19", "makine": "Mikser / Karıştırıcı", "firma": "YEMTAR", "sorun": "KARIŞTIRICI MİL KOPARTMASI", "yapilan": "MİL DEĞİŞİM VE GEREKLİ AYARLAR YAPILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b50", "tarih": "2025-01-08", "makine": "Genel", "firma": "TRİO FORKLİFT", "sorun": "1055 SAAT BAKIMI", "yapilan": "700 EURO", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b51", "tarih": "2025-01-14", "makine": "Tartım Ünitesi", "firma": "YEMTAR", "sorun": "PADIL MİL KIRMA", "yapilan": "FADIL DEĞİŞTİ-BUNKER KAPAĞI KAÇIRMA KAPATILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b52", "tarih": "2024-01-14", "makine": "Otomasyon / Elektrik", "firma": "OTOMASYONCU RAMAZAN", "sorun": "ANA MAKİNA OTOMASYON ŞASE PROBLEMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b53", "tarih": "2025-01-10", "makine": "Transpalet", "firma": "YALOVA İSTİF MAKİNALARI", "sorun": "EP 1,5 TON TRANSPALETİN ENVANTERE GİRİŞİ MAKİNA NO 1", "yapilan": "YEDEK BATARYALI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b54", "tarih": "2025-01-14", "makine": "Transpalet", "firma": "YALOVA İSTİF MAKİNALARI", "sorun": "EP 1,5 TON TRANSPALETİN ENVANTERE GİRİŞİ MAKİNA NO 2", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b55", "tarih": "2025-01-17", "makine": "Forklift", "firma": "TRİO FORKLİFT", "sorun": "FORKLİFT ŞASE YAPIP İKAZ VERMESİ", "yapilan": "MAZOT FİLTRE ALTINDAKİ SARKIK SENSÖR ELEKTRİK BAĞLANTISI KESİLDİ VE DÜZELDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b56", "tarih": "2025-01-21", "makine": "Otomasyon / Elektrik", "firma": "BOBİNAJCI ADNAN", "sorun": "KABLO KAPASİTE KAYNAKLI MOTOR YANMASI", "yapilan": "MOTOR YENİDEN SARIMA GİRDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b57", "tarih": "2025-01-23", "makine": "Kompresör", "firma": "İlhan Kompresör", "sorun": "KOMPRESÖR GENEL BAKIM", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b58", "tarih": "2025-01-22", "makine": "Kompresör", "firma": "İlhan Kompresör", "sorun": "KOMPRESÖR TERMOSTAT DEĞİŞİMİ", "yapilan": "SEKMANLI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b59", "tarih": "2025-02-24", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELİS DEĞİŞİMİ", "yapilan": "HARDOX", "maliyet": "BEYAZ", "durum": "Tamamlandı"}, {"id": "b60", "tarih": "2025-03-11", "makine": "Kurutucu", "firma": "TESİSATÇI CEMAL", "sorun": "KURUTMA MAKİNASI GENEL BAKIMI", "yapilan": "BOZUK PARÇALAR DEĞİŞTİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b61", "tarih": "2024-03-21", "makine": "Otomasyon / Elektrik", "firma": "RAMAZAN ABİ", "sorun": "SAYAÇ DEĞİŞİMİ", "yapilan": "SAYIM MOTORU TUŞ ARIZASINDAN KAYNAKLI DEĞİŞİM", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b62", "tarih": "2025-04-10", "makine": "Mikser / Karıştırıcı", "firma": "YEMTAR", "sorun": "KARIŞTIRICI BAKIMI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b63", "tarih": "2025-04-22", "makine": "Mikser / Karıştırıcı", "firma": "ROTA", "sorun": "MİKSER PADIL KIRMASI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b64", "tarih": "2025-06-18", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "TARTIM BUNKER ARIZASI", "yapilan": "YABANCI CİSİM KAÇMA SONUCU TEPSİ MOTORUNUN ZORLANMASI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b65", "tarih": "2025-07-05", "makine": "Tartım Ünitesi", "firma": "TETA", "sorun": "TARTIM BUNKERİ TAM PARÇA DEĞİŞTİ TEPSİ ÇAPI 265'E İNDİRİLDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b66", "tarih": "2025-07-05", "makine": "Paketleme", "firma": "TETA", "sorun": "PAKETLEME TEPSİ DEĞİŞİMİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b67", "tarih": "2025-07-05", "makine": "Paketleme", "firma": "TETA", "sorun": "PAKETLEME KAYIŞ DEĞİŞİMİ", "yapilan": "TERMİK ARIZASI 07-07-2025 DEVAM EDİYOR HELEZON 23 CM DEĞİŞTİ YENİ 33 CM", "maliyet": "", "durum": "Devam Ediyor"}, {"id": "b68", "tarih": "2025-07-05", "makine": "Tartım Ünitesi", "firma": "TETA", "sorun": "SALLAMA MOTORUNDA ARIZA TESPİT EDİLMEDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b69", "tarih": "2025-07-05", "makine": "Elevatör", "firma": "TETA", "sorun": "ELEVATÖR KAYIŞ VE KOVA KONTROL EDİLDİ ARIZA TESPİT EDİLMEDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b70", "tarih": "2025-07-05", "makine": "Elevatör", "firma": "TETA", "sorun": "ELEVATÖR REDAKTÖR KEÇE ARIZASINDAN YAĞ KAÇAĞI", "yapilan": "KEÇE YAĞ SİPARİŞ EDİLDİ", "maliyet": "", "durum": "Beklemede"}, {"id": "b71", "tarih": "2025-07-07", "makine": "Tartım Ünitesi", "firma": "YAVUZ KANTARCILIK", "sorun": "TARTI ARIZASI EKRAN ÇALIŞMIYOR", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b72", "tarih": "2025-07-22", "makine": "Genel", "firma": "ROTA", "sorun": "MERDİVEN BANTLARI YAPIŞTIRILDI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b73", "tarih": "2025-07-22", "makine": "Premix", "firma": "OTOMASYONCU RAMAZAN", "sorun": "PREMİX KAPAK AÇMAMA ARIZASI", "yapilan": "EGZOZ TIKALI OLMASI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b74", "tarih": "2025-07-22", "makine": "Genel", "firma": "KOMPESÖRCÜ İLHAN", "sorun": "MÜHÜR ARIZASI VE BAKIMI", "yapilan": "GENEL BAKIM YAPILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b75", "tarih": "2025-08-26", "makine": "Padıl", "firma": "ROTA", "sorun": "PADIL VURMA ARIZASI", "yapilan": "BAKILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b76", "tarih": "2025-08-26", "makine": "Tartım Ünitesi", "firma": "TETA MUSTAFA ELEKTRİKÇİ", "sorun": "KG AŞIM AYARI YAPILDI HASSAS TARTIM 400DEN 500 SANİYE 100-120- SON TARTIM -8 OLARAK GÜNCELLENDİ", "yapilan": "KALİBRE AYARI YAPILDI", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b77", "tarih": "2025-09-16", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "SALLAMA YATAK KIRMASI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b78", "tarih": "2025-09-29", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "TARTIM KAPAK PİSTON KOLU KOPMASI 40 NUMARA PİSTON KOLU ALINDI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b79", "tarih": "2025-10-20", "makine": "Genel", "firma": "TURANLAR", "sorun": "YANLIŞ MALZEME GELDİ-ATK YERİNE KEPEK-", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b80", "tarih": "2025-12-22", "makine": "Kurutucu", "firma": "ELEKTRİKÇİ CEMAL", "sorun": "KURUTUCU BAKIMI YAPILDI.MOTOR VE BAZI AKSAMLAR DEĞİŞTİRİLDİ", "yapilan": "18.000+KDV", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b81", "tarih": "2026-10-09", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "TARTIM KAYIŞI YENİLENDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b82", "tarih": "2026-02-20", "makine": "Mikser / Karıştırıcı", "firma": "ROTA", "sorun": "KARIŞIM MAKİNASI ÜST DİŞLİ RULMAN ARIZASI RULMANLAR DEĞİŞTİRİLDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b83", "tarih": "2026-02-18", "makine": "Tartım Ünitesi", "firma": "ROTA", "sorun": "SALLAMA TEPSİSİ TETAYA GÖNDERİLDİ", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b84", "tarih": "2026-02-27", "makine": "Paketleme", "firma": "TETA", "sorun": "TARTIM TEPSİSİ VE HELİS DEĞİŞTİRİLDİ TEPSİ AÇILARI DEĞİŞTİRİLDİ", "yapilan": "TETAYA 1 TARTIM TEPSİ TAM TAKIM 2 HELİS 1 BOĞAZ GÖNDERİLDİ", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b85", "tarih": "2026-03-06", "makine": "Otomasyon / Elektrik", "firma": "ROTA", "sorun": "c5 role arızası tepsi dönmemesi role ali osman tarafından değiştirildi", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b86", "tarih": "2026-03-11", "makine": "Paketleme", "firma": "ROTA", "sorun": "PAKETLEME HELEZON BİLYALARI VE KEÇELERİ DEĞİŞTİRİLDİ", "yapilan": "DIŞ BİLYA=6206-2PS1/C3 KEÇE=40*68*10 İÇİNDEKİ BİLYA NSK76*22 13.75", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b87", "tarih": "2026-03-21", "makine": "Genel", "firma": "TRİO FORKLİFT", "sorun": "GENEL BAKIM 2344 SAAT", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b88", "tarih": "2026-03-26", "makine": "Padıl", "firma": "YEMTAR", "sorun": "PADIL DEĞİŞİMİ YAPILDI-53000+KDV", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b89", "tarih": "2026-03-27", "makine": "Genel", "firma": "İLHAN KOMPRESÖR", "sorun": "GENEL BAKIM-", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b90", "tarih": "2026-04-14", "makine": "Genel", "firma": "YEMTAR", "sorun": "YEMTARDAN EVREN BEY İLE ALT KAPAK TAMAMEN REVİZE EDİLDİ 20.000'E İNDİ ALT KAPAK KAÇIRMA HATASI", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b91", "tarih": "2026-04-14", "makine": "Genel", "firma": "PADIL SİPARİŞİ VERİLDİ", "sorun": "", "yapilan": "", "maliyet": "", "durum": "Tamamlandı"}, {"id": "b92", "tarih": "2026-06-01", "makine": "Padıl", "firma": "YEMTAR", "sorun": "PADIL MİL KIRMA", "yapilan": "REVİZE YAPILDI 2 PADIL GELDİ 2000 DOLAR", "maliyet": "", "durum": "Tamamlandı"}], "parca": [{"id": "p1", "marka": "FESTO", "aciklama": "2 TANE ÇUVAL PİSTONU", "ek": "", "durum": "Kullanıldı"}, {"id": "p2", "marka": "TETA", "aciklama": "3 ADET DOLUM HELEZONU", "ek": "", "durum": "Stokta"}, {"id": "p3", "marka": "BALKONUK", "aciklama": "2 ADET BALCI ELEVATÖR ALT YATAK", "ek": "", "durum": "Stokta"}, {"id": "p4", "marka": "MOTOR", "aciklama": "1 ADET 4 KV MOTOR", "ek": "", "durum": "Stokta"}, {"id": "p5", "marka": "EMS MAKİNA", "aciklama": "ALT KAPAK VALFİ", "ek": "2 ADET", "durum": "Stokta"}, {"id": "p6", "marka": "YEMTAR", "aciklama": "1 ADET SAAT YÖNÜ TERSİ FADIL", "ek": "", "durum": "Stokta"}, {"id": "p7", "marka": "KOMPESÖR HAVA FİLTRESİ ÇAP 12", "aciklama": "", "ek": "", "durum": "Stokta"}, {"id": "p8", "marka": "TETA", "aciklama": "HELEZON PAKETLEME VE TARTIM TAM TAKIM GÖNDERİLDİ", "ek": "", "durum": "Gönderildi"}, {"id": "p9", "marka": "TETA", "aciklama": "", "ek": "", "durum": "Stokta"}]};
+let DB=null, filt={q:'',makine:'',yil:'',durum:''}, editId=null;
+
+function loadDB(){try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));}catch(e){DB=JSON.parse(JSON.stringify(SEED));}DB.kayitlar=DB.kayitlar||[];DB.parca=DB.parca||[];}
+function saveDB(){localStorage.setItem(LSKEY,JSON.stringify(DB));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function fmtDate(s){if(!s)return '—';const p=String(s).split('-');if(p.length!==3)return s;return p[2]+'.'+p[1]+'.'+p[0]}
+function uid(){return 'b'+Math.random().toString(36).slice(2,8)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1900)}
+function makineler(){const s=new Set();DB.kayitlar.forEach(k=>{if(k.makine)s.add(k.makine)});return [...s].sort((a,b)=>a.localeCompare(b,'tr'))}
+function yillar(){const s=new Set();DB.kayitlar.forEach(k=>{if(k.tarih)s.add(k.tarih.slice(0,4))});return [...s].filter(Boolean).sort().reverse()}
+function durumCls(d){return d==='Tamamlandı'?'b-tam':d==='Devam Ediyor'?'b-dev':'b-bek'}
+
+function filtered(){
+  let a=[...DB.kayitlar];
+  if(filt.q){const q=filt.q.toLowerCase('tr');a=a.filter(k=>(k.sorun+' '+k.yapilan+' '+k.firma+' '+k.makine+' '+k.maliyet).toLowerCase().includes(q))}
+  if(filt.makine)a=a.filter(k=>k.makine===filt.makine);
+  if(filt.yil)a=a.filter(k=>(k.tarih||'').slice(0,4)===filt.yil);
+  if(filt.durum)a=a.filter(k=>k.durum===filt.durum);
+  return a.sort((x,y)=>(y.tarih||'').localeCompare(x.tarih||'')||(y.id>x.id?1:-1));
+}
+
+function render(){
+  const arr=filtered(), all=DB.kayitlar, yilNow=todayISO().slice(0,4);
+  const buYil=all.filter(k=>(k.tarih||'').slice(0,4)===yilNow).length;
+  const acik=all.filter(k=>k.durum!=='Tamamlandı').length;
+  const maliyetli=all.filter(k=>k.maliyet&&k.maliyet.trim()).length;
+  // en aktif makine
+  const mc={};all.forEach(k=>{if(k.makine&&k.makine!=='Genel')mc[k.makine]=(mc[k.makine]||0)+1});
+  const topMak=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]||['—',0];
+  const stokta=DB.parca.filter(p=>p.durum==='Stokta').length;
+
+  let h=`<div class="kpis">
+    <div class="kpi"><div class="kl">Toplam Kayıt</div><div class="kv">${all.length}</div><div class="ks">tüm bakım/arıza geçmişi</div></div>
+    <div class="kpi g"><div class="kl">Bu Yıl (${yilNow})</div><div class="kv">${buYil}</div><div class="ks">kayıt</div></div>
+    <div class="kpi a"><div class="kl">Açık İşler</div><div class="kv">${acik}</div><div class="ks">devam eden / bekleyen</div></div>
+    <div class="kpi p"><div class="kl">En Aktif Makine</div><div class="kv" style="font-size:15px">${esc(topMak[0])}</div><div class="ks">${topMak[1]} bakım kaydı</div></div>
+    <div class="kpi o"><div class="kl">Yedek Parça</div><div class="kv">${stokta}<span style="font-size:13px;color:var(--slate-400)"> / ${DB.parca.length}</span></div><div class="ks">stokta / toplam</div></div>
+  </div>`;
+
+  h+=`<div class="grid-2"><div>`;
+  // filtreler
+  h+=`<div class="filters">
+    <input class="search" id="fq" placeholder="🔍 Ara: sorun, işlem, firma, makine..." value="${esc(filt.q)}" oninput="setF('q',this.value)">
+    <select id="fmak" onchange="setF('makine',this.value)"><option value="">Tüm Makineler</option>${makineler().map(m=>`<option ${filt.makine===m?'selected':''}>${esc(m)}</option>`).join('')}</select>
+    <select id="fyil" onchange="setF('yil',this.value)"><option value="">Tüm Yıllar</option>${yillar().map(y=>`<option ${filt.yil===y?'selected':''}>${y}</option>`).join('')}</select>
+    <select id="fdur" onchange="setF('durum',this.value)"><option value="">Tüm Durumlar</option>${DURUMLAR.map(d=>`<option ${filt.durum===d?'selected':''}>${d}</option>`).join('')}</select>
+    ${(filt.q||filt.makine||filt.yil||filt.durum)?`<button class="btn btn-sm" onclick="clearF()">Temizle</button>`:''}
+  </div>`;
+  // tablo
+  h+=`<div class="card"><div class="card-hd"><h3>Bakım / Arıza Kayıtları</h3><span class="hint">${arr.length} kayıt gösteriliyor</span></div>
+    <div class="tbl-scroll"><table class="t"><thead><tr><th>Tarih</th><th>Makine</th><th>Firma / Servis</th><th>Sorun / Arıza</th><th>Yapılan İşlem</th><th>Maliyet / Not</th><th>Durum</th><th></th></tr></thead><tbody>`;
+  if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt bulunamadı.</td></tr>`;
+  arr.forEach(k=>{
+    h+=`<tr>
+      <td class="c-tarih">${fmtDate(k.tarih)}</td>
+      <td><span class="mtag">${esc(k.makine||'Genel')}</span></td>
+      <td>${esc(k.firma||'')}</td>
+      <td class="c-sorun">${esc(k.sorun||'')}</td>
+      <td class="c-yapilan">${esc(k.yapilan||'')}</td>
+      <td class="c-mal">${esc(k.maliyet||'')}</td>
+      <td><span class="badge ${durumCls(k.durum)}">${esc(k.durum)}</span></td>
+      <td><div class="rowact">
+        <button class="iconbtn" onclick="openKayit('${k.id}')" title="Düzenle"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+        <button class="iconbtn del" onclick="delKayit('${k.id}')" title="Sil"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+      </div></td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div></div>`;
+
+  // sağ kolon: makine özeti + yedek parça
+  h+=`<div>`;
+  const mlist=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
+  const maxC=Math.max(1,...mlist.map(m=>m[1]));
+  h+=`<div class="card"><div class="card-hd"><h3>Makine Bazlı Özet</h3><span class="hint">bakım sayısı</span></div><div style="padding:8px 0 12px">${mlist.length?mlist.map(m=>`<div class="mbar"><span class="ml">${esc(m[0])}</span><span class="mb"><i style="width:${Math.round(m[1]/maxC*100)}%"></i></span><span class="mv">${m[1]}</span></div>`).join(''):'<div class="empty">Veri yok</div>'}</div></div>`;
+  h+=`<div class="card"><div class="card-hd"><h3>Elde Olan Malzemeler</h3><button class="btn btn-sm no-print" onclick="openParca()">+ Ekle</button></div><div>${renderParca()}</div></div>`;
+  h+=`</div></div>`;
+
+  document.getElementById('content').innerHTML=h;
+}
+
+function renderParca(){
+  if(!DB.parca.length)return '<div class="empty">Malzeme yok.</div>';
+  const ps={'Stokta':'ps-stok','Kullanıldı':'ps-kul','Gönderildi':'ps-gon'};
+  return DB.parca.map(p=>`<div class="parca"><div class="pi"><div class="pm">${esc(p.marka||'—')}</div><div class="pa">${esc(p.aciklama||'')}${p.ek?' · '+esc(p.ek):''}</div></div>
+    <span class="ps ${ps[p.durum]||'ps-stok'}">${esc(p.durum||'Stokta')}</span>
+    <button class="iconbtn del no-print" onclick="delParca('${p.id}')" title="Sil"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>`).join('');
+}
+
+// ---- filtre ----
+function setF(k,v){filt[k]=v;render();if(k==='q'){const el=document.getElementById('fq');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length);}}}
+function clearF(){filt={q:'',makine:'',yil:'',durum:''};render()}
+
+// ---- kayıt modal ----
+function openKayit(id){
+  editId=id||null;
+  const k=id?DB.kayitlar.find(x=>x.id===id):{tarih:todayISO(),makine:'',firma:'',sorun:'',yapilan:'',maliyet:'',durum:'Tamamlandı'};
+  if(!k)return;
+  const maks=makineler();
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>${id?'Kayıt Düzenle':'Yeni Bakım / Arıza Kaydı'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row">
+        <div class="fld"><label>Tarih</label><input type="date" id="m_tarih" value="${esc(k.tarih||todayISO())}"></div>
+        <div class="fld"><label>Durum</label><select id="m_durum">${DURUMLAR.map(d=>`<option ${k.durum===d?'selected':''}>${d}</option>`).join('')}</select></div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label>Makine / Ekipman</label><input id="m_makine" list="makList" value="${esc(k.makine||'')}" placeholder="Örn. Paketleme"><datalist id="makList">${maks.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></div>
+        <div class="fld"><label>Firma / Servis</label><input id="m_firma" value="${esc(k.firma||'')}" placeholder="Örn. YEMTAR"></div>
+      </div>
+      <div class="fld"><label>Sorun / Arıza</label><textarea id="m_sorun" placeholder="Yaşanan sorun...">${esc(k.sorun||'')}</textarea></div>
+      <div class="fld"><label>Yapılan İşlem / Bakım</label><textarea id="m_yapilan" placeholder="Yapılan müdahale...">${esc(k.yapilan||'')}</textarea></div>
+      <div class="fld"><label>Maliyet / Not</label><input id="m_maliyet" value="${esc(k.maliyet||'')}" placeholder="Örn. 8000+KDV"></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKayit()">Kaydet</button></div>
+  </div></div>`;
+  setTimeout(()=>{const e=document.getElementById('m_makine');if(e&&!id)e.focus();},30);
+}
+function saveKayit(){
+  const g=id=>document.getElementById(id).value.trim();
+  const o={tarih:g('m_tarih'),durum:g('m_durum'),makine:g('m_makine')||'Genel',firma:g('m_firma'),sorun:g('m_sorun'),yapilan:g('m_yapilan'),maliyet:g('m_maliyet')};
+  if(!o.tarih){toast('Tarih gerekli');return}
+  if(!o.sorun&&!o.yapilan&&!o.firma){toast('En az sorun, işlem veya firma girin');return}
+  if(editId){const k=DB.kayitlar.find(x=>x.id===editId);Object.assign(k,o);toast('Kayıt güncellendi');}
+  else{DB.kayitlar.push({id:uid(),...o});toast('Kayıt eklendi');}
+  saveDB();closeModal();render();
+}
+function delKayit(id){const k=DB.kayitlar.find(x=>x.id===id);if(!k)return;if(!confirm('Bu kayıt silinsin mi?\n\n'+fmtDate(k.tarih)+' · '+(k.sorun||k.yapilan||'').slice(0,60)))return;DB.kayitlar=DB.kayitlar.filter(x=>x.id!==id);saveDB();render();toast('Kayıt silindi');}
+
+// ---- parça modal ----
+function openParca(){
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:440px">
+    <div class="modal-hd"><h3>Malzeme Ekle</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld"><label>Marka / Tip</label><input id="p_marka" placeholder="Örn. FESTO"></div>
+      <div class="fld"><label>Açıklama / Adet</label><input id="p_aciklama" placeholder="Örn. 2 adet çuval pistonu"></div>
+      <div class="fld"><label>Durum</label><select id="p_durum"><option>Stokta</option><option>Kullanıldı</option><option>Gönderildi</option></select></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveParca()">Kaydet</button></div>
+  </div></div>`;
+  setTimeout(()=>document.getElementById('p_marka').focus(),30);
+}
+function saveParca(){
+  const marka=document.getElementById('p_marka').value.trim();
+  const aciklama=document.getElementById('p_aciklama').value.trim();
+  const durum=document.getElementById('p_durum').value;
+  if(!marka&&!aciklama){toast('Marka veya açıklama girin');return}
+  DB.parca.unshift({id:'p'+Math.random().toString(36).slice(2,7),marka,aciklama,ek:'',durum});
+  saveDB();closeModal();render();toast('Malzeme eklendi');
+}
+function delParca(id){if(!confirm('Bu malzeme silinsin mi?'))return;DB.parca=DB.parca.filter(p=>p.id!==id);saveDB();render();}
+function closeModal(){document.getElementById('modalRoot').innerHTML='';editId=null;}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+loadDB();render();
+</script>
+</body>
+</html>
