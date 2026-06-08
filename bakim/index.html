@@ -132,13 +132,21 @@ table.t tbody tr:hover .rowact{opacity:1}
     <div><div class="t1">Makine Envanter</div><div class="t2">Makine &amp; Ekipman · Bakım, Arıza, Yedek Parça</div></div>
   </div>
   <button class="btn btn-sm" onclick="window.print()" id="printBtn">Yazdır / PDF</button>
-  <button class="btn btn-pri" onclick="openKayit()" id="newBtn">+ Yeni Kayıt</button>
+  <button class="btn btn-pri" onclick="newItem()" id="newBtn">+ Yeni Kayıt</button>
 </div>
 
 <div class="tabs">
   <button class="tab active" id="tab-bakim" onclick="setTab('bakim')">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
     Bakım / Arıza Takip
+  </button>
+  <button class="tab" id="tab-sozlesme" onclick="setTab('sozlesme')">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
+    Bakım Sözleşmeleri
+  </button>
+  <button class="tab" id="tab-kitap" onclick="setTab('kitap')">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    Bakım Kitapları
   </button>
   <button class="tab soon" id="tab-pbs" onclick="setTab('pbs')">
     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><circle cx="12" cy="12" r="1"/></svg>
@@ -159,13 +167,14 @@ let DB=null, filt={q:'',makine:'',yil:'',durum:''}, editId=null, tab='bakim';
 
 function setTab(t){
   tab=t;
-  document.getElementById('tab-bakim').classList.toggle('active',t==='bakim');
-  document.getElementById('tab-pbs').classList.toggle('active',t==='pbs');
-  // PBS sekmesinde sadece bakım butonları gizlensin
-  document.getElementById('newBtn').style.display=t==='bakim'?'':'none';
+  ['bakim','sozlesme','kitap','pbs'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('active',t===x));
+  const nb=document.getElementById('newBtn');
+  const labels={bakim:'+ Yeni Kayıt',sozlesme:'+ Sözleşme Ekle',kitap:'+ Kitap Ekle'};
+  if(labels[t]){nb.style.display='';nb.textContent=labels[t];}else{nb.style.display='none';}
   document.getElementById('printBtn').style.display=t==='bakim'?'':'none';
   render();
 }
+function newItem(){if(tab==='sozlesme')openSozlesme();else if(tab==='kitap')openKitap();else openKayit();}
 function renderPBS(){
   document.getElementById('content').innerHTML=`<div class="card"><div class="pbs-empty">
     <div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><circle cx="12" cy="12" r="1"/></svg></div>
@@ -176,7 +185,123 @@ function renderPBS(){
   </div></div>`;
 }
 
-function loadDB(){try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):JSON.parse(JSON.stringify(SEED));}catch(e){DB=JSON.parse(JSON.stringify(SEED));}DB.kayitlar=DB.kayitlar||[];DB.parca=DB.parca||[];}
+// ===== Belge yardımcıları (link tabanlı) =====
+function safeLink(u){u=String(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;return u;}
+function pdfBtn(link){const u=safeLink(link);return u?`<a class="btn btn-sm" href="${esc(u)}" target="_blank" rel="noopener" style="text-decoration:none;white-space:nowrap"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:1px"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Aç</a>`:'<span style="color:var(--slate-400);font-size:11px">link yok</span>'}
+function daysTo(iso){if(!iso)return null;const t=new Date();t.setHours(0,0,0,0);const p=String(iso).split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);return Math.round((d-t)/864e5)}
+
+// ===== BAKIM SÖZLEŞMELERİ =====
+function sozStat(s){
+  const d=daysTo(s.bitis);
+  if(d==null)return {t:'Süresiz',st:'background:var(--slate-200);color:var(--slate-600)'};
+  if(d<0)return {t:'Süresi Doldu',st:'background:var(--red-100);color:var(--red-700)'};
+  if(d<=30)return {t:d+' gün kaldı',st:'background:var(--amber-100);color:var(--amber-700)'};
+  return {t:'Aktif',st:'background:var(--green-100);color:var(--green-700)'};
+}
+function renderSozlesme(){
+  const list=[...DB.sozlesmeler].sort((a,b)=>(b.bitis||'').localeCompare(a.bitis||'')||(b.baslangic||'').localeCompare(a.baslangic||''));
+  const aktif=DB.sozlesmeler.filter(s=>{const d=daysTo(s.bitis);return d==null||d>=0}).length;
+  const yakin=DB.sozlesmeler.filter(s=>{const d=daysTo(s.bitis);return d!=null&&d>=0&&d<=30}).length;
+  const dolmus=DB.sozlesmeler.filter(s=>{const d=daysTo(s.bitis);return d!=null&&d<0}).length;
+  let h=`<div class="kpis">
+    <div class="kpi"><div class="kl">Toplam Sözleşme</div><div class="kv">${DB.sozlesmeler.length}</div><div class="ks">firma anlaşmaları</div></div>
+    <div class="kpi g"><div class="kl">Aktif</div><div class="kv">${aktif}</div><div class="ks">yürürlükte</div></div>
+    <div class="kpi a"><div class="kl">Yakında Bitecek</div><div class="kv">${yakin}</div><div class="ks">30 gün içinde</div></div>
+    <div class="kpi r"><div class="kl">Süresi Dolmuş</div><div class="kv">${dolmus}</div><div class="ks">yenilenmeli</div></div>
+  </div>`;
+  h+=`<div class="card"><div class="card-hd"><h3>Bakım Sözleşmeleri</h3><span class="hint">PDF için paylaşım linki (Drive vb.) ekleyin</span></div>`;
+  if(!list.length){h+=`<div class="empty">Henüz sözleşme yok. Sağ üstten <b>+ Sözleşme Ekle</b> ile firma sözleşmelerinin PDF linkini ekleyin.</div></div>`;document.getElementById('content').innerHTML=h;return;}
+  h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Firma</th><th>Konu</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>PDF</th><th></th></tr></thead><tbody>`;
+  list.forEach(s=>{const st=sozStat(s);h+=`<tr>
+    <td><b>${esc(s.firma||'—')}</b>${s.not?`<div style="font-size:11px;color:var(--slate-500);margin-top:2px">${esc(s.not)}</div>`:''}</td>
+    <td>${esc(s.baslik||'')}</td>
+    <td class="c-tarih">${s.baslangic?fmtDate(s.baslangic):'—'}</td>
+    <td class="c-tarih">${s.bitis?fmtDate(s.bitis):'—'}</td>
+    <td><span class="badge" style="${st.st}">${st.t}</span></td>
+    <td>${pdfBtn(s.link)}</td>
+    <td><div class="rowact">
+      <button class="iconbtn" onclick="openSozlesme('${s.id}')" title="Düzenle"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+      <button class="iconbtn del" onclick="delSozlesme('${s.id}')" title="Sil"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+    </div></td></tr>`;});
+  h+=`</tbody></table></div></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function openSozlesme(id){
+  const s=id?DB.sozlesmeler.find(x=>x.id===id):{firma:'',baslik:'',baslangic:'',bitis:'',link:'',not:''};
+  if(!s)return;
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>${id?'Sözleşme Düzenle':'Yeni Bakım Sözleşmesi'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row">
+        <div class="fld"><label>Firma</label><input id="s_firma" value="${esc(s.firma||'')}" placeholder="Örn. TETA"></div>
+        <div class="fld"><label>Konu / Başlık</label><input id="s_baslik" value="${esc(s.baslik||'')}" placeholder="Örn. Yıllık bakım anlaşması"></div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label>Başlangıç</label><input type="date" id="s_baslangic" value="${esc(s.baslangic||'')}"></div>
+        <div class="fld"><label>Bitiş</label><input type="date" id="s_bitis" value="${esc(s.bitis||'')}"></div>
+      </div>
+      <div class="fld"><label>PDF Linki (Drive vb. paylaşım linki)</label><input id="s_link" value="${esc(s.link||'')}" placeholder="https://drive.google.com/..."></div>
+      <div class="fld"><label>Not</label><input id="s_not" value="${esc(s.not||'')}" placeholder="İsteğe bağlı"></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveSozlesme()">Kaydet</button></div>
+  </div></div>`;
+  editId=id||null;setTimeout(()=>document.getElementById('s_firma').focus(),30);
+}
+function saveSozlesme(){
+  const g=id=>document.getElementById(id).value.trim();
+  const o={firma:g('s_firma'),baslik:g('s_baslik'),baslangic:g('s_baslangic'),bitis:g('s_bitis'),link:safeLink(g('s_link')),not:g('s_not')};
+  if(!o.firma&&!o.baslik){toast('Firma veya konu girin');return}
+  if(editId){Object.assign(DB.sozlesmeler.find(x=>x.id===editId),o);toast('Sözleşme güncellendi');}
+  else{DB.sozlesmeler.push({id:'s'+Math.random().toString(36).slice(2,8),...o});toast('Sözleşme eklendi');}
+  saveDB();closeModal();render();
+}
+function delSozlesme(id){const s=DB.sozlesmeler.find(x=>x.id===id);if(!s)return;if(!confirm('Bu sözleşme silinsin mi?\n\n'+(s.firma||'')+' · '+(s.baslik||'')))return;DB.sozlesmeler=DB.sozlesmeler.filter(x=>x.id!==id);saveDB();render();toast('Sözleşme silindi');}
+
+// ===== BAKIM KİTAPLARI (User Manual) =====
+function renderKitap(){
+  const list=[...DB.kitaplar].sort((a,b)=>(a.makine||'').localeCompare(b.makine||'','tr')||(a.baslik||'').localeCompare(b.baslik||'','tr'));
+  let h=`<div class="card"><div class="card-hd"><h3>Bakım Kitapları · Kullanım Kılavuzları</h3><span class="hint">Büyük dosyalar Drive'da; buraya paylaşım linki eklenir</span></div>`;
+  if(!list.length){h+=`<div class="empty">Henüz kitap yok. Sağ üstten <b>+ Kitap Ekle</b> ile firmaların verdiği user manual / kılavuzların PDF linkini ekleyin.<br><span style="font-size:11.5px">İpucu: Büyük manuelleri Google Drive'a yükleyip paylaşım linkini buraya yapıştırın — yer kaplamaz.</span></div></div>`;document.getElementById('content').innerHTML=h;return;}
+  h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Makine / Marka</th><th>Kitap / Kılavuz</th><th>Not</th><th>PDF</th><th></th></tr></thead><tbody>`;
+  list.forEach(k=>{h+=`<tr>
+    <td><span class="mtag">${esc(k.makine||'Genel')}</span></td>
+    <td><b>${esc(k.baslik||'—')}</b></td>
+    <td style="color:var(--slate-600)">${esc(k.not||'')}</td>
+    <td>${pdfBtn(k.link)}</td>
+    <td><div class="rowact">
+      <button class="iconbtn" onclick="openKitap('${k.id}')" title="Düzenle"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+      <button class="iconbtn del" onclick="delKitap('${k.id}')" title="Sil"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+    </div></td></tr>`;});
+  h+=`</tbody></table></div></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function openKitap(id){
+  const k=id?DB.kitaplar.find(x=>x.id===id):{makine:'',baslik:'',link:'',not:''};
+  if(!k)return;
+  const maks=makineler();
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:480px">
+    <div class="modal-hd"><h3>${id?'Kitap Düzenle':'Yeni Bakım Kitabı'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld"><label>Makine / Marka</label><input id="k_makine" list="makListK" value="${esc(k.makine||'')}" placeholder="Örn. Forklift"><datalist id="makListK">${maks.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></div>
+      <div class="fld"><label>Kitap / Kılavuz Adı</label><input id="k_baslik" value="${esc(k.baslik||'')}" placeholder="Örn. Kullanım Kılavuzu / Servis Manueli"></div>
+      <div class="fld"><label>PDF Linki (Drive vb. paylaşım linki)</label><input id="k_link" value="${esc(k.link||'')}" placeholder="https://drive.google.com/..."></div>
+      <div class="fld"><label>Not</label><input id="k_not" value="${esc(k.not||'')}" placeholder="İsteğe bağlı"></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKitap()">Kaydet</button></div>
+  </div></div>`;
+  editId=id||null;setTimeout(()=>document.getElementById('k_makine').focus(),30);
+}
+function saveKitap(){
+  const g=id=>document.getElementById(id).value.trim();
+  const o={makine:g('k_makine')||'Genel',baslik:g('k_baslik'),link:safeLink(g('k_link')),not:g('k_not')};
+  if(!o.baslik&&!o.link){toast('Kitap adı veya link girin');return}
+  if(editId){Object.assign(DB.kitaplar.find(x=>x.id===editId),o);toast('Kitap güncellendi');}
+  else{DB.kitaplar.push({id:'k'+Math.random().toString(36).slice(2,8),...o});toast('Kitap eklendi');}
+  saveDB();closeModal();render();
+}
+function delKitap(id){const k=DB.kitaplar.find(x=>x.id===id);if(!k)return;if(!confirm('Bu kitap silinsin mi?\n\n'+(k.baslik||'')))return;DB.kitaplar=DB.kitaplar.filter(x=>x.id!==id);saveDB();render();toast('Kitap silindi');}
+
+function loadDB(){let yok=false;try{const s=localStorage.getItem(LSKEY);if(s){DB=JSON.parse(s);}else{DB=JSON.parse(JSON.stringify(SEED));yok=true;}}catch(e){DB=JSON.parse(JSON.stringify(SEED));yok=true;}DB.kayitlar=DB.kayitlar||[];DB.parca=DB.parca||[];DB.sozlesmeler=DB.sozlesmeler||[];DB.kitaplar=DB.kitaplar||[];if(yok)localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function saveDB(){localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -198,6 +323,8 @@ function filtered(){
 
 function render(){
   if(tab==='pbs'){renderPBS();return;}
+  if(tab==='sozlesme'){renderSozlesme();return;}
+  if(tab==='kitap'){renderKitap();return;}
   const arr=filtered(), all=DB.kayitlar, yilNow=todayISO().slice(0,4);
   const buYil=all.filter(k=>(k.tarih||'').slice(0,4)===yilNow).length;
   const acik=all.filter(k=>k.durum!=='Tamamlandı').length;
@@ -329,7 +456,36 @@ function delParca(id){if(!confirm('Bu malzeme silinsin mi?'))return;DB.parca=DB.
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editId=null;}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
+// Firebase senkron katmanı yeni veri çekince çağırır
+window.__reloadFromStorage=function(){const t=tab;loadDB();tab=t;render();};
 loadDB();render();
+</script>
+<!-- Firebase senkron katmanı (cihazlar arası ortak veri) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
+const DOC_ID="bakim";
+function isSyncKey(k){return !!k&&k.indexOf('rota_bakim')===0}
+const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps",DOC_ID);
+function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isSyncKey(k))o[k]=localStorage.getItem(k);}return o;}
+let suppress=false,lastUpdated=0,timer=null,hydrated=false;
+const _set=localStorage.setItem.bind(localStorage),_rem=localStorage.removeItem.bind(localStorage);
+localStorage.setItem=function(k,v){_set(k,v);if(!suppress&&isSyncKey(k))schedulePush();};
+localStorage.removeItem=function(k){_rem(k);if(!suppress&&isSyncKey(k))schedulePush();};
+// İlk başarılı senkron tamamlanmadan push yapma (boş tarayıcı gerçek veriyi ezmesin)
+function schedulePush(){if(!hydrated)return;clearTimeout(timer);timer=setTimeout(push,900);}
+async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated});fbDot('#16A34A','Senkron');}catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');}}
+function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isSyncKey(k))_set(k,d[k]);});}finally{suppress=false;}}
+let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Inter,system-ui,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c}"></span> ${t}`;}
+(async function(){
+  fbDot('#F59E0B','Bağlanıyor');
+  try{const snap=await getDoc(dref);
+    if(snap.exists()&&snap.data().data){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;hydrated=true;if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Senkron');}
+    else{hydrated=true;await push();}
+  }catch(e){console.warn('FB init',e);fbDot('#EF4444','Çevrimdışı');}
+  try{onSnapshot(dref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||(d.updated&&d.updated===lastUpdated))return;lastUpdated=d.updated||0;hydrated=true;applyRemote(d.data);if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Güncellendi');});}catch(e){}
+})();
 </script>
 </body>
 </html>
