@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>İnsan Kaynakları · Rota</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue-900:#0C2340;--blue-700:#174B82;--blue-600:#1D62A8;--blue-500:#2878C8;--blue-100:#E8F1FB;--blue-50:#F3F8FD;
+  --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#334155;--slate-600:#475569;--slate-500:#64748B;--slate-400:#94A3B8;--slate-300:#CBD5E1;--slate-200:#E2E8F0;--slate-100:#F1F5F9;--slate-50:#F8FAFC;
+  --amber-500:#F59E0B;--amber-600:#D8A23F;
+  --font:'Inter',system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:var(--slate-100);color:var(--slate-800);line-height:1.4;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid var(--slate-200);padding:12px 22px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+.topbar .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+.topbar .brand img{height:34px}
+.topbar .brand .t1{font-size:15px;font-weight:700;color:var(--slate-900);line-height:1.1}
+.topbar .brand .t2{font-size:11px;color:var(--slate-500)}
+.back-link{font-size:12px;color:var(--slate-500);text-decoration:none;font-weight:600;display:inline-flex;align-items:center;gap:5px}
+.back-link:hover{color:var(--blue-600)}
+.wrap{max-width:920px;margin:0 auto;padding:34px 22px 60px}
+.head{margin-bottom:24px}
+.head h1{font-size:22px;font-weight:800;color:var(--slate-900);letter-spacing:-.01em}
+.head p{font-size:13.5px;color:var(--slate-500);margin-top:5px}
+.cards{display:flex;flex-direction:column;gap:14px}
+.card{--c:var(--amber-600);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:18px;padding:20px 22px;background:#fff;border:1px solid var(--slate-200);border-radius:13px;position:relative;overflow:hidden;text-decoration:none;color:inherit;transition:transform .25s,border-color .2s,box-shadow .2s}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);transform:scaleY(0);transform-origin:top;transition:transform .3s}
+.card.active{cursor:pointer}
+.card.active:hover{transform:translateY(-2px);border-color:color-mix(in oklab,var(--c) 45%,var(--slate-200));box-shadow:0 8px 24px -12px rgba(0,0,0,.15)}
+.card.active:hover::before{transform:scaleY(1)}
+.card.soon{opacity:.72;cursor:default}
+.card .ic{width:52px;height:52px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:color-mix(in oklab,var(--c) 14%,#fff);color:var(--c);flex:none}
+.card .ic svg{width:25px;height:25px;stroke-width:1.9}
+.card .body{min-width:0}
+.card .kicker{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--c);margin-bottom:4px}
+.card .body h2{font-size:17px;font-weight:700;color:var(--slate-900);margin-bottom:4px}
+.card .body p{font-size:12.5px;color:var(--slate-500);line-height:1.5}
+.card .go{color:var(--slate-300)}
+.card .go svg{width:22px;height:22px}
+.soon-badge{position:absolute;top:14px;right:16px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--slate-400);background:var(--slate-100);border:1px solid var(--slate-200);padding:4px 10px;border-radius:20px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <a class="back-link" href="../">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Portal
+  </a>
+  <div class="brand">
+    <img src="../rota-smi.png" alt="Rota SMI" onerror="this.style.display='none'">
+    <div><div class="t1">İnsan Kaynakları</div><div class="t2">İK · İSG · KVKK Yönetimi</div></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="head">
+    <h1>İnsan Kaynakları</h1>
+    <p>Personel, iş sağlığı ve güvenliği ve kişisel verilerin korunması süreçlerini buradan yöneteceğiz.</p>
+  </div>
+
+  <div class="cards">
+    <!-- 1. İnsan Kaynakları -->
+    <div class="card soon" style="--c:#D8A23F" aria-disabled="true">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      <span class="body"><span class="kicker">İK</span><h2>İnsan Kaynakları</h2><p>Personel kayıtları, bordro, izin, performans ve özlük dosyaları.</p></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+      <span class="soon-badge">Yakında</span>
+    </div>
+
+    <!-- 2. İş Sağlığı ve Güvenliği -->
+    <div class="card soon" style="--c:#2FAF8F" aria-disabled="true">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18a5 5 0 0 1 5-5h10a5 5 0 0 1 5 5"/><path d="M2 18h20v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/><path d="M12 5v8"/><path d="M8 8.5C8 6 9.8 4 12 4s4 2 4 4.5"/></svg></span>
+      <span class="body"><span class="kicker">İSG</span><h2>İş Sağlığı ve Güvenliği</h2><p>Risk analizi, eğitim takibi, kaza/ramak kala kayıtları ve KKD yönetimi.</p></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+      <span class="soon-badge">Yakında</span>
+    </div>
+
+    <!-- 3. KVKK -->
+    <div class="card soon" style="--c:#7C3AED" aria-disabled="true">
+      <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="body"><span class="kicker">KVKK</span><h2>KVKK</h2><p>Aydınlatma metinleri, açık rıza, veri envanteri ve ihlal/saklama kayıtları.</p></span>
+      <span class="go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+      <span class="soon-badge">Yakında</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
