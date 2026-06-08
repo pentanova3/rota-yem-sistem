@@ -153,7 +153,7 @@ table.t tbody tr:hover .rowact{opacity:1}
 <script>
 const LSKEY='rota_ik_v1';
 const DEPARTMANLAR=['Üretim','İdari','Pazarlama','Diğer'];
-const SABLON_KAT=['İş Sözleşmesi','Muvafakatname','Oryantasyon','Görev Tanımı','KVKK Evrakı','Zimmet','İmha Onamı','İzin Dilekçesi','Diğer'];
+const SABLON_KAT=['İş Sözleşmesi','Muvafakatname','Oryantasyon','Görev Tanımı','KVKK Evrakı','Zimmet','İmha Onamı','İzin Dilekçesi','İhbar Bildirimi','Diğer'];
 const IZIN_TUR=[
   {k:'yillik',l:'Yıllık İzin',birim:'gün',yillik:true},
   {k:'ucretsiz',l:'Ücretsiz İzin (Günlük)',birim:'gün',taraf:true},
@@ -168,6 +168,8 @@ const IZIN_TUR=[
 function izinTur(k){return IZIN_TUR.find(t=>t.k===k)||IZIN_TUR[IZIN_TUR.length-1]}
 const AY_ADLARI=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 let izinYil=new Date().getFullYear(), avansYil=new Date().getFullYear();
+const IHBAR_ISVEREN="İŞ SÖZLEŞMESİ FESİH (İHBAR ÖNELİ) BİLDİRİMİ\n\nSayın {{ad_soyad}},\n\nİşyerimizde {{ise_giris}} tarihinden itibaren {{gorev}} olarak çalışmaktasınız. 4857 sayılı İş Kanunu hükümleri çerçevesinde iş sözleşmenizin, aşağıda belirtilen ihbar süresinin sonunda feshedileceği tarafınıza bildirilir.\n\nKıdem: {{kidem}}\nYasal ihbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona erme tarihi: {{ihbar_bitis}}\n\n4857 sayılı Kanun'un 27. maddesi gereği ihbar süresi içinde, ücretinizden herhangi bir kesinti yapılmaksızın günde en az 2 saat iş arama izni hakkınız bulunmaktadır. İhbar süresi boyunca toplam iş arama izniniz: {{is_arama_saat}} saattir.\n\nBilgilerinize sunarız.\n\nİŞVEREN\nRota SMI Tarım\nTarih: {{bugun}}\n\nTebellüğ Eden (İşçi): {{ad_soyad}}\nTarih / İmza:";
+const IHBAR_ISCI="İHBAR ÖNELİ İLE FESİH (İSTİFA) BİLDİRİMİ\n\nROTA SMI TARIM İŞYERİ YÖNETİMİNE,\n\n{{ise_giris}} tarihinden bu yana işyerinizde {{gorev}} olarak çalışmaktayım. İş sözleşmemi, 4857 sayılı İş Kanunu'nun öngördüğü ihbar süresine uyarak feshetmek istediğimi bildiririm.\n\nKıdem: {{kidem}}\nİhbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona ereceği tarih: {{ihbar_bitis}}\n\nGereğini saygılarımla arz ederim.\n\n{{ad_soyad}}\nTarih: {{bugun}}\nİmza:";
 const SECTIONS=[
   {k:'personel',l:'Personeller',grp:'Kayıt'},
   {k:'sablon',l:'Sözleşme & Şablonlar',grp:'Kayıt'},
@@ -193,6 +195,7 @@ const MERGE=[
   {k:'ise_giris',l:'İşe Giriş'},{k:'telefon',l:'Telefon'},{k:'adres',l:'Adres'},{k:'dogum',l:'Doğum Tarihi'},
   {k:'ucret',l:'Brüt Ücret'},{k:'iban',l:'IBAN'},{k:'bugun',l:'Bugün'},
   {k:'izin_turu',l:'İzin Türü'},{k:'izin_baslangic',l:'İzin Başlangıç'},{k:'izin_bitis',l:'İzin Bitiş'},{k:'izin_sure',l:'İzin Süresi'},
+  {k:'kidem',l:'Kıdem'},{k:'ihbar_hafta',l:'İhbar Hafta'},{k:'ihbar_gun',l:'İhbar Gün'},{k:'ihbar_baslangic',l:'İhbar Başlangıç'},{k:'ihbar_bitis',l:'İhbar Bitiş'},{k:'is_arama_saat',l:'İş Arama İzni (saat)'},{k:'fesih_eden',l:'Fesih Eden'},
 ];
 let DB=null, sec='personel', editId=null;
 
@@ -222,6 +225,18 @@ function yilFark(iso,ref){const d=parseISO(iso);if(!d)return 0;const r=ref?parse
 // 4857/53: 1-5yıl=14, 5-15=20, 15+=26; 18 altı/50+ en az 20
 function yillikHakGun(iseGiris,dogum,refISO){const k=yilFark(iseGiris,refISO);if(k<1)return 0;let g=k<=5?14:(k<15?20:26);if(dogum){const yas=yilFark(dogum,refISO);if(yas<18||yas>=50)g=Math.max(g,20);}return g}
 function sonrakiHakEdis(iseGiris,dogum){const d=parseISO(iseGiris);if(!d)return null;const t=new Date();t.setHours(0,0,0,0);let yil=t.getFullYear();let nx=new Date(yil,d.getMonth(),d.getDate());if(nx<=t)nx=new Date(yil+1,d.getMonth(),d.getDate());const refISO=nx.getFullYear()+'-'+String(nx.getMonth()+1).padStart(2,'0')+'-'+String(nx.getDate()).padStart(2,'0');return {tarih:refISO,gun:yillikHakGun(iseGiris,dogum,refISO)}}
+function aylarArasi(a,b){const d1=parseISO(a),d2=parseISO(b);if(!d1||!d2)return 0;let m=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth());if(d2.getDate()<d1.getDate())m--;return Math.max(0,m)}
+function kidemMetin(iseGiris,refISO){const m=aylarArasi(iseGiris,refISO);const y=Math.floor(m/12),ay=m%12;const parts=[];if(y)parts.push(y+' yıl');if(ay)parts.push(ay+' ay');return parts.length?parts.join(' '):'1 aydan az'}
+function isgunuSay(fromISO,toISO){const d=parseISO(fromISO),e=parseISO(toISO);if(!d||!e)return 0;let c=0;const x=new Date(d);x.setDate(x.getDate()+1);while(x<=e){const g=x.getDay();if(g>=1&&g<=5)c++;x.setDate(x.getDate()+1);}return c}
+// 4857/17: <6ay=2hf, 6ay-1.5yıl=4hf, 1.5-3yıl=6hf, 3yıl+=8hf · md.27: günde min 2 saat iş arama izni
+function ihbarHesapla(iseGiris,fesihISO){
+  const ref=fesihISO||todayISO();const m=aylarArasi(iseGiris,ref);
+  let hafta=m<6?2:m<18?4:m<36?6:8;
+  const ihbarGun=hafta*7;const bitis=parseISO(ref);bitis.setDate(bitis.getDate()+ihbarGun);
+  const bitisISO=bitis.getFullYear()+'-'+String(bitis.getMonth()+1).padStart(2,'0')+'-'+String(bitis.getDate()).padStart(2,'0');
+  const isgunu=isgunuSay(ref,bitisISO);const isArama=isgunu*2;
+  return {ay:m,kidem:kidemMetin(iseGiris,ref),hafta,ihbarGun,baslangic:ref,bitis:bitisISO,isgunu,isAramaSaat:isArama};
+}
 function uid(p){return (p||'x')+Math.random().toString(36).slice(2,8)}
 function safeLink(u){u=String(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;return u}
 function deptTag(d){const c={'Üretim':'t-ure','İdari':'t-ida','Pazarlama':'t-paz'}[d]||'t-dig';return `<span class="tag ${c}">${esc(d||'—')}</span>`}
@@ -430,6 +445,7 @@ function renderBelge(bolum){
   const cfg=BELGE_BOLUM[bolum];const list=DB.belgeler.filter(b=>b.bolum===bolum);
   let h=`<p class="intro">${cfg.intro}</p>`;
   if(bolum==='kabul')h+=waPanel(list);
+  if(bolum==='cikis')h+=ihbarPanel();
   h+=`<div class="card"><div class="card-hd"><h3>${cfg.title}</h3><span class="hint">${list.length} belge</span></div>`;
   if(!list.length){h+=`<div class="empty">Henüz belge yok. Sağ üstten <b>+ Belge / Şablon</b> ekleyin.<br><span style="font-size:11.5px">Şablonu Drive'a yükleyip paylaşım linkini yapıştırın.</span></div></div>`;document.getElementById('content').innerHTML=h;return;}
   h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Başlık</th><th>Açıklama</th><th>Tarih</th><th>PDF</th><th></th></tr></thead><tbody>`;
@@ -462,6 +478,55 @@ function saveBelge(bolum){
   saveDB();closeModal();render();toast('Belge kaydedildi');
 }
 function delBelge(id){const b=DB.belgeler.find(x=>x.id===id);if(!b)return;if(!confirm('"'+(b.baslik||'')+'" silinsin mi?'))return;DB.belgeler=DB.belgeler.filter(x=>x.id!==id);saveDB();render();toast('Silindi');}
+
+// ---- İhbar süresi hesaplama ----
+function ihbarPanel(){
+  return `<div class="card" style="border-color:var(--blue-200)"><div class="card-hd" style="background:var(--blue-50)"><h3>⏱ İhbar Süresi Hesaplama & İhbar Yazısı</h3><span class="hint">4857/17 · md.27 iş arama izni</span></div>
+    <div style="padding:14px 18px;font-size:12.5px;color:var(--slate-600)">Personel ve fesih bildirim tarihini girin; kıdeme göre <b>ihbar süresi</b>, <b>sözleşmenin sona erme tarihi</b> ve <b>iş arama izni</b> otomatik hesaplanır. İşçi/işveren feshine göre ihbar yazısını oluşturup yazdırın.
+      <div style="margin-top:12px"><button class="btn btn-pri" onclick="openIhbarHesap()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> İhbar Süresi Hesapla / Yazı Oluştur</button></div>
+    </div></div>`;
+}
+function openIhbarHesap(pid){
+  if(!DB.personeller.length){toast('Önce personel ekleyin');go('personel');return;}
+  const pOpts=DB.personeller.map(p=>`<option value="${p.id}" ${pid===p.id?'selected':''}>${esc(p.ad)}${p.iseGiris?'':' — işe giriş yok'}</option>`).join('');
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>İhbar Süresi Hesaplama</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row3">
+        <div class="fld"><label>Personel</label><select id="ihbar_pers" onchange="ihbarHesapGoster()">${pOpts}</select></div>
+        <div class="fld"><label>Fesih Bildirim Tarihi</label><input type="date" id="ihbar_tarih" value="${todayISO()}" onchange="ihbarHesapGoster()"></div>
+        <div class="fld"><label>Fesih Eden</label><select id="ihbar_eden"><option value="isveren">İşveren</option><option value="isci">İşçi</option></select></div>
+      </div>
+      <div id="ihbar_sonuc" style="margin-top:6px"></div>
+      <div class="helptext" style="margin-top:10px">4857/17: 6 aydan az 2 hafta · 6 ay–1,5 yıl 4 hafta · 1,5–3 yıl 6 hafta · 3 yıl+ 8 hafta. İş arama izni md.27: işgünü başına 2 saat (hafta içi günler).</div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Kapat</button><button class="btn btn-pri" onclick="ihbarYaziOlustur()">İhbar Yazısı Oluştur & Yazdır</button></div>
+  </div></div>`;
+  ihbarHesapGoster();
+}
+function ihbarHesapGoster(){
+  const p=DB.personeller.find(x=>x.id===document.getElementById('ihbar_pers').value);
+  const box=document.getElementById('ihbar_sonuc');if(!p)return;
+  if(!p.iseGiris){box.innerHTML=`<div style="background:var(--red-50);border:1px solid #fecaca;color:var(--red-700);border-radius:9px;padding:12px;font-size:12.5px">Bu personelin <b>işe giriş tarihi</b> girilmemiş. Personeller bölümünden ekleyin; ihbar süresi kıdemden hesaplanır.</div>`;return;}
+  const r=ihbarHesapla(p.iseGiris,document.getElementById('ihbar_tarih').value);
+  const cell=(l,v,c)=>`<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:9px;padding:11px 13px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--slate-500)">${l}</div><div style="font-size:16px;font-weight:700;margin-top:3px;${c||''}">${v}</div></div>`;
+  box.innerHTML=`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+    ${cell('Kıdem',r.kidem+' <span style=\"font-size:11px;color:var(--slate-400)\">('+r.ay+' ay)</span>')}
+    ${cell('İhbar Süresi',r.hafta+' hafta <span style=\"font-size:11px;color:var(--slate-400)\">('+r.ihbarGun+' gün)</span>','color:var(--blue-700)')}
+    ${cell('Sözleşme Sona Erme',fmtDate(r.bitis),'color:var(--red-700)')}
+    ${cell('İş Arama İzni',r.isAramaSaat+' saat <span style=\"font-size:11px;color:var(--slate-400)\">('+r.isgunu+' işgünü × 2s)</span>','color:var(--green-700)')}
+  </div>`;
+}
+function ihbarYaziOlustur(){
+  const p=DB.personeller.find(x=>x.id===document.getElementById('ihbar_pers').value);if(!p)return;
+  if(!p.iseGiris){toast('İşe giriş tarihi yok');return;}
+  const eden=document.getElementById('ihbar_eden').value;
+  const r=ihbarHesapla(p.iseGiris,document.getElementById('ihbar_tarih').value);
+  const extra={kidem:r.kidem,ihbar_hafta:r.hafta,ihbar_gun:r.ihbarGun,ihbar_baslangic:fmtDate(r.baslangic),ihbar_bitis:fmtDate(r.bitis),is_arama_saat:r.isAramaSaat,fesih_eden:eden==='isveren'?'İşveren':'İşçi'};
+  const userT=DB.sablonlar.filter(s=>s.kategori==='İhbar Bildirimi');
+  const s=userT.length?userT[0]:{ad:'İhbar Öneli Bildirimi',icerik:(eden==='isveren'?IHBAR_ISVEREN:IHBAR_ISCI)};
+  closeModal();printFilled([{p,s,extra}]);
+}
 
 // ---- WhatsApp ----
 function waPanel(list){
