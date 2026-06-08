@@ -894,10 +894,10 @@ function renderTazminat(){
   const kidemBrut=sum(r=>r.h.kidemBrut),ihbarBrut=sum(r=>r.h.ihbarBrut);
   const kidemNet=sum(r=>r.h.kidemNet),ihbarNet=sum(r=>r.h.ihbarNet);
   const eksikUcret=rows.filter(r=>!(+r.p.ucret>0)).length;
-  let h=`<p class="intro">Personel brüt ücretleri ve işe giriş tarihlerinden kıdem & ihbar tazminatı yükümlülüğü hesaplanır. <b>"Bugün firmayı kapatsak"</b> senaryosunda ödenecek toplam aşağıdadır. Kesintiler dahildir: kıdem tazminatından <b>damga vergisi</b>, ihbar tazminatından <b>gelir vergisi + damga vergisi</b>. Kıdem tazminatı <b>tavanı</b> uygulanır (Ayarlar'dan güncelleyin).</p>`;
+  let h=`<p class="intro">Personel brüt ücretleri ve işe giriş tarihlerinden kıdem & ihbar tazminatı yükümlülüğü hesaplanır. Seçilen tarih itibarıyla tüm aktif personel için ödenecek toplam tazminat aşağıdadır. Kesintiler dahildir: kıdem tazminatından <b>damga vergisi</b>, ihbar tazminatından <b>gelir vergisi + damga vergisi</b>. Kıdem tazminatı <b>tavanı</b> uygulanır (Ayarlar'dan güncelleyin).</p>`;
   // büyük yükümlülük banner
   h+=`<div class="card" style="background:linear-gradient(135deg,var(--blue-900),var(--blue-700));border:none;color:#fff"><div style="padding:18px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-    <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9fc0e6">Bugün kapatsak — Toplam Tazminat Yükümlülüğü (${fmtDate(ref)})</div>
+    <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9fc0e6">Toplam Tazminat Yükümlülüğü (${fmtDate(ref)})</div>
     <div style="font-size:30px;font-weight:800;margin-top:5px">${fmtTL(kidemNet+ihbarNet)} <span style="font-size:14px;font-weight:600;color:#9fc0e6">net</span></div>
     <div style="font-size:13px;color:#cdddf0;margin-top:3px">Brüt: ${fmtTL(kidemBrut+ihbarBrut)} · ${aktif.length} aktif personel</div></div>
   </div></div>`;
