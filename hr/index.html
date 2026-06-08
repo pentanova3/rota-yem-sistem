@@ -167,7 +167,7 @@ const IZIN_TUR=[
 ];
 function izinTur(k){return IZIN_TUR.find(t=>t.k===k)||IZIN_TUR[IZIN_TUR.length-1]}
 const AY_ADLARI=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-let izinYil=new Date().getFullYear(), avansYil=new Date().getFullYear();
+let izinYil=new Date().getFullYear(), avansYil=new Date().getFullYear(), tazminatTarih=null;
 const IHBAR_ISVEREN="İŞ SÖZLEŞMESİ FESİH (İHBAR ÖNELİ) BİLDİRİMİ\n\nSayın {{ad_soyad}},\n\nİşyerimizde {{ise_giris}} tarihinden itibaren {{gorev}} olarak çalışmaktasınız. 4857 sayılı İş Kanunu hükümleri çerçevesinde iş sözleşmenizin, aşağıda belirtilen ihbar süresinin sonunda feshedileceği tarafınıza bildirilir.\n\nKıdem: {{kidem}}\nYasal ihbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona erme tarihi: {{ihbar_bitis}}\n\n4857 sayılı Kanun'un 27. maddesi gereği ihbar süresi içinde, ücretinizden herhangi bir kesinti yapılmaksızın günde en az 2 saat iş arama izni hakkınız bulunmaktadır. İhbar süresi boyunca toplam iş arama izniniz: {{is_arama_saat}} saattir.\n\nBilgilerinize sunarız.\n\nİŞVEREN\nRota SMI Tarım\nTarih: {{bugun}}\n\nTebellüğ Eden (İşçi): {{ad_soyad}}\nTarih / İmza:";
 const IHBAR_ISCI="İHBAR ÖNELİ İLE FESİH (İSTİFA) BİLDİRİMİ\n\nROTA SMI TARIM İŞYERİ YÖNETİMİNE,\n\n{{ise_giris}} tarihinden bu yana işyerinizde {{gorev}} olarak çalışmaktayım. İş sözleşmemi, 4857 sayılı İş Kanunu'nun öngördüğü ihbar süresine uyarak feshetmek istediğimi bildiririm.\n\nKıdem: {{kidem}}\nİhbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona ereceği tarih: {{ihbar_bitis}}\n\nGereğini saygılarımla arz ederim.\n\n{{ad_soyad}}\nTarih: {{bugun}}\nİmza:";
 const SECTIONS=[
@@ -179,6 +179,7 @@ const SECTIONS=[
   {k:'cikis',l:'Çıkış Evrakları',grp:'Süreçler'},
   {k:'izin',l:'İzin Takibi',grp:'Süreçler'},
   {k:'avans',l:'Avans Yönetimi',grp:'Süreçler'},
+  {k:'tazminat',l:'Kıdem & İhbar Tazminatı',grp:'Süreçler'},
   {k:'talimat',l:'Talimatlar',grp:'Arşiv'},
   {k:'diger',l:'Diğer Evraklar',grp:'Arşiv'},
 ];
@@ -212,7 +213,7 @@ function seed(){
   };
 }
 function loadDB(){let yok=false;try{const s=localStorage.getItem(LSKEY);if(s)DB=JSON.parse(s);else{DB=seed();yok=true;}}catch(e){DB=seed();yok=true;}
-  DB.personeller=DB.personeller||[];DB.belgeler=DB.belgeler||[];DB.sablonlar=DB.sablonlar||[];DB.izinler=DB.izinler||[];DB.izinBakiye=DB.izinBakiye||[];DB.avanslar=DB.avanslar||[];if(!DB.waMesaj)DB.waMesaj=seed().waMesaj;
+  DB.personeller=DB.personeller||[];DB.belgeler=DB.belgeler||[];DB.sablonlar=DB.sablonlar||[];DB.izinler=DB.izinler||[];DB.izinBakiye=DB.izinBakiye||[];DB.avanslar=DB.avanslar||[];DB.tazminatOdeme=DB.tazminatOdeme||[];DB.tazminatAyar=DB.tazminatAyar||{kidemTavan:53919.68,gelirVergisiOran:0.15,damgaOran:0.00759};if(!DB.waMesaj)DB.waMesaj=seed().waMesaj;
   if(yok)localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function saveDB(){localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -264,6 +265,7 @@ function navIcon(k){const I={
   cikis:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   izin:'<path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
   avans:'<path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+  tazminat:'<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
   talimat:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   diger:'<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>',
 }[k]||'';return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I}</svg>`;}
@@ -278,6 +280,7 @@ function render(){
   else if(sec==='sablon')ta.innerHTML=`<button class="btn btn-pri" onclick="openSablon()">+ Yeni Şablon</button>`;
   else if(sec==='izin')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="izinYil=+this.value;render()">${yilSecenekleri(izinYil)}</select><button class="btn btn-pri" onclick="openIzinKayit()">+ İzin Kaydı</button>`;
   else if(sec==='avans')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="avansYil=+this.value;render()">${yilSecenekleri(avansYil)}</select><button class="btn btn-pri" onclick="openAvans()">+ Avans</button>`;
+  else if(sec==='tazminat')ta.innerHTML=`<span style="font-size:11px;color:var(--slate-500)">Hesap tarihi</span><input type="date" class="btn" style="padding:6px 10px" value="${tazminatTarih||todayISO()}" onchange="tazminatTarih=this.value;render()"><button class="btn btn-sm" onclick="openTazminatAyar()">Ayarlar</button>`;
   else if(BELGE_BOLUM[sec])ta.innerHTML=`<button class="btn btn-pri" onclick="openBelge('${sec}')">+ Belge / Şablon</button>`;
   const sub={personel:'Personel kayıtları — sözleşme ve evraklar bu kayıtlardan otomatik doldurulur',sablon:'Düzenlenebilir sözleşme/evrak şablonları — personel bilgisiyle otomatik doldur, yazdır',izin:'Yıllık/ücretsiz/mazeret izin takibi ve istatistikleri',avans:'Personel avans talep ve kesinti takibi'}[sec]||(BELGE_BOLUM[sec]?BELGE_BOLUM[sec].hint:'');
   document.getElementById('secSub').textContent=sub;
@@ -285,6 +288,7 @@ function render(){
   if(sec==='sablon')return renderSablon();
   if(sec==='izin')return renderIzin();
   if(sec==='avans')return renderAvans();
+  if(sec==='tazminat')return renderTazminat();
   if(BELGE_BOLUM[sec])return renderBelge(sec);
 }
 
@@ -838,6 +842,135 @@ function avansDetay(pid){
     </div>
     <div class="modal-ft"><button class="btn btn-pri" onclick="closeModal()">Kapat</button></div>
   </div></div>`;
+}
+
+// ============ KIDEM & İHBAR TAZMİNATI ============
+function tazminatHesap(p,refISO){
+  const ay=DB.tazminatAyar;const ref=refISO||todayISO();
+  const brut=+p.ucret||0;const gunluk=brut/30;
+  const d1=parseISO(p.iseGiris),d2=parseISO(ref);
+  const toplamGun=(d1&&d2)?Math.max(0,Math.round((d2-d1)/864e5)):0;
+  const yilKesir=toplamGun/365;
+  let kidemBrut=0,tavanU=false;
+  if(toplamGun>=365){let yillik=brut;if(brut>ay.kidemTavan){yillik=ay.kidemTavan;tavanU=true;}kidemBrut=yillik*yilKesir;}
+  const kidemDamga=kidemBrut*ay.damgaOran;const kidemNet=kidemBrut-kidemDamga;
+  const ih=ihbarHesapla(p.iseGiris,ref);
+  const ihbarBrut=gunluk*ih.ihbarGun;const ihbarGelir=ihbarBrut*ay.gelirVergisiOran;const ihbarDamga=ihbarBrut*ay.damgaOran;const ihbarNet=ihbarBrut-ihbarGelir-ihbarDamga;
+  return {brut,gunluk,toplamGun,yilKesir,kidemBrut,kidemDamga,kidemNet,tavanU,kidemHak:toplamGun>=365,ihbarHafta:ih.hafta,ihbarGun:ih.ihbarGun,ihbarBrut,ihbarGelir,ihbarDamga,ihbarNet,toplamBrut:kidemBrut+ihbarBrut,toplamNet:kidemNet+ihbarNet,kidemMetin:kidemMetin(p.iseGiris,ref)};
+}
+function tazOdenen(pid){return DB.tazminatOdeme.filter(o=>o.personelId===pid).reduce((s,o)=>({kidem:s.kidem+(+o.kidem||0),ihbar:s.ihbar+(+o.ihbar||0)}),{kidem:0,ihbar:0});}
+function renderTazminat(){
+  const ref=tazminatTarih||todayISO();
+  const aktif=DB.personeller.filter(p=>p.durum!=='ayrildi');
+  const rows=aktif.map(p=>({p,h:tazminatHesap(p,ref),od:tazOdenen(p.id)}));
+  const sum=(f)=>rows.reduce((s,r)=>s+f(r),0);
+  const kidemBrut=sum(r=>r.h.kidemBrut),ihbarBrut=sum(r=>r.h.ihbarBrut);
+  const kidemNet=sum(r=>r.h.kidemNet),ihbarNet=sum(r=>r.h.ihbarNet);
+  const eksikUcret=rows.filter(r=>!(+r.p.ucret>0)).length;
+  let h=`<p class="intro">Personel brüt ücretleri ve işe giriş tarihlerinden kıdem & ihbar tazminatı yükümlülüğü hesaplanır. <b>"Bugün firmayı kapatsak"</b> senaryosunda ödenecek toplam aşağıdadır. Kesintiler dahildir: kıdem tazminatından <b>damga vergisi</b>, ihbar tazminatından <b>gelir vergisi + damga vergisi</b>. Kıdem tazminatı <b>tavanı</b> uygulanır (Ayarlar'dan güncelleyin).</p>`;
+  // büyük yükümlülük banner
+  h+=`<div class="card" style="background:linear-gradient(135deg,var(--blue-900),var(--blue-700));border:none;color:#fff"><div style="padding:18px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+    <div><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9fc0e6">Bugün kapatsak — Toplam Tazminat Yükümlülüğü (${fmtDate(ref)})</div>
+    <div style="font-size:30px;font-weight:800;margin-top:5px">${fmtTL(kidemNet+ihbarNet)} <span style="font-size:14px;font-weight:600;color:#9fc0e6">net</span></div>
+    <div style="font-size:13px;color:#cdddf0;margin-top:3px">Brüt: ${fmtTL(kidemBrut+ihbarBrut)} · ${aktif.length} aktif personel</div></div>
+  </div></div>`;
+  h+=`<div class="kpis">
+    <div class="kpi"><div class="kl">Kıdem Tazminatı</div><div class="kv">${fmtTL(kidemNet)}</div><div class="ks">net · brüt ${fmtTL(kidemBrut)}</div></div>
+    <div class="kpi a"><div class="kl">İhbar Tazminatı</div><div class="kv">${fmtTL(ihbarNet)}</div><div class="ks">net · brüt ${fmtTL(ihbarBrut)}</div></div>
+    <div class="kpi g"><div class="kl">Genel Toplam (Net)</div><div class="kv">${fmtTL(kidemNet+ihbarNet)}</div><div class="ks">ödenecek tahmini</div></div>
+    <div class="kpi p"><div class="kl">Kıdem Tavanı</div><div class="kv" style="font-size:15px">${fmtTL(DB.tazminatAyar.kidemTavan)}</div><div class="ks">GV %${(DB.tazminatAyar.gelirVergisiOran*100)} · damga ‰${(DB.tazminatAyar.damgaOran*1000).toFixed(2)}</div></div>
+  </div>`;
+  if(eksikUcret)h+=`<div class="helptext" style="background:var(--amber-50);border:1px solid #fde68a;border-radius:8px;padding:9px 12px;margin-bottom:14px;color:var(--amber-700)">⚠ ${eksikUcret} personelin brüt ücreti girilmemiş — tazminatları 0 görünür. Satırdaki ✎ ile brüt ücreti girin (her yıl başı güncelleyin).</div>`;
+  h+=`<div class="card"><div class="card-hd"><h3>Personel Bazında Tazminat · ${fmtDate(ref)}</h3><span class="hint">satıra tıkla → detay & ödeme</span></div>`;
+  if(!aktif.length){h+=`<div class="empty">Aktif personel yok. Önce <b>Personeller</b> bölümünden ekleyin.</div></div>`;document.getElementById('content').innerHTML=h;return;}
+  h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Personel</th><th>İşe Giriş / Kıdem</th><th class="num">Brüt Ücret</th><th class="num">Kıdem Tazminatı</th><th class="num">İhbar Tazminatı</th><th class="num">Toplam (Net)</th><th></th></tr></thead><tbody>`;
+  rows.sort((a,b)=>b.h.toplamNet-a.h.toplamNet).forEach(({p,h:x,od})=>{
+    h+=`<tr style="cursor:pointer" onclick="tazminatDetay('${p.id}')">
+      <td><b>${esc(p.ad)}</b>${od.kidem||od.ihbar?`<div style="font-size:10px;color:var(--green-700)">ödenen: ${fmtTL(od.kidem+od.ihbar)}</div>`:''}</td>
+      <td>${p.iseGiris?fmtDate(p.iseGiris):'<span style="color:var(--red-700)">giriş yok</span>'}<div style="font-size:10.5px;color:var(--slate-400)">${x.kidemMetin}</div></td>
+      <td class="num">${+p.ucret>0?fmtTL(p.ucret):'<span style="color:var(--amber-700)">—</span>'}</td>
+      <td class="num">${x.kidemHak?`<b>${fmtTL(x.kidemNet)}</b><div style="font-size:10px;color:var(--slate-400)">brüt ${fmtTL(x.kidemBrut)}${x.tavanU?' · tavan':''}</div>`:'<span style="color:var(--slate-400)">1 yıl yok</span>'}</td>
+      <td class="num"><b>${fmtTL(x.ihbarNet)}</b><div style="font-size:10px;color:var(--slate-400)">${x.ihbarHafta} hf · brüt ${fmtTL(x.ihbarBrut)}</div></td>
+      <td class="num" style="font-weight:700;color:var(--blue-800)">${fmtTL(x.toplamNet)}</td>
+      <td onclick="event.stopPropagation()"><div class="rowact">
+        <button class="iconbtn" title="Brüt ücret güncelle" onclick="tazBrut('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+      </div></td></tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function tazBrut(pid){const p=DB.personeller.find(x=>x.id===pid);if(!p)return;const v=prompt('Aylık giydirilmiş brüt ücret (TL) — '+p.ad+'\n(Kıdem & ihbar tazminatı bu tutardan hesaplanır)',p.ucret||'');if(v==null)return;p.ucret=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;saveDB();render();toast('Brüt ücret güncellendi');}
+function tazminatDetay(pid){
+  const p=DB.personeller.find(x=>x.id===pid);if(!p)return;
+  const ref=tazminatTarih||todayISO();const x=tazminatHesap(p,ref);const od=tazOdenen(pid);
+  const odemeler=DB.tazminatOdeme.filter(o=>o.personelId===pid).sort((a,b)=>(b.tarih||'').localeCompare(a.tarih||''));
+  const sat=(l,v,c)=>`<tr><td style="color:var(--slate-600)">${l}</td><td class="num" style="${c||''}">${v}</td></tr>`;
+  const odSat=odemeler.map(o=>`<tr><td>${fmtDate(o.tarih)}</td><td class="num">${fmtTL(o.kidem)}</td><td class="num">${fmtTL(o.ihbar)}</td><td style="color:var(--slate-500)">${esc(o.aciklama||'')}</td><td><button class="iconbtn del" onclick="delTazOdeme('${o.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('');
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal lg">
+    <div class="modal-hd"><h3>${esc(p.ad)} — Tazminat Detayı · ${fmtDate(ref)}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div><div style="font-size:12px;font-weight:700;color:var(--blue-800);margin-bottom:6px">KIDEM TAZMİNATI</div>
+          <table class="t" style="min-width:0"><tbody>
+            ${sat('Kıdem süresi',x.kidemMetin+' ('+x.toplamGun+' gün)')}
+            ${sat('Brüt ücret (aylık)',fmtTL(x.brut))}
+            ${x.tavanU?sat('Kıdem tavanı','<span style=\"color:var(--amber-700)\">'+fmtTL(DB.tazminatAyar.kidemTavan)+' uygulandı</span>'):''}
+            ${sat('Kıdem tazminatı (brüt)',x.kidemHak?fmtTL(x.kidemBrut):'1 yıl dolmadı — yok')}
+            ${sat('− Damga vergisi (‰'+(DB.tazminatAyar.damgaOran*1000).toFixed(2)+')','−'+fmtTL(x.kidemDamga))}
+            ${sat('<b>Net kıdem tazminatı</b>','<b style=\"color:var(--green-700)\">'+fmtTL(x.kidemNet)+'</b>')}
+          </tbody></table></div>
+        <div><div style="font-size:12px;font-weight:700;color:var(--amber-700);margin-bottom:6px">İHBAR TAZMİNATI</div>
+          <table class="t" style="min-width:0"><tbody>
+            ${sat('İhbar süresi',x.ihbarHafta+' hafta ('+x.ihbarGun+' gün)')}
+            ${sat('Günlük brüt',fmtTL(x.gunluk))}
+            ${sat('İhbar tazminatı (brüt)',fmtTL(x.ihbarBrut))}
+            ${sat('− Gelir vergisi (%'+(DB.tazminatAyar.gelirVergisiOran*100)+')','−'+fmtTL(x.ihbarGelir))}
+            ${sat('− Damga vergisi','−'+fmtTL(x.ihbarDamga))}
+            ${sat('<b>Net ihbar tazminatı</b>','<b style=\"color:var(--green-700)\">'+fmtTL(x.ihbarNet)+'</b>')}
+          </tbody></table></div>
+      </div>
+      <div style="background:var(--blue-50);border:1px solid var(--blue-200);border-radius:10px;padding:13px 16px;margin:14px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--slate-500)">Toplam Net Tazminat</div><div style="font-size:22px;font-weight:800;color:var(--blue-900)">${fmtTL(x.toplamNet)}</div><div style="font-size:11px;color:var(--slate-500)">Brüt: ${fmtTL(x.toplamBrut)}${od.kidem||od.ihbar?` · Ödenen: ${fmtTL(od.kidem+od.ihbar)}`:''}</div></div>
+        <button class="btn btn-pri" onclick="openTazOdeme('${pid}')">Ödeme Kaydet</button>
+      </div>
+      ${odemeler.length?`<div style="font-size:13px;font-weight:700;margin-bottom:6px">Ödeme Geçmişi</div><div class="tbl-scroll"><table class="t" style="min-width:0"><thead><tr><th>Tarih</th><th class="num">Kıdem</th><th class="num">İhbar</th><th>Açıklama</th><th></th></tr></thead><tbody>${odSat}</tbody></table></div>`:''}
+    </div>
+    <div class="modal-ft"><button class="btn btn-pri" onclick="closeModal()">Kapat</button></div>
+  </div></div>`;
+}
+function openTazOdeme(pid){
+  const p=DB.personeller.find(x=>x.id===pid);if(!p)return;
+  const x=tazminatHesap(p,tazminatTarih||todayISO());
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>Tazminat Ödemesi — ${esc(p.ad)}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld"><label>Ödeme Tarihi</label><input type="date" id="to_tarih" value="${todayISO()}"></div>
+      <div class="fld-row"><div class="fld"><label>Kıdem Tazminatı (net)</label><input type="number" id="to_kidem" value="${Math.round(x.kidemNet)}"></div><div class="fld"><label>İhbar Tazminatı (net)</label><input type="number" id="to_ihbar" value="${Math.round(x.ihbarNet)}"></div></div>
+      <div class="fld"><label>Açıklama</label><input id="to_acik" placeholder="İsteğe bağlı"></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveTazOdeme('${pid}')">Kaydet</button></div>
+  </div></div>`;
+}
+function saveTazOdeme(pid){
+  const o={id:uid('to'),personelId:pid,tarih:document.getElementById('to_tarih').value,kidem:+document.getElementById('to_kidem').value||0,ihbar:+document.getElementById('to_ihbar').value||0,aciklama:document.getElementById('to_acik').value.trim()};
+  DB.tazminatOdeme.push(o);saveDB();closeModal();tazminatDetay(pid);render();toast('Ödeme kaydedildi');
+}
+function delTazOdeme(id){const o=DB.tazminatOdeme.find(x=>x.id===id);if(!o)return;if(!confirm('Bu ödeme kaydı silinsin mi?'))return;DB.tazminatOdeme=DB.tazminatOdeme.filter(x=>x.id!==id);saveDB();tazminatDetay(o.personelId);render();toast('Silindi');}
+function openTazminatAyar(){
+  const a=DB.tazminatAyar;
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>Tazminat Hesaplama Ayarları</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld"><label>Kıdem Tazminatı Tavanı (TL / yıl)</label><input type="number" id="ay_tavan" value="${a.kidemTavan}"><div class="helptext">Her yıl 1 Ocak ve 1 Temmuz'da güncellenir. Güncel tavanı buraya girin.</div></div>
+      <div class="fld-row"><div class="fld"><label>İhbar — Gelir Vergisi (%)</label><input type="number" id="ay_gv" value="${+(a.gelirVergisiOran*100).toFixed(2)}" step="0.01"></div><div class="fld"><label>Damga Vergisi (‰)</label><input type="number" id="ay_damga" value="${+(a.damgaOran*1000).toFixed(2)}" step="0.01"></div></div>
+      <div class="helptext">Kıdem tazminatından yalnızca damga vergisi kesilir; SGK ve gelir vergisi kesilmez. İhbar tazminatı ücret sayılır: gelir vergisi (kümülatif dilime göre değişir; buradaki oran tahminidir) + damga vergisi kesilir.</div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveTazminatAyar()">Kaydet</button></div>
+  </div></div>`;
+}
+function saveTazminatAyar(){
+  DB.tazminatAyar={kidemTavan:+document.getElementById('ay_tavan').value||0,gelirVergisiOran:(+document.getElementById('ay_gv').value||0)/100,damgaOran:(+document.getElementById('ay_damga').value||0)/1000};
+  saveDB();closeModal();render();toast('Ayarlar kaydedildi');
 }
 
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editId=null;}
