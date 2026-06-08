@@ -6,6 +6,7 @@
 <title>İnsan Kaynakları · Rota</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --blue-900:#0C2340;--blue-800:#103561;--blue-700:#174B82;--blue-600:#1D62A8;--blue-500:#2878C8;--blue-400:#4A9AE5;--blue-300:#8DC2F2;--blue-200:#C1DEF7;--blue-100:#E8F1FB;--blue-50:#F3F8FD;
@@ -117,6 +118,25 @@ table.t tbody tr:hover .rowact{opacity:1}
 .mergebar button{font-size:11px;font-weight:600;border:1px solid var(--blue-200);background:var(--blue-50);color:var(--blue-700);padding:4px 9px;border-radius:6px;cursor:pointer}
 .mergebar button:hover{background:var(--blue-100)}
 .helptext{font-size:11.5px;color:var(--slate-500);margin-top:6px}
+/* puantaj */
+.brush{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.brush .bl{font-size:11px;font-weight:700;color:var(--slate-500);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.brush button{font-size:11.5px;font-weight:700;border:2px solid transparent;border-radius:7px;padding:5px 11px;cursor:pointer}
+.brush button.on{border-color:var(--slate-900);box-shadow:0 0 0 2px #fff inset}
+.pz-scroll{overflow:auto;max-height:72vh;border:1px solid var(--slate-200);border-radius:10px}
+table.pz{border-collapse:separate;border-spacing:0;font-size:11px}
+table.pz th,table.pz td{border-right:1px solid var(--slate-200);border-bottom:1px solid var(--slate-200);padding:4px 5px;text-align:center;white-space:nowrap}
+table.pz thead th{background:var(--slate-100);font-weight:700;font-size:10px;color:var(--slate-600);position:sticky;top:0;z-index:2}
+table.pz thead tr:nth-child(2) th{top:23px}
+table.pz td.nm,table.pz th.nm{text-align:left;position:sticky;left:0;background:#fff;z-index:1;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--slate-200)}
+table.pz th.nm{background:var(--slate-100);z-index:4}
+table.pz td.sno{position:sticky;left:0;background:#fff}
+table.pz td.day{cursor:pointer;font-weight:700;min-width:24px}
+table.pz td.day:hover{outline:2px solid var(--blue-400);outline-offset:-2px}
+table.pz td.sum{font-weight:700;background:var(--slate-50)}
+.pz-X{background:#E9F8EF;color:#15803D}.pz-HT{background:#F1F5F9;color:#94A3B8}.pz-GT{background:#EDE9FE;color:#7C3AED}
+.pz-YI{background:#E8F1FB;color:#1D62A8}.pz-UI{background:#FEF3C7;color:#B45309}.pz-R{background:#FEE2E2;color:#B91C1C}.pz-M{background:#CFFAFE;color:#0E7490}.pz-E{color:#cbd5e1}
+table.pz td.wend{background:#fafbfc}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--slate-900);color:#fff;padding:10px 18px;border-radius:9px;font-size:13px;z-index:200;opacity:0;transition:.25s;pointer-events:none}
 .toast.on{opacity:1}
 .sb-ov{display:none}
@@ -168,6 +188,9 @@ const IZIN_TUR=[
 function izinTur(k){return IZIN_TUR.find(t=>t.k===k)||IZIN_TUR[IZIN_TUR.length-1]}
 const AY_ADLARI=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 let izinYil=new Date().getFullYear(), avansYil=new Date().getFullYear(), tazminatTarih=null;
+let puantajAy=(new Date().getFullYear())+'-'+String(new Date().getMonth()+1).padStart(2,'0'), pzBrush='X';
+const PZ_STATUS=[{k:'X',l:'Çalıştı',cls:'X'},{k:'HT',l:'Hafta Tatili',cls:'HT'},{k:'GT',l:'Genel Tatil',cls:'GT'},{k:'Yİ',l:'Yıllık İzin',cls:'YI'},{k:'Üİ',l:'Ücretsiz İzin',cls:'UI'},{k:'R',l:'Raporlu',cls:'R'},{k:'M',l:'Mazeret',cls:'M'},{k:'',l:'Boş',cls:'E'}];
+const PZ_RESMI={'01-01':'Yılbaşı','04-23':'Ulusal Egemenlik','05-01':'Emek ve Dayanışma','05-19':'Atatürk\'ü Anma','07-15':'Demokrasi','08-30':'Zafer','10-29':'Cumhuriyet'};
 const IHBAR_ISVEREN="İŞ SÖZLEŞMESİ FESİH (İHBAR ÖNELİ) BİLDİRİMİ\n\nSayın {{ad_soyad}},\n\nİşyerimizde {{ise_giris}} tarihinden itibaren {{gorev}} olarak çalışmaktasınız. 4857 sayılı İş Kanunu hükümleri çerçevesinde iş sözleşmenizin, aşağıda belirtilen ihbar süresinin sonunda feshedileceği tarafınıza bildirilir.\n\nKıdem: {{kidem}}\nYasal ihbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona erme tarihi: {{ihbar_bitis}}\n\n4857 sayılı Kanun'un 27. maddesi gereği ihbar süresi içinde, ücretinizden herhangi bir kesinti yapılmaksızın günde en az 2 saat iş arama izni hakkınız bulunmaktadır. İhbar süresi boyunca toplam iş arama izniniz: {{is_arama_saat}} saattir.\n\nBilgilerinize sunarız.\n\nİŞVEREN\nRota SMI Tarım\nTarih: {{bugun}}\n\nTebellüğ Eden (İşçi): {{ad_soyad}}\nTarih / İmza:";
 const IHBAR_ISCI="İHBAR ÖNELİ İLE FESİH (İSTİFA) BİLDİRİMİ\n\nROTA SMI TARIM İŞYERİ YÖNETİMİNE,\n\n{{ise_giris}} tarihinden bu yana işyerinizde {{gorev}} olarak çalışmaktayım. İş sözleşmemi, 4857 sayılı İş Kanunu'nun öngördüğü ihbar süresine uyarak feshetmek istediğimi bildiririm.\n\nKıdem: {{kidem}}\nİhbar süresi: {{ihbar_hafta}} hafta ({{ihbar_gun}} gün)\nİhbar süresi başlangıcı: {{ihbar_baslangic}}\nİş sözleşmesinin sona ereceği tarih: {{ihbar_bitis}}\n\nGereğini saygılarımla arz ederim.\n\n{{ad_soyad}}\nTarih: {{bugun}}\nİmza:";
 const SECTIONS=[
@@ -180,6 +203,7 @@ const SECTIONS=[
   {k:'izin',l:'İzin Takibi',grp:'Süreçler'},
   {k:'avans',l:'Avans Yönetimi',grp:'Süreçler'},
   {k:'tazminat',l:'Kıdem & İhbar Tazminatı',grp:'Süreçler'},
+  {k:'puantaj',l:'Puantaj',grp:'Bordro'},
   {k:'talimat',l:'Talimatlar',grp:'Arşiv'},
   {k:'diger',l:'Diğer Evraklar',grp:'Arşiv'},
 ];
@@ -213,7 +237,7 @@ function seed(){
   };
 }
 function loadDB(){let yok=false;try{const s=localStorage.getItem(LSKEY);if(s)DB=JSON.parse(s);else{DB=seed();yok=true;}}catch(e){DB=seed();yok=true;}
-  DB.personeller=DB.personeller||[];DB.belgeler=DB.belgeler||[];DB.sablonlar=DB.sablonlar||[];DB.izinler=DB.izinler||[];DB.izinBakiye=DB.izinBakiye||[];DB.avanslar=DB.avanslar||[];DB.tazminatOdeme=DB.tazminatOdeme||[];DB.tazminatAyar=DB.tazminatAyar||{kidemTavan:53919.68,gelirVergisiOran:0.15,damgaOran:0.00759};if(!DB.waMesaj)DB.waMesaj=seed().waMesaj;
+  DB.personeller=DB.personeller||[];DB.belgeler=DB.belgeler||[];DB.sablonlar=DB.sablonlar||[];DB.izinler=DB.izinler||[];DB.izinBakiye=DB.izinBakiye||[];DB.avanslar=DB.avanslar||[];DB.tazminatOdeme=DB.tazminatOdeme||[];DB.tazminatAyar=DB.tazminatAyar||{kidemTavan:53919.68,gelirVergisiOran:0.15,damgaOran:0.00759};DB.puantaj=DB.puantaj||{};if(!DB.waMesaj)DB.waMesaj=seed().waMesaj;
   if(yok)localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function saveDB(){localStorage.setItem(LSKEY,JSON.stringify(DB));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -266,6 +290,7 @@ function navIcon(k){const I={
   izin:'<path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
   avans:'<path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
   tazminat:'<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
+  puantaj:'<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 2v4M16 2v4"/><path d="m9 16 2 2 4-4"/>',
   talimat:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   diger:'<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>',
 }[k]||'';return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I}</svg>`;}
@@ -281,6 +306,7 @@ function render(){
   else if(sec==='izin')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="izinYil=+this.value;render()">${yilSecenekleri(izinYil)}</select><button class="btn btn-pri" onclick="openIzinKayit()">+ İzin Kaydı</button>`;
   else if(sec==='avans')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="avansYil=+this.value;render()">${yilSecenekleri(avansYil)}</select><button class="btn btn-pri" onclick="openAvans()">+ Avans</button>`;
   else if(sec==='tazminat')ta.innerHTML=`<span style="font-size:11px;color:var(--slate-500)">Hesap tarihi</span><input type="date" class="btn" style="padding:6px 10px" value="${tazminatTarih||todayISO()}" onchange="tazminatTarih=this.value;render()"><button class="btn btn-sm" onclick="openTazminatAyar()">Ayarlar</button>`;
+  else if(sec==='puantaj')ta.innerHTML=`<input type="month" class="btn" style="padding:6px 10px" value="${puantajAy}" onchange="puantajAy=this.value;render()"><button class="btn btn-pri" onclick="pzExcel()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg> Excel İndir</button>`;
   else if(BELGE_BOLUM[sec])ta.innerHTML=`<button class="btn btn-pri" onclick="openBelge('${sec}')">+ Belge / Şablon</button>`;
   const sub={personel:'Personel kayıtları — sözleşme ve evraklar bu kayıtlardan otomatik doldurulur',sablon:'Düzenlenebilir sözleşme/evrak şablonları — personel bilgisiyle otomatik doldur, yazdır',izin:'Yıllık/ücretsiz/mazeret izin takibi ve istatistikleri',avans:'Personel avans talep ve kesinti takibi'}[sec]||(BELGE_BOLUM[sec]?BELGE_BOLUM[sec].hint:'');
   document.getElementById('secSub').textContent=sub;
@@ -289,6 +315,7 @@ function render(){
   if(sec==='izin')return renderIzin();
   if(sec==='avans')return renderAvans();
   if(sec==='tazminat')return renderTazminat();
+  if(sec==='puantaj')return renderPuantaj();
   if(BELGE_BOLUM[sec])return renderBelge(sec);
 }
 
@@ -971,6 +998,89 @@ function openTazminatAyar(){
 function saveTazminatAyar(){
   DB.tazminatAyar={kidemTavan:+document.getElementById('ay_tavan').value||0,gelirVergisiOran:(+document.getElementById('ay_gv').value||0)/100,damgaOran:(+document.getElementById('ay_damga').value||0)/1000};
   saveDB();closeModal();render();toast('Ayarlar kaydedildi');
+}
+
+// ============ PUANTAJ ============
+function pzCls(k){const s=PZ_STATUS.find(x=>x.k===k);return s?s.cls:'E'}
+function pzAyBilgi(ym){const a=String(ym).split('-').map(Number);return {y:a[0],m:a[1],gun:new Date(a[0],a[1],0).getDate(),adi:AY_ADLARI[a[1]-1]}}
+function pzGunAdi(y,m,d){return ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'][new Date(y,m-1,d).getDay()]}
+function pzWeekend(y,m,d){const g=new Date(y,m-1,d).getDay();return g===0||g===6}
+function pzResmi(m,d){return PZ_RESMI[String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')]}
+function pzData(){DB.puantaj=DB.puantaj||{};if(!DB.puantaj[puantajAy])DB.puantaj[puantajAy]={rows:{}};return DB.puantaj[puantajAy]}
+function pzInitRow(info){const g={};for(let d=1;d<=info.gun;d++)g[d]=pzResmi(info.m,d)?'GT':(pzWeekend(info.y,info.m,d)?'HT':'X');return {gunler:g,fin:{}}}
+function pzRow(pid,info){const data=pzData();if(!data.rows[pid])data.rows[pid]=pzInitRow(info);const r=data.rows[pid];r.gunler=r.gunler||{};r.fin=r.fin||{};return r}
+function pzAvansAy(pid,ym){return DB.avanslar.filter(a=>a.personelId===pid&&avansAylar(a).includes(ym)).reduce((s,a)=>s+avansAylik(a),0)}
+function pzSet(pid,d){const info=pzAyBilgi(puantajAy);const r=pzRow(pid,info);r.gunler[d]=pzBrush;saveDB();renderPuantaj();}
+function pzSayim(r,info){const c={};PZ_STATUS.forEach(s=>c[s.k]=0);for(let d=1;d<=info.gun;d++){const k=r.gunler[d]||'';c[k]=(c[k]||0)+1;}return c}
+function renderPuantaj(){
+  const info=pzAyBilgi(puantajAy);
+  const aktif=DB.personeller.filter(p=>p.durum!=='ayrildi');
+  let h=`<p class="intro">Aylık puantaj — bordro için. Hafta sonu (HT) ve resmi tatiller (GT) otomatik işaretlenir. Önce alttan bir <b>durum seçin</b>, sonra hücrelere tıklayarak boyayın. Avans kolonu Avans modülünden gelir. Sağ üstten <b>Excel indirin</b>, ay seçiciyle geçmiş ayları görün.</p>`;
+  // boya paleti
+  h+=`<div class="brush"><span class="bl">Boya:</span>${PZ_STATUS.map(s=>`<button class="pz-${s.cls} ${pzBrush===s.k?'on':''}" onclick="pzBrush='${s.k}';renderPuantaj()">${s.k||'·'} ${s.l}</button>`).join('')}</div>`;
+  if(!aktif.length){document.getElementById('content').innerHTML=h+`<div class="card"><div class="empty">Aktif personel yok. Önce <b>Personeller</b> ekleyin.</div></div>`;return;}
+  // tablo
+  let head1=`<th class="nm">#  Adı Soyadı</th><th>Dep.</th>`;
+  let head2=`<th class="nm"></th><th></th>`;
+  for(let d=1;d<=info.gun;d++){const we=pzWeekend(info.y,info.m,d),rt=pzResmi(info.m,d);head1+=`<th title="${rt||''}" style="${rt?'color:var(--purple)':we?'color:var(--slate-400)':''}">${d}</th>`;head2+=`<th style="font-weight:600;color:var(--slate-400)">${pzGunAdi(info.y,info.m,d)}</th>`;}
+  head1+=`<th class="sum">Çalış.</th><th class="sum">Yİ</th><th class="sum">R</th><th class="sum">Üİ</th><th class="sum">HT</th><th class="sum">GT</th><th>₺</th>`;
+  head2+=`<th class="sum" colspan="7"></th>`;
+  let body='';
+  aktif.forEach((p,i)=>{
+    const r=pzRow(p.id,info);const c=pzSayim(r,info);
+    let cells='';
+    for(let d=1;d<=info.gun;d++){const k=r.gunler[d]||'';const we=pzWeekend(info.y,info.m,d);cells+=`<td class="day pz-${pzCls(k)} ${we?'wend':''}" onclick="pzSet('${p.id}',${d})">${k}</td>`;}
+    body+=`<tr><td class="nm">${i+1}. ${esc(p.ad)}</td><td>${esc(p.departman||'')}</td>${cells}<td class="sum">${c['X']||0}</td><td class="sum">${c['Yİ']||0}</td><td class="sum">${c['R']||0}</td><td class="sum">${c['Üİ']||0}</td><td class="sum">${c['HT']||0}</td><td class="sum">${c['GT']||0}</td><td><button class="iconbtn" title="Mali bilgiler" onclick="openPzFin('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></button></td></tr>`;
+  });
+  h+=`<div class="card" style="padding:0;border:none;background:none"><div class="pz-scroll"><table class="pz"><thead><tr>${head1}</tr><tr>${head2}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function openPzFin(pid){
+  const p=DB.personeller.find(x=>x.id===pid);if(!p)return;
+  const info=pzAyBilgi(puantajAy);const r=pzRow(pid,info);const f=r.fin;
+  const avansOto=pzAvansAy(pid,puantajAy);
+  const num=(id,lbl,val,ph)=>`<div class="fld"><label>${lbl}</label><input type="number" id="${id}" value="${val!=null&&val!==''?val:''}" placeholder="${ph||''}"></div>`;
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal lg">
+    <div class="modal-hd"><h3>${esc(p.ad)} — Mali Bilgiler · ${info.adi} ${info.y}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row3">${num('f_belir','Belirlenen Maaş (brüt)',f.belirlenenMaas!=null&&f.belirlenenMaas!==''?f.belirlenenMaas:(p.ucret||''),'')}${num('f_net','Maaş (Net)',f.maasNet,'')}${num('f_aile','Aile Yardımı',f.aileYardim,'')}</div>
+      <div class="fld-row3">${num('f_cocuk','Çocuk Yardımı',f.cocukYardim,'')}${num('f_prim','Prim',f.prim,'')}${num('f_harc','Harcırah',f.harcirah,'')}</div>
+      <div class="fld-row3">${num('f_avans','Avans',f.avans!=null&&f.avans!==''?f.avans:'','oto: '+avansOto)}${num('f_fm','Fazla Mesai (saat)',f.fazlaMesai,'')}${num('f_rt','Resmi Tatil Mesai',f.resmiMesai,'')}</div>
+      <div class="fld-row">${num('f_icra','İcra',f.icra,'')}<div class="fld"><label>&nbsp;</label><div class="helptext" style="padding-top:9px">Avans boş bırakılırsa Avans modülündeki bu ay kesintisi (<b>${fmtTL(avansOto)}</b>) kullanılır.</div></div></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="savePzFin('${pid}')">Kaydet</button></div>
+  </div></div>`;
+}
+function savePzFin(pid){
+  const info=pzAyBilgi(puantajAy);const r=pzRow(pid,info);const g=id=>document.getElementById(id).value.trim();
+  r.fin={belirlenenMaas:g('f_belir'),maasNet:g('f_net'),aileYardim:g('f_aile'),cocukYardim:g('f_cocuk'),prim:g('f_prim'),harcirah:g('f_harc'),avans:g('f_avans'),fazlaMesai:g('f_fm'),resmiMesai:g('f_rt'),icra:g('f_icra')};
+  saveDB();closeModal();renderPuantaj();toast('Mali bilgiler kaydedildi');
+}
+function pzExcel(){
+  if(typeof XLSX==='undefined'){toast('Excel kütüphanesi yüklenemedi');return;}
+  const info=pzAyBilgi(puantajAy);const aktif=DB.personeller.filter(p=>p.durum!=='ayrildi');
+  const aoa=[];
+  aoa.push(['ROTA SMI TARIM — '+info.adi.toUpperCase()+' '+info.y+' AYI PUANTAJ']);
+  const h1=['S.No','Departman','Adı Soyadı','Belirlenen Maaş','Maaş (Net)','Aile Yardımı','Çocuk Yardımı','Prim','Harcırah','Avans','Fazla Mesai','Resmi Tatil Mesai','İcra'];
+  const h2=['','','','','','','','','','','','',''];
+  for(let d=1;d<=info.gun;d++){h1.push(d);h2.push(pzGunAdi(info.y,info.m,d).toUpperCase());}
+  h1.push('Çalışılan','Yıllık İzin','Raporlu','Ücretsiz','Hafta Tatili','Genel Tatil');
+  h2.push('','','','','','');
+  aoa.push(h1);aoa.push(h2);
+  aktif.forEach((p,i)=>{
+    const r=pzRow(p.id,info);const c=pzSayim(r,info);const f=r.fin||{};
+    const avans=(f.avans!=null&&f.avans!=='')?f.avans:(pzAvansAy(p.id,puantajAy)||'');
+    const row=[i+1,p.departman||'',p.ad,(f.belirlenenMaas!=null&&f.belirlenenMaas!=='')?f.belirlenenMaas:(p.ucret||''),f.maasNet||'',f.aileYardim||'',f.cocukYardim||'',f.prim||'',f.harcirah||'',avans,f.fazlaMesai||'',f.resmiMesai||'',f.icra||''];
+    for(let d=1;d<=info.gun;d++)row.push(r.gunler[d]||'');
+    row.push(c['X']||0,c['Yİ']||0,c['R']||0,c['Üİ']||0,c['HT']||0,c['GT']||0);
+    aoa.push(row);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:5},{wch:10},{wch:22},{wch:12},{wch:11},{wch:10},{wch:10},{wch:8},{wch:9},{wch:9},{wch:10},{wch:13},{wch:8}].concat(Array.from({length:info.gun},()=>({wch:4}))).concat([{wch:9},{wch:9},{wch:8},{wch:9},{wch:9},{wch:9}]);
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:12}}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,info.adi+' '+info.y);
+  XLSX.writeFile(wb,'ROTA YEM '+info.adi.toUpperCase()+' '+info.y+' PUANTAJ.xlsx');
+  toast('Excel indiriliyor');
 }
 
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editId=null;}
