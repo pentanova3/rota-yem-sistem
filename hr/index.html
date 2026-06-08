@@ -166,7 +166,8 @@ const IZIN_TUR=[
   {k:'diger',l:'Diğer İzin',birim:'gün'},
 ];
 function izinTur(k){return IZIN_TUR.find(t=>t.k===k)||IZIN_TUR[IZIN_TUR.length-1]}
-let izinYil=new Date().getFullYear();
+const AY_ADLARI=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+let izinYil=new Date().getFullYear(), avansYil=new Date().getFullYear();
 const SECTIONS=[
   {k:'personel',l:'Personeller',grp:'Kayıt'},
   {k:'sablon',l:'Sözleşme & Şablonlar',grp:'Kayıt'},
@@ -260,7 +261,8 @@ function render(){
   const ta=document.getElementById('topActions');ta.innerHTML='';
   if(sec==='personel')ta.innerHTML=`<button class="btn btn-pri" onclick="openPersonel()">+ Personel</button>`;
   else if(sec==='sablon')ta.innerHTML=`<button class="btn btn-pri" onclick="openSablon()">+ Yeni Şablon</button>`;
-  else if(sec==='izin')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="izinYil=+this.value;render()">${yilSecenekleri()}</select><button class="btn btn-pri" onclick="openIzinKayit()">+ İzin Kaydı</button>`;
+  else if(sec==='izin')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="izinYil=+this.value;render()">${yilSecenekleri(izinYil)}</select><button class="btn btn-pri" onclick="openIzinKayit()">+ İzin Kaydı</button>`;
+  else if(sec==='avans')ta.innerHTML=`<select class="btn" style="padding:7px 10px" onchange="avansYil=+this.value;render()">${yilSecenekleri(avansYil)}</select><button class="btn btn-pri" onclick="openAvans()">+ Avans</button>`;
   else if(BELGE_BOLUM[sec])ta.innerHTML=`<button class="btn btn-pri" onclick="openBelge('${sec}')">+ Belge / Şablon</button>`;
   const sub={personel:'Personel kayıtları — sözleşme ve evraklar bu kayıtlardan otomatik doldurulur',sablon:'Düzenlenebilir sözleşme/evrak şablonları — personel bilgisiyle otomatik doldur, yazdır',izin:'Yıllık/ücretsiz/mazeret izin takibi ve istatistikleri',avans:'Personel avans talep ve kesinti takibi'}[sec]||(BELGE_BOLUM[sec]?BELGE_BOLUM[sec].hint:'');
   document.getElementById('secSub').textContent=sub;
@@ -499,7 +501,7 @@ function waGonder(){
 }
 
 // ============ İZİN & AVANS (iskelet) ============
-function yilSecenekleri(){const c=new Date().getFullYear();let o='';for(let y=c+1;y>=c-4;y--)o+=`<option value="${y}" ${y===izinYil?'selected':''}>${y}</option>`;return o;}
+function yilSecenekleri(sel){sel=sel||izinYil;const c=new Date().getFullYear();let o='';for(let y=c+1;y>=c-4;y--)o+=`<option value="${y}" ${y===sel?'selected':''}>${y}</option>`;return o;}
 function getBakiye(pid,yil){const b=(DB.izinBakiye||[]).find(x=>x.personelId===pid&&+x.yil===+yil);return b||{personelId:pid,yil,devir:0,hakEdilen:''};}
 function izinKayitlari(pid,yil){return DB.izinler.filter(z=>z.personelId===pid&&(yil==null||(z.baslangic||'').slice(0,4)===String(yil)));}
 function izinStat(p,yil){
@@ -656,18 +658,120 @@ function izinDilekce(pid,zid){
     <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" id="dilBtn">Yazdır</button></div></div></div>`;
   document.getElementById('dilBtn').onclick=()=>{const s=dilSablon.find(x=>x.id===document.getElementById('dil_s').value);closeModal();printFilled([{p,s,extra}]);};
 }
+function fmtTL(n){n=+n||0;return '₺'+n.toLocaleString('tr-TR',{maximumFractionDigits:0})}
+function curYM(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function ymAdd(ym,n){let a=String(ym).split('-').map(Number);let y=a[0],m=a[1]-1+n;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+'-'+String(m+1).padStart(2,'0')}
+function fmtYM(ym){if(!ym)return '';const a=String(ym).split('-').map(Number);return (AY_ADLARI[a[1]-1]||'')+' '+a[0]}
+function avansAylik(a){const t=Math.max(1,+a.taksit||1);return Math.round((+a.tutar||0)/t)}
+function avansAylar(a){const t=Math.max(1,+a.taksit||1);const out=[];if(!a.baslangicAy)return out;for(let i=0;i<t;i++)out.push(ymAdd(a.baslangicAy,i));return out}
+function avansKesilen(a,ref){ref=ref||curYM();const aylar=avansAylar(a).filter(ym=>ym<=ref);return Math.min(+a.tutar||0,aylar.length*avansAylik(a))}
+function avansKalan(a){return Math.max(0,(+a.tutar||0)-avansKesilen(a))}
+function avansBuAy(a){return avansAylar(a).includes(curYM())?Math.min(avansAylik(a),avansKalan(a)+avansAylik(a)):0}
 function renderAvans(){
-  document.getElementById('content').innerHTML=`<div class="card"><div class="ph">
-    <div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></div>
-    <h2>Avans Yönetimi</h2>
-    <p>Bu bölüm bir sonraki adımda devreye alınacak. Personel kayıtlarıyla entegre çalışacak:</p>
-    <ul class="plist">
-      <li>• Hangi personel, hangi tarihte, ne kadar avans talep etti</li>
-      <li>• Avansın hangi ay(lar)da maaştan kesileceği</li>
-      <li>• Personel bazında yıl içi toplam avans tutarı</li>
-      <li>• Tüm personelin avans özet tablosu</li>
-    </ul>
-    <span class="soon">Hazırlanıyor</span>
+  const aktif=DB.personeller.filter(p=>p.durum!=='ayrildi');
+  const yilAvans=DB.avanslar.filter(a=>(a.tarih||'').slice(0,4)===String(avansYil));
+  const yilToplam=yilAvans.reduce((s,a)=>s+(+a.tutar||0),0);
+  const acikBakiye=DB.avanslar.reduce((s,a)=>s+avansKalan(a),0);
+  const buAyKesinti=DB.avanslar.reduce((s,a)=>s+avansBuAy(a),0);
+  const avanslıPersonel=new Set(DB.avanslar.filter(a=>avansKalan(a)>0).map(a=>a.personelId)).size;
+  let h=`<p class="intro">Personel avans taleplerini girin; tutarı kaç ayda ve hangi aydan itibaren kesileceğini belirtin. Kesilen/kalan ve aylık kesinti planı otomatik hesaplanır. Aşağıda yıl içi toplam ve tüm personel özeti yer alır.</p>`;
+  h+=`<div class="kpis">
+    <div class="kpi"><div class="kl">${avansYil} Verilen Avans</div><div class="kv">${fmtTL(yilToplam)}</div><div class="ks">${yilAvans.length} talep</div></div>
+    <div class="kpi a"><div class="kl">Açık Bakiye (Kalan)</div><div class="kv">${fmtTL(acikBakiye)}</div><div class="ks">tüm avanslar</div></div>
+    <div class="kpi g"><div class="kl">Bu Ay Kesilecek</div><div class="kv">${fmtTL(buAyKesinti)}</div><div class="ks">${fmtYM(curYM())}</div></div>
+    <div class="kpi p"><div class="kl">Avanslı Personel</div><div class="kv">${avanslıPersonel}</div><div class="ks">açık borcu olan</div></div>
+  </div>`;
+  h+=`<div class="card"><div class="card-hd"><h3>Personel Bazında Avans Özeti · ${avansYil}</h3><span class="hint">satıra tıkla → detay & kesinti planı</span></div>`;
+  // sadece avansı olan veya tüm aktif personel
+  const rows=aktif.map(p=>{
+    const ay=DB.avanslar.filter(a=>a.personelId===p.id);
+    const yil=ay.filter(a=>(a.tarih||'').slice(0,4)===String(avansYil)).reduce((s,a)=>s+(+a.tutar||0),0);
+    const kalan=ay.reduce((s,a)=>s+avansKalan(a),0);
+    const buAy=ay.reduce((s,a)=>s+avansBuAy(a),0);
+    return {p,yil,kalan,buAy,adet:ay.length};
+  }).filter(r=>r.adet>0);
+  if(!rows.length){h+=`<div class="empty">${aktif.length?'Henüz avans kaydı yok. Sağ üstten <b>+ Avans</b> ile ekleyin.':'Önce <b>Personeller</b> bölümünden personel ekleyin.'}</div></div>`;document.getElementById('content').innerHTML=h;return;}
+  h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Personel</th><th>Departman</th><th class="num">Yıl İçi Avans</th><th class="num">Kalan Borç</th><th class="num">Bu Ay Kesinti</th><th class="num">Kayıt</th><th></th></tr></thead><tbody>`;
+  rows.sort((a,b)=>b.kalan-a.kalan).forEach(r=>{h+=`<tr style="cursor:pointer" onclick="avansDetay('${r.p.id}')">
+    <td><b>${esc(r.p.ad)}</b></td><td>${deptTag(r.p.departman)}</td>
+    <td class="num">${fmtTL(r.yil)}</td>
+    <td class="num" style="font-weight:700;${r.kalan>0?'color:var(--amber-700)':'color:var(--green-700)'}">${fmtTL(r.kalan)}</td>
+    <td class="num">${r.buAy?fmtTL(r.buAy):'—'}</td>
+    <td class="num">${r.adet}</td>
+    <td onclick="event.stopPropagation()"><div class="rowact"><button class="iconbtn" title="Avans ekle" onclick="openAvans('${r.p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg></button></div></td></tr>`;});
+  h+=`</tbody></table></div></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function openAvans(pid,id){
+  const a=id?DB.avanslar.find(x=>x.id===id):{personelId:pid||'',tarih:todayISO(),tutar:'',taksit:1,baslangicAy:ymAdd(curYM(),1),aciklama:''};
+  if(!a)return;editId=id||null;
+  const pOpts=DB.personeller.filter(p=>p.durum!=='ayrildi').map(p=>`<option value="${p.id}" ${a.personelId===p.id?'selected':''}>${esc(p.ad)}</option>`).join('');
+  let ayOpts='';for(let i=0;i<18;i++){const ym=ymAdd(curYM(),i);ayOpts+=`<option value="${ym}" ${a.baslangicAy===ym?'selected':''}>${fmtYM(ym)}</option>`;}
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>${id?'Avans Düzenle':'Yeni Avans'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row"><div class="fld"><label>Personel</label><select id="a_pers">${pOpts}</select></div><div class="fld"><label>Talep Tarihi</label><input type="date" id="a_tarih" value="${esc(a.tarih||todayISO())}"></div></div>
+      <div class="fld-row3">
+        <div class="fld"><label>Avans Tutarı (TL)</label><input type="number" id="a_tutar" value="${a.tutar||''}" oninput="avansOnizle()"></div>
+        <div class="fld"><label>Taksit (ay)</label><input type="number" id="a_taksit" value="${a.taksit||1}" min="1" oninput="avansOnizle()"></div>
+        <div class="fld"><label>İlk Kesinti Ayı</label><select id="a_basay" onchange="avansOnizle()">${ayOpts}</select></div>
+      </div>
+      <div class="helptext" id="a_onizle"></div>
+      <div class="fld" style="margin-top:12px"><label>Açıklama</label><input id="a_acik" value="${esc(a.aciklama||'')}" placeholder="İsteğe bağlı"></div>
+    </div>
+    <div class="modal-ft"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveAvans()">Kaydet</button></div>
+  </div></div>`;
+  avansOnizle();
+}
+function avansOnizle(){
+  const tutar=+document.getElementById('a_tutar').value||0;
+  const taksit=Math.max(1,+document.getElementById('a_taksit').value||1);
+  const basay=document.getElementById('a_basay').value;
+  const aylik=Math.round(tutar/taksit);
+  const aylar=[];for(let i=0;i<taksit;i++)aylar.push(fmtYM(ymAdd(basay,i)));
+  document.getElementById('a_onizle').innerHTML=tutar?`Aylık kesinti <b>${fmtTL(aylik)}</b> · ${taksit} taksit · <b>${aylar[0]}</b>${taksit>1?` – <b>${aylar[aylar.length-1]}</b>`:''}`:'Tutar girin, kesinti planı burada görünecek.';
+}
+function saveAvans(){
+  const g=id=>document.getElementById(id).value;
+  const o={personelId:g('a_pers'),tarih:g('a_tarih'),tutar:+g('a_tutar')||0,taksit:Math.max(1,+g('a_taksit')||1),baslangicAy:g('a_basay'),aciklama:g('a_acik').trim()};
+  if(!o.personelId){toast('Personel seçin');return}
+  if(!o.tutar){toast('Tutar girin');return}
+  if(editId)Object.assign(DB.avanslar.find(x=>x.id===editId),o);else DB.avanslar.push({id:uid('a'),...o});
+  saveDB();closeModal();render();toast('Avans kaydedildi');
+}
+function delAvans(id){if(!confirm('Bu avans kaydı silinsin mi?'))return;const a=DB.avanslar.find(x=>x.id===id);DB.avanslar=DB.avanslar.filter(x=>x.id!==id);saveDB();if(a)avansDetay(a.personelId);render();toast('Silindi');}
+function avansDetay(pid){
+  const p=DB.personeller.find(x=>x.id===pid);if(!p)return;
+  const list=[...DB.avanslar.filter(a=>a.personelId===pid)].sort((a,b)=>(b.tarih||'').localeCompare(a.tarih||''));
+  const yilToplam=list.filter(a=>(a.tarih||'').slice(0,4)===String(avansYil)).reduce((s,a)=>s+(+a.tutar||0),0);
+  const kalan=list.reduce((s,a)=>s+avansKalan(a),0);
+  const cards=list.map(a=>{
+    const aylar=avansAylar(a),aylik=avansAylik(a),kes=avansKesilen(a),kal=avansKalan(a);
+    const plan=aylar.map(ym=>{const odendi=ym<=curYM();return `<span class="chip" style="${odendi?'background:var(--green-100);color:var(--green-700)':''}">${fmtYM(ym)} · ${fmtTL(Math.min(aylik,+a.tutar))}${odendi?' ✓':''}</span>`;}).join('');
+    return `<div style="border:1px solid var(--slate-200);border-radius:10px;padding:13px 15px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+        <div><div style="font-size:15px;font-weight:700">${fmtTL(a.tutar)}</div><div style="font-size:11.5px;color:var(--slate-500)">Talep: ${fmtDate(a.tarih)} · ${a.taksit} taksit${a.aciklama?' · '+esc(a.aciklama):''}</div></div>
+        <div style="display:flex;gap:4px">
+          <button class="iconbtn" title="Düzenle" onclick="closeModal();openAvans(null,'${a.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg></button>
+          <button class="iconbtn del" title="Sil" onclick="delAvans('${a.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;font-size:12px;margin:9px 0;color:var(--slate-600)"><span>Kesilen: <b style="color:var(--green-700)">${fmtTL(kes)}</b></span><span>Kalan: <b style="color:${kal>0?'var(--amber-700)':'var(--green-700)'}">${fmtTL(kal)}</b></span></div>
+      <div class="chips">${plan}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal lg">
+    <div class="modal-hd"><h3>${esc(p.ad)} — Avans Detayı</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
+        <div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:9px;padding:10px 12px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--slate-500)">${avansYil} Toplam</div><div style="font-size:17px;font-weight:700;margin-top:3px">${fmtTL(yilToplam)}</div></div>
+        <div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:9px;padding:10px 12px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--slate-500)">Kalan Borç</div><div style="font-size:17px;font-weight:700;margin-top:3px;color:${kalan>0?'var(--amber-700)':'var(--green-700)'}">${fmtTL(kalan)}</div></div>
+        <div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:9px;padding:10px 12px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--slate-500)">Avans Sayısı</div><div style="font-size:17px;font-weight:700;margin-top:3px">${list.length}</div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:13px">Avans Kayıtları & Kesinti Planı</b><button class="btn btn-sm btn-pri" onclick="closeModal();openAvans('${pid}')">+ Avans Ekle</button></div>
+      ${list.length?cards:'<div class="empty">Avans kaydı yok.</div>'}
+    </div>
+    <div class="modal-ft"><button class="btn btn-pri" onclick="closeModal()">Kapat</button></div>
   </div></div>`;
 }
 
