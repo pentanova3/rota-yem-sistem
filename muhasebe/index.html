@@ -181,7 +181,7 @@ let DB=null, weekOffset=0, cfChart=null;
 
 function seed(){
   return {
-    meta:{ acilisBakiye:812817, acilisTarih:'2026-06-01', updated:'' },
+    meta:{ acilisBakiye:0, acilisTarih:'2026-06-01', updated:'' },
     girisKat:[
       {id:'k_hesapta',ad:'Hesap / Kasa'},
       {id:'k_pos',ad:'POS Tahsilat'},
@@ -198,28 +198,8 @@ function seed(){
       {id:'c_vergi',ad:'Vergiler'},
       {id:'c_maas',ad:'Maaş / SGK'}
     ],
-    entries:{
-      '2026-06-04':{k_hesapta:1484828},
-      '2026-06-05':{k_garanti:673568,c_borc:392465,c_kkart:1250000,c_fabrika:179794.03,c_vergi:40000},
-      '2026-06-08':{c_borc:677961.92,c_gecikmis:16318717.58},
-      '2026-06-12':{c_fabrika:175000},
-      '2026-06-15':{k_garanti:688350,k_alacak:720964.89,c_kredi:637974.44},
-      '2026-06-18':{c_borc:32000,c_fabrika:250000},
-      '2026-06-22':{c_kredi:3921086.88},
-      '2026-06-24':{c_fabrika:80000},
-      '2026-06-25':{c_fabrika:675000},
-      '2026-06-30':{k_garanti:220000},
-      '2026-07-01':{k_garanti:1323170}
-    },
-    odemeler:[
-      {id:'o1',ad:'Kuveyttürk SMI Kredi 20.',tarih:'2026-06-15',tutar:488291.52,kat:'Kredi',odendi:false},
-      {id:'o2',ad:'Kuveyttürk SMI Kredi 21.',tarih:'2026-07-16',tutar:488291.52,kat:'Kredi',odendi:false},
-      {id:'o3',ad:'OSB Taksit',tarih:'2026-07-25',tutar:675000,kat:'Taksit',odendi:false},
-      {id:'o4',ad:'Kuveyttürk SMI Kredi 22.',tarih:'2026-08-17',tutar:488291.52,kat:'Kredi',odendi:false},
-      {id:'o5',ad:'Kuveyttürk SMI Kredi 23.',tarih:'2026-09-15',tutar:488291.52,kat:'Kredi',odendi:false},
-      {id:'o6',ad:'Kuveyttürk SMI Kredi 24.',tarih:'2026-10-15',tutar:488291.52,kat:'Kredi',odendi:false},
-      {id:'o7',ad:'Kuveyttürk SMI Kredi 25.',tarih:'2026-12-15',tutar:488791.54,kat:'Kredi',odendi:false}
-    ]
+    entries:{},
+    odemeler:[]
   };
 }
 function loadDB(){ try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):seed();}catch(e){DB=seed();} }
@@ -424,7 +404,7 @@ function setCell(inp){
   DB.entries[d]=DB.entries[d]||{};
   if(val)DB.entries[d][k]=val; else delete DB.entries[d][k];
   if(!Object.keys(DB.entries[d]).length)delete DB.entries[d];
-  saveDB();render();
+  saveDB();render();toast('Kaydedildi');
 }
 function addKat(tip){
   const ad=prompt((tip==='giris'?'Yeni giriş':'Yeni çıkış')+' kategorisi adı:','');
@@ -473,8 +453,37 @@ function showApp(){
   loadDB();render();
 }
 document.getElementById('gpass').addEventListener('keydown',e=>{if(e.key==='Enter')unlock();});
+window.__reloadMuhasebe=function(){var w=(typeof weekOffset!=='undefined')?weekOffset:0;loadDB();weekOffset=w;if(!document.getElementById('app').classList.contains('hidden'))render();};
 if(sessionStorage.getItem('rota_nakit_ok')==='1')showApp();
 else document.getElementById('gpass').focus();
+</script>
+<!-- Firebase senkron (apps/muhasebe) - guvenli: son duzenleme zamanina gore -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
+const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps","muhasebe");
+function isKey(k){return !!k&&k.indexOf('rota_nakit')===0}
+function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isKey(k))o[k]=localStorage.getItem(k);}return o;}
+function localMeta(){try{const r=localStorage.getItem('rota_nakit_v1');return r?((JSON.parse(r).meta||{}).updated||''):'';}catch(e){return '';}}
+let suppress=false,lastUpdated=0,timer=null,hydrated=false;
+const _set=localStorage.setItem.bind(localStorage);
+localStorage.setItem=function(k,v){_set(k,v);if(!suppress&&isKey(k))schedulePush();};
+function schedulePush(){if(!hydrated)return;clearTimeout(timer);timer=setTimeout(push,800);}
+async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated,metaUpdated:localMeta()});fbDot('#16A34A','Senkron');}catch(e){console.warn('mh push',e);fbDot('#EF4444','Hata');}}
+function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isKey(k))_set(k,d[k]);});}finally{suppress=false;}}
+let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Inter,system-ui,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+c+'"></span> '+t;}
+(async function(){
+  fbDot('#F59E0B','Baglaniyor');
+  try{const snap=await getDoc(dref);const localRaw=localStorage.getItem('rota_nakit_v1');
+    if(snap.exists()&&snap.data().data&&Object.keys(snap.data().data).length){
+      const rm=snap.data().metaUpdated||'';const lm=localMeta();
+      if(!localRaw||rm>=lm){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;hydrated=true;if(window.__reloadMuhasebe)window.__reloadMuhasebe();fbDot('#16A34A','Senkron');}
+      else{hydrated=true;await push();}
+    }else{hydrated=true;if(localRaw)await push();}
+  }catch(e){console.warn('mh init',e);fbDot('#EF4444','Cevrimdisi');}
+  try{onSnapshot(dref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||!d.data||(d.updated&&d.updated===lastUpdated))return;if(d.metaUpdated&&localMeta()&&d.metaUpdated<localMeta())return;lastUpdated=d.updated||0;hydrated=true;applyRemote(d.data);if(window.__reloadMuhasebe)window.__reloadMuhasebe();fbDot('#16A34A','Guncellendi');});}catch(e){}
+})();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
 </body>
