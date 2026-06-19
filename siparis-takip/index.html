@@ -915,7 +915,7 @@ function saveOrder(){
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);DB.orders[idx]=o;logAct('Sipariş güncellendi: '+o.customer);}
   else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);}
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim');
-  if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
+  if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();if(!o.hareketTarihi)o.hareketTarihi=todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
   if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
   saveDB();
   if(_bildirim){if(confirm('Sipariş durumu "'+statusLabel(_yeniSt)+'" oldu.\n\nMüşteriye WhatsApp bilgilendirme mesajı gönderilsin mi?'))openWa(o);}
@@ -929,8 +929,9 @@ function buildShipMsg(o){
   let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır. 🚚\n\nÜrünler:\n${lines}\n`;
   msg+=`\n🚛 Araç Plaka: ${o.plaka||'—'}`;
   msg+=`\n👤 Şoför: ${o.sofor||'—'}`;
-  const hk=[o.hareketTarihi?fmtDate(o.hareketTarihi):'',o.hareketSaati||''].filter(Boolean).join(' ');
-  if(hk)msg+=`\n🕒 Fabrikadan Hareket: ${hk}`;
+  const htar=o.hareketTarihi||o.sevkTarih||todayISO();
+  msg+=`\n📅 Fabrikadan Hareket Tarihi: ${fmtDate(htar)}`;
+  msg+=`\n🕒 Fabrikadan Hareket Saati: ${o.hareketSaati||'Belirtilmedi'}`;
   if(o.palet&&String(o.palet).trim())msg+=`\n📦 Palet: ${o.palet}`;
   if(o.strec)msg+=`\n🧵 Streç: Evet`;
   if(o.not&&String(o.not).trim())msg+=`\n📝 Not: ${o.not}`;
