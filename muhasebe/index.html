@@ -78,13 +78,15 @@ button{font-family:inherit}
 .grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
 @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
 /* cashflow table */
-.cf-scroll{overflow:auto;max-height:calc(100vh - 165px)}
+.cf-scroll{overflow:visible}
+.card.cf-card{overflow:visible}
+@media(max-width:820px){.cf-scroll{overflow-x:auto}}
 table.cf{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px}
 table.cf th,table.cf td{padding:8px 10px;border-bottom:1px solid var(--slate-100);text-align:right;white-space:nowrap}
 table.cf th:first-child,table.cf td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1;min-width:160px}
-table.cf thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--slate-200);position:sticky;top:0;z-index:2}
+table.cf thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--slate-200);position:sticky;top:var(--cf-top,52px);z-index:5}
 table.cf thead th.today{background:var(--blue-100);color:var(--blue-800)}
-table.cf thead th:first-child{z-index:3}
+table.cf thead th:first-child{left:0;top:var(--cf-top,52px);z-index:6}
 table.cf .grp td{background:var(--slate-50);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--slate-500)}
 table.cf .grp.in td{color:var(--green-700);background:#f0fdf4}
 table.cf .grp.out td{color:var(--red-700);background:#fef2f2}
@@ -295,7 +297,7 @@ function render(){
     <div class="card-bd" style="padding:14px 16px"><div style="position:relative;height:230px"><canvas id="cfChart"></canvas></div></div></div>`;
 
   // Günlük tablo
-  h+=`<div class="card"><div class="card-hd"><h3>Günlük Nakit Akış Tablosu</h3><span class="hint">Hücreye tıklayıp tutar girin · boş = 0</span></div>
+  h+=`<div class="card cf-card"><div class="card-hd"><h3>Günlük Nakit Akış Tablosu</h3><span class="hint">Hücreye tıklayıp tutar girin · boş = 0</span></div>
     <div class="card-bd"><div class="cf-scroll"><table class="cf"><thead><tr><th>Kategori</th>`;
   w.days.forEach((ds,i)=>{const d=parseISO(ds);const isT=ds===todayISO();h+=`<th class="${isT?'today':''}">${GUNLER[i].slice(0,3)}<br><span style="font-weight:600;color:var(--slate-400)">${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}</span></th>`;});
   h+=`<th>Hafta</th></tr></thead><tbody>`;
@@ -487,5 +489,15 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
+<script>
+// Nakit akış tablosu başlığı, sayfa kaydırılınca topbar'ın hemen altında sabit kalsın.
+(function(){
+  function setTop(){var t=document.querySelector('.topbar');var h=t?t.offsetHeight:52;document.documentElement.style.setProperty('--cf-top',h+'px');}
+  window.addEventListener('load',setTop);
+  window.addEventListener('resize',setTop);
+  setInterval(setTop,1500); // topbar yüksekliği (responsive sarma) değişirse güncelle
+  setTop();
+})();
+</script>
 </body>
 </html>
