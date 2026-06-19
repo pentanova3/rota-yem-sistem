@@ -688,7 +688,7 @@ function refreshOrders(){
 function orderTable(arr){
   if(!arr.length)return `<div class="tbl-empty">Sipariş bulunamadı</div>`;
   const priceCol=canSeePrice();
-  return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
+  return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Müşteri Onayı</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
     const prods=(o.lines||[]).map(l=>l.code).join(', ');
     const kom=o.komisyoncuId?komById(o.komisyoncuId):null;
     return `<tr class="${kom?('row-'+kom.type):''}">
@@ -702,6 +702,7 @@ function orderTable(arr){
       <td class="num">${(o.lines||[]).length}</td>
       ${priceCol?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
       <td style="font-size:11.5px">${esc(o.kargo||'—')}</td>
+      <td>${musteriOnayCell(o)}</td>
       <td>${statusBadge(o.status)}</td>
       <td style="white-space:nowrap"><button class="btn-ic" onclick="openOrder('${o.id}')" title="Detay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${custById(o.customerId)?.phone?`<button class="btn-ic" onclick="waOrder('${o.id}')" title="WhatsApp" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>
     </tr>`}).join('')}</tbody></table>`;
@@ -710,7 +711,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:'',not:'',komisyoncuId:'',komisyonRate:null,musteriOnay:'',musteriOnayTs:'',yoneticiOnay:false,onayToken:''};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -887,6 +888,13 @@ function saveOrder(){
   if(o.date&&o.teslimTarihi<o.date){toast('Teslim tarihi, sipariş alım tarihinden önce olamaz');return}
   o.lines=(o.lines||[]).filter(l=>l.code&&(+l.qty>0));
   if(!o.lines.length){toast('En az bir ürün ekleyin');return}
+  var _origSt=o.id?((DB.orders.find(function(x){return x.id===o.id})||{}).status):'beklemede';
+  if(o.status==='onay'&&o.musteriOnay!=='onaylandi'&&_origSt!=='onay'){
+    if(!confirm('⚠️ Müşteri bu siparişi henüz ONAYLAMADI.\n\nYine de durumu "Onaylandı" yapmak istiyor musunuz?\n\n(Müşteri Onayı sütununda "Onay Bekleniyor" olarak kalacaktır.)')){
+      o.status=_origSt||'beklemede';renderOrderModal();toast('Onay iptal edildi');return;
+    }
+    o.yoneticiOnay=true;
+  }
   // Birim fiyatı kullanıcı elle girer; boş bırakılanı 0 olarak kaydet (otomatik liste fiyatı atanmaz)
   o.lines.forEach(l=>{if(l.price==null||l.price==='')l.price=0;else l.price=+l.price;delete l._locked;});
   o.total=orderTotal(o);
@@ -916,6 +924,27 @@ function openWa(o){
   const msg=encodeURIComponent(buildWaMsg(o));
   if(c&&c.phone){window.open(`https://wa.me/${phoneClean(c.phone)}?text=${msg}`,'_blank')}
   else{window.open(`https://wa.me/?text=${msg}`,'_blank');toast('Müşteri telefonu kayıtlı değil — numarayı WhatsApp\'ta seçin')}
+}
+function musteriOnayCell(o){
+  if(o.musteriOnay==='onaylandi')return '<span class="badge st-teslim" title="Müşteri onayladı'+(o.musteriOnayTs?': '+fmtDate(o.musteriOnayTs):'')+'">✓ Onaylandı</span>';
+  if(o.musteriOnay==='itiraz')return '<span class="badge st-iptal" title="Müşteri sipariş bilgilerine itiraz etti — kontrol edin">⚠ İtiraz</span>';
+  var extra=o.yoneticiOnay?'<div style="font-size:9px;color:#92400E;margin-top:2px">yönetici onayladı</div>':'';
+  var hasPhone=(custById(o.customerId)||{}).phone;
+  var btn=canEdit()?' <button onclick="waOnay(\''+o.id+'\')" title="'+(hasPhone?'WhatsApp ile onay linki gönder':'Telefon kayıtlı değil — WhatsApp\'ta numarayı seçin')+'" style="background:'+(hasPhone?'#25D366':'#94A3B8')+';color:#fff;border:none;padding:2px 7px;font-size:10px;font-weight:700;border-radius:5px;cursor:pointer;vertical-align:middle">WA Onay</button>':'';
+  return '<span class="badge" style="background:#FEF3C7;color:#92400E">Onay Bekleniyor</span>'+btn+extra;
+}
+function ensureOnayToken(o){if(!o.onayToken){o.onayToken=uid('ot')+Math.random().toString(36).slice(2,7);return true;}return false;}
+function orderOnayLink(o){return location.origin+'/onay/?t='+encodeURIComponent(o.onayToken);}
+function waOnay(id){
+  var o=DB.orders.find(function(x){return x.id===id});if(!o)return;
+  if(!canEdit()){toast('Yetkiniz yok');return}
+  if(ensureOnayToken(o)){logAct('Onay linki oluşturuldu: #'+o.no);saveDB();}
+  var c=custById(o.customerId), link=orderOnayLink(o);
+  var lines=(o.lines||[]).map(function(l){return '• '+l.code+': '+fmtN(l.qty)+' çuval'}).join('\n');
+  var msg='Sayın '+o.customer+',\n\n'+fmtDate(o.date)+' tarihli siparişinizi ONAYLAMANIZ için aşağıdaki bağlantıya tıklayınız:\n'+link+'\n\nSipariş özeti:\n'+lines+'\nTeslim tarihi: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—')+'\n\nLütfen ürün ve teslim bilgilerini kontrol edip onaylayınız.\nRota SMI';
+  var txt=encodeURIComponent(msg);
+  if(c&&c.phone){window.open('https://wa.me/'+phoneClean(c.phone)+'?text='+txt,'_blank');toast('WhatsApp onay mesajı hazırlandı');}
+  else{window.open('https://wa.me/?text='+txt,'_blank');toast('Müşteri telefonu kayıtlı değil — numarayı WhatsApp\'ta seçin');}
 }
 // ============ CUSTOMERS ============
 let editCust=null,custQ='';
@@ -1682,6 +1711,20 @@ document.getElementById('lhint').innerHTML='Demo giriş: <b>admin</b> / <b>rota2
 tryAutoLogin();
 // Firebase'den veri gelince yeniden yükle (cihazlar arası senkron)
 window.__reloadFromStorage=function(){window.__fbSuppress=true;try{loadDB();if(USER)initApp();}catch(e){console.warn(e)}window.__fbSuppress=false;};
+window.__applyOnaylar=function(map){
+  if(!map||typeof DB==='undefined'||!DB||!Array.isArray(DB.orders))return;
+  var chg=0;
+  Object.keys(map).forEach(function(oid){
+    var rec=map[oid];if(!rec)return;
+    var o=DB.orders.find(function(x){return x.id===oid});if(!o)return;
+    if(rec.onay==='onaylandi'){
+      if(o.musteriOnay!=='onaylandi'){o.musteriOnay='onaylandi';o.musteriOnayTs=rec.ts||new Date().toISOString();o.musteriOnayAd=rec.ad||'';if(o.status==='beklemede')o.status='onay';chg++;}
+    }else if(rec.onay==='itiraz'){
+      if(!o.musteriOnay){o.musteriOnay='itiraz';o.musteriOnayTs=rec.ts||new Date().toISOString();chg++;}
+    }
+  });
+  if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+' sipariş)');saveDB();}catch(e){}try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
+};
 </script>
 <!-- Firebase senkron katmanı (cihazlar arası veri) -->
 <script type="module">
@@ -1709,6 +1752,10 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     else{hydrated=true;await push();}
   }catch(e){console.warn('FB init',e);fbDot('#EF4444','Çevrimdışı (senkron duraklatıldı)');}
   try{onSnapshot(dref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||(d.updated&&d.updated===lastUpdated))return;lastUpdated=d.updated||0;hydrated=true;applyRemote(d.data);if(window.__reloadFromStorage)window.__reloadFromStorage();fbDot('#16A34A','Güncellendi');});}catch(e){}
+  try{const onayRef=doc(fdb,"apps","onaylar");
+    try{const os=await getDoc(onayRef);if(os.exists()&&window.__applyOnaylar)window.__applyOnaylar(os.data()||{});}catch(e){}
+    onSnapshot(onayRef,(s)=>{try{if(s.exists()&&window.__applyOnaylar)window.__applyOnaylar(s.data()||{});}catch(e){}});
+  }catch(e){}
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
