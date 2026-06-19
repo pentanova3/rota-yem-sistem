@@ -733,7 +733,7 @@ function renderOrderModal(){
       <div class="fgrid c3">
         <div class="fld"><label>Sipariş Alındı</label><input value="${o.id?fmtDateTime(o.createdAt||o.date):'Kayıtta otomatik atanır'}" disabled title="Sistem tarafından otomatik"></div>
         <div class="fld"><label>Teslim Tarihi <span style="color:var(--red-500)">*</span></label><input type="date" value="${o.teslimTarihi||''}" min="${o.date||todayISO()}" ${ro?'disabled':''} onchange="editOrder.teslimTarihi=this.value" style="${!o.teslimTarihi&&!ro?'border-color:var(--amber-500);background:#FFFBEB':''}"></div>
-        <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="editOrder.status=this.value">${optDurum().map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="editOrder.status=this.value">${optDurum().filter(s=>!(s.v==='sevk'&&isSelfPickup(o)&&o.status!=='sevk')).map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
         <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
@@ -748,7 +748,7 @@ function renderOrderModal(){
       <div class="sub-hd">Sevkiyat & Lojistik${noShip?' <span style="font-weight:600;font-size:11px;color:var(--amber-700);text-transform:none;letter-spacing:0">— Fabrika tesliminde girilmez</span>':''}</div>
       <div style="${noShip?'opacity:.5;pointer-events:none':''}">
       <div class="fgrid c3">
-        <div class="fld"><label>Kargo Tipi</label><select ${shipRO?'disabled':''} onchange="editOrder.kargo=this.value"><option value="">—</option>${optKargo().map(k=>`<option ${o.kargo===k?'selected':''}>${esc(k)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Kargo Tipi</label><select ${shipRO?'disabled':''} onchange="onChangeKargo(this.value)"><option value="">—</option>${optKargo().map(k=>`<option ${o.kargo===k?'selected':''}>${esc(k)}</option>`).join('')}</select></div>
         ${showPrice?`<div class="fld"><label>Nakliye Ücreti ₺</label><input type="number" value="${o.nakliye||''}" ${shipRO?'disabled':''} onchange="editOrder.nakliye=+this.value"></div>`:'<div></div>'}
         <div class="fld"><label>Plaka</label><input value="${esc(o.plaka||'')}" ${shipRO?'disabled':''} onchange="editOrder.plaka=this.value"></div>
       </div>
@@ -757,6 +757,7 @@ function renderOrderModal(){
         <div class="fld"><label>Palet</label><input value="${esc(o.palet||'')}" ${shipRO?'disabled':''} onchange="editOrder.palet=this.value"></div>
         <div class="fld"><label>Streç</label><input value="${esc(o.strec||'')}" ${shipRO?'disabled':''} onchange="editOrder.strec=this.value"></div>
       </div>
+      <div class="fgrid c3"><div class="fld"><label>Fabrikadan Hareket Saati <span style="font-weight:600;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0">— nakliye bildiriminde kullanılır</span></label><input type="time" value="${esc(o.hareketSaati||'')}" ${shipRO?'disabled':''} onchange="editOrder.hareketSaati=this.value"></div><div></div><div></div></div>
       </div>
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
       <div class="fld"><label>Müşteriye Onay Notu <span style="font-weight:600;font-size:10.5px;color:var(--amber-700);text-transform:none;letter-spacing:0">— eksik/değişiklik varsa yaz, müşteri WhatsApp linkinde ayrıca onaylar</span></label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.onayNot=this.value" placeholder="Örn: 30 çuval yerine 20 çuval gönderilecektir.">${esc(o.onayNot||'')}</textarea></div>
@@ -863,7 +864,9 @@ function priceListSelectorHTML(o,ro){
     <select ${ro?'disabled':''} style="font-size:12px;padding:3px 6px;max-width:230px" onchange="onChangePriceList(this.value)">${opts}</select>
   </span>`;
 }
-function onChangeKademe(v){editOrder.fiyatKademe=v;if(v==='fabrika'){editOrder.kargo='';editOrder.nakliye=0;editOrder.plaka='';editOrder.sofor='';editOrder.palet='';editOrder.strec='';}clearLinePrices();renderOrderModal()}
+function onChangeKademe(v){editOrder.fiyatKademe=v;if(v==='fabrika'){editOrder.kargo='';editOrder.nakliye=0;editOrder.plaka='';editOrder.sofor='';editOrder.palet='';editOrder.strec='';editOrder.hareketSaati='';}clearLinePrices();renderOrderModal()}
+function onChangeKargo(v){editOrder.kargo=v;renderOrderModal()}
+function isSelfPickup(o){return o.fiyatKademe==='fabrika'||o.kargo==='Müşteri Alımı';}
 function isISODate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s||'')}
 function odemeFieldHTML(o,ro){
   const isDate=isISODate(o.odeme);
@@ -906,11 +909,40 @@ function saveOrder(){
   if(o.komisyoncuId){const kom=komById(o.komisyoncuId);if(kom&&o.komisyonRate==null)o.komisyonRate=+kom.rate||(kom.type==='danisman'?((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT):0);const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonRate=null;o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);DB.orders[idx]=o;logAct('Sipariş güncellendi: '+o.customer);}
   else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);}
-  saveDB();closeModal();toast('Sipariş kaydedildi');render();
+  var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim');
+  if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
+  if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
+  saveDB();
+  if(_bildirim){if(confirm('Sipariş durumu "'+statusLabel(_yeniSt)+'" oldu.\n\nMüşteriye WhatsApp bilgilendirme mesajı gönderilsin mi?'))openWa(o);}
+  closeModal();toast('Sipariş kaydedildi');render();
 }
 function delOrder(id){if(!confirm('Bu sipariş silinsin mi?'))return;DB.orders=DB.orders.filter(o=>o.id!==id);logAct('Sipariş silindi');saveDB();closeModal();toast('Silindi');render()}
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editOrder=null;editCust=null}
 // ============ WHATSAPP ============
+function buildShipMsg(o){
+  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır. 🚚\n\nÜrünler:\n${lines}\n`;
+  msg+=`\n🚛 Araç Plaka: ${o.plaka||'—'}`;
+  msg+=`\n👤 Şoför: ${o.sofor||'—'}`;
+  if(o.hareketSaati)msg+=`\n🕒 Fabrikadan Hareket: ${o.hareketSaati}`;
+  if(o.not&&String(o.not).trim())msg+=`\n📝 Not: ${o.not}`;
+  msg+=`\n\nRota SMI`;
+  return msg;
+}
+function buildDeliveredMsg(o){
+  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
+  const tarih=o.teslimEdildiTarih?fmtDate(o.teslimEdildiTarih):(o.teslimTarihi?fmtDate(o.teslimTarihi):fmtDate(todayISO()));
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir. ✅\n\nTeslim Edilen Ürünler:\n${lines}\n`;
+  msg+=`\n📅 Teslim Tarihi: ${tarih}`;
+  msg+=`\n👤 Teslim Alan: ${o.customer}`;
+  msg+=`\n\nTeşekkür ederiz.\nRota SMI`;
+  return msg;
+}
+function waStatusMsg(o){
+  if(o.status==='sevk'&&!isSelfPickup(o))return buildShipMsg(o);
+  if(o.status==='teslim')return buildDeliveredMsg(o);
+  return buildWaMsg(o);
+}
 function buildWaMsg(o){
   const c=custById(o.customerId);
   const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
@@ -925,7 +957,7 @@ function waOrder(id){const o=DB.orders.find(x=>x.id===id);if(o)openWa(o)}
 function waOrderModal(){openWa(editOrder)}
 function openWa(o){
   const c=custById(o.customerId);
-  const msg=encodeURIComponent(buildWaMsg(o));
+  const msg=encodeURIComponent(waStatusMsg(o));
   if(c&&c.phone){window.open(`https://wa.me/${phoneClean(c.phone)}?text=${msg}`,'_blank')}
   else{window.open(`https://wa.me/?text=${msg}`,'_blank');toast('Müşteri telefonu kayıtlı değil — numarayı WhatsApp\'ta seçin')}
 }
@@ -938,11 +970,11 @@ function musteriOnayCell(o){
   return '<span class="badge" style="background:#FEF3C7;color:#92400E">Onay Bekleniyor</span>'+btn+extra;
 }
 function pushHist(o,type,text){o.history=o.history||[];o.history.unshift({ts:new Date().toISOString(),type:type,text:text,by:(typeof USER!=='undefined'&&USER?USER.username:'sistem')});if(o.history.length>120)o.history=o.history.slice(0,120);}
-function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':'•';}
+function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':t==='sevk'?'🚚':t==='teslim'?'📦':'•';}
 function historyHTML(o){
   if(!o.history||!o.history.length)return '';
   var rows=o.history.map(function(e){
-    var col=e.type==='onay'?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':'var(--slate-600)';
+    var col=(e.type==='onay'||e.type==='teslim')?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':e.type==='sevk'?'#1D4ED8':'var(--slate-600)';
     return '<div style="display:flex;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slate-100)"><span style="font-size:13px;flex:none;line-height:1.3">'+histIcon(e.type)+'</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:'+col+';font-weight:600;word-break:break-word">'+esc(e.text)+'</div><div style="font-size:10px;color:var(--slate-400)">'+fmtDateTime(e.ts)+(e.by?' · '+esc(e.by):'')+'</div></div></div>';
   }).join('');
   return '<div class="sub-hd">Sipariş Geçmişi / Olay Akışı</div><div style="max-height:230px;overflow-y:auto;border:1px solid var(--slate-200);border-radius:8px;padding:2px 12px">'+rows+'</div>';
