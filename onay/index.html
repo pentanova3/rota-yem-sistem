@@ -35,6 +35,9 @@ tfoot td{border-top:2px solid var(--line);border-bottom:none;font-size:14px;font
 .deliv .dl-d{font-size:12px;color:#1e40af;font-weight:600;margin-bottom:2px}
 .deliv .dl-v{font-size:20px;font-weight:800;color:#1e3a8a;letter-spacing:.3px}
 .deliv .dl-x{font-size:12.5px;color:var(--slate);margin-top:5px}
+.onaynot{background:#fffbeb;border:1.5px solid #fde68a;border-radius:11px;padding:13px 15px;margin-top:16px}
+.onaynot .on-t{font-size:12px;font-weight:800;color:#b45309;margin-bottom:4px;letter-spacing:.2px}
+.onaynot .on-v{font-size:14.5px;font-weight:600;color:#7c2d12;line-height:1.45;white-space:pre-wrap}
 .confirm{margin-top:16px;background:#fff;border:2px solid var(--line);border-radius:12px;padding:14px 15px}
 .chk{display:flex;align-items:flex-start;gap:11px;cursor:pointer;user-select:none}
 .chk input{width:22px;height:22px;margin-top:1px;accent-color:var(--green);flex:none;cursor:pointer}
@@ -138,8 +141,10 @@ function renderOrder(o){
       ${o.kargo?`<div class="row"><span class="k">Sevkiyat</span><span class="v">${esc(o.kargo)}</span></div>`:''}
       ${o.odeme?`<div class="row"><span class="k">Ödeme Tarihi</span><span class="v">${/^\d{4}-\d{2}-\d{2}/.test(o.odeme)?fmtDate(o.odeme):esc(o.odeme)}</span></div>`:''}
 
+      ${o.onayNot?`<div class="onaynot"><div class="on-t">⚠️ ÖNEMLİ NOT</div><div class="on-v">${esc(o.onayNot)}</div></div>`:''}
       <div class="confirm">
         <label class="chk"><input type="checkbox" id="ack"><span>Yukarıdaki ürün, miktar ve teslim bilgilerini kontrol ettim; sipariş doğrudur.</span></label>
+        ${o.onayNot?`<label class="chk" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px"><input type="checkbox" id="ackNot"><span><b>Yukarıdaki notu okudum</b> ve kabul ediyorum.</span></label>`:''}
       </div>
       <div class="btns">
         <button class="btn btn-ok" id="okBtn" disabled>Siparişimi Onaylıyorum</button>
@@ -148,21 +153,28 @@ function renderOrder(o){
       <div class="note">Onayınız, siparişinizin hazırlanmasına başlanması için Rota SMI ekibine bildirilir.<br>Bir hata görürseniz onaylamadan bizimle iletişime geçin.</div>
     </div>
   </div>`;
-  const ack=document.getElementById('ack'), ok=document.getElementById('okBtn');
-  ack.onchange=()=>{ok.disabled=!ack.checked;};
+  const ack=document.getElementById('ack'), ackNot=document.getElementById('ackNot'), ok=document.getElementById('okBtn');
+  const sync=()=>{ok.disabled=!(ack.checked&&(!ackNot||ackNot.checked));};
+  ack.onchange=sync; if(ackNot)ackNot.onchange=sync;
   ok.onclick=()=>submit('onaylandi');
   document.getElementById('errBtn').onclick=()=>{
-    if(confirm('Sipariş bilgilerinde hata olduğunu bildireceksiniz. Rota SMI ekibi sizinle iletişime geçecektir.\n\nDevam edilsin mi?'))submit('itiraz');
+    const sebep=prompt('Lütfen siparişteki hatayı / itirazınızı kısaca yazın\n(örn: 30 çuval istedim, 20 çuval görünüyor):','');
+    if(sebep==null)return;
+    if(!sebep.trim()){alert('Lütfen hatanın ne olduğunu yazın.');return;}
+    submit('itiraz', sebep.trim());
   };
 }
 
-async function submit(kind){
+async function submit(kind, sebep){
   const o=ORDER;if(!o)return;
-  const ok=document.getElementById('okBtn'), err=document.getElementById('errBtn');
+  const ok=document.getElementById('okBtn'), err=document.getElementById('errBtn'), ackNot=document.getElementById('ackNot');
   if(ok)ok.disabled=true; if(err)err.disabled=true;
   if(ok&&kind==='onaylandi')ok.textContent='Gönderiliyor...';
+  const payload={onay:kind,ts:new Date().toISOString(),ad:o.customer||'',no:o.no||''};
+  if(kind==='itiraz')payload.sebep=sebep||'';
+  if(kind==='onaylandi'&&ackNot)payload.notOkundu=true;
   try{
-    await setDoc(ONAYREF,{[o.id]:{onay:kind,ts:new Date().toISOString(),ad:o.customer||'',no:o.no||''}},{merge:true});
+    await setDoc(ONAYREF,{[o.id]:payload},{merge:true});
   }catch(e){
     stateView('⚠','#fee2e2','#b91c1c','Gönderilemedi','Onayınız kaydedilemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.');return;
   }

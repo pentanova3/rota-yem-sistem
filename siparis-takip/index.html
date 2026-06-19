@@ -759,10 +759,13 @@ function renderOrderModal(){
       </div>
       </div>
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
+      <div class="fld"><label>Müşteriye Onay Notu <span style="font-weight:600;font-size:10.5px;color:var(--amber-700);text-transform:none;letter-spacing:0">— eksik/değişiklik varsa yaz, müşteri WhatsApp linkinde ayrıca onaylar</span></label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.onayNot=this.value" placeholder="Örn: 30 çuval yerine 20 çuval gönderilecektir.">${esc(o.onayNot||'')}</textarea></div>
+      ${o.id?historyHTML(o):''}
     </div>
     <div class="modal-ft">
       <div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
       <div style="display:flex;gap:8px">
+        ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">📤 Onay Linki Gönder</button>`:''}
         ${o.id?`<button class="btn btn-wa" onclick="waOrderModal()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp Mesajı</button>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
         <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
@@ -894,7 +897,7 @@ function saveOrder(){
     if(!confirm('⚠️ Müşteri bu siparişi henüz ONAYLAMADI.\n\nYine de durumu "Onaylandı" yapmak istiyor musunuz?\n\n(Müşteri Onayı sütununda "Onay Bekleniyor" olarak kalacaktır.)')){
       o.status=_origSt||'beklemede';renderOrderModal();toast('Onay iptal edildi');return;
     }
-    o.yoneticiOnay=true;
+    o.yoneticiOnay=true;pushHist(o,'yonetici','Yönetici durumu "Onaylandı" yaptı (müşteri onayı olmadan)');
   }
   // Birim fiyatı kullanıcı elle girer; boş bırakılanı 0 olarak kaydet (otomatik liste fiyatı atanmaz)
   o.lines.forEach(l=>{if(l.price==null||l.price==='')l.price=0;else l.price=+l.price;delete l._locked;});
@@ -928,21 +931,47 @@ function openWa(o){
 }
 function musteriOnayCell(o){
   if(o.musteriOnay==='onaylandi')return '<span class="badge st-teslim" title="Müşteri onayladı'+(o.musteriOnayTs?': '+fmtDate(o.musteriOnayTs):'')+'">✓ Onaylandı</span>';
-  if(o.musteriOnay==='itiraz')return '<span class="badge st-iptal" title="Müşteri sipariş bilgilerine itiraz etti — kontrol edin">⚠ İtiraz</span>';
+  if(o.musteriOnay==='itiraz')return '<span class="badge st-iptal" title="'+esc('Müşteri itirazı'+(o.itirazSebep?': '+o.itirazSebep:'')+' — düzeltip yeniden onay linki gönderin')+'">⚠ İtiraz</span>';
   var extra=o.yoneticiOnay?'<div style="font-size:9px;color:#92400E;margin-top:2px">yönetici onayladı</div>':'';
   var hasPhone=(custById(o.customerId)||{}).phone;
   var btn=canEdit()?' <button onclick="waOnay(\''+o.id+'\')" title="'+(hasPhone?'WhatsApp ile onay linki gönder':'Telefon kayıtlı değil — WhatsApp\'ta numarayı seçin')+'" style="background:'+(hasPhone?'#25D366':'#94A3B8')+';color:#fff;border:none;padding:2px 7px;font-size:10px;font-weight:700;border-radius:5px;cursor:pointer;vertical-align:middle">WA Onay</button>':'';
   return '<span class="badge" style="background:#FEF3C7;color:#92400E">Onay Bekleniyor</span>'+btn+extra;
+}
+function pushHist(o,type,text){o.history=o.history||[];o.history.unshift({ts:new Date().toISOString(),type:type,text:text,by:(typeof USER!=='undefined'&&USER?USER.username:'sistem')});if(o.history.length>120)o.history=o.history.slice(0,120);}
+function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':'•';}
+function historyHTML(o){
+  if(!o.history||!o.history.length)return '';
+  var rows=o.history.map(function(e){
+    var col=e.type==='onay'?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':'var(--slate-600)';
+    return '<div style="display:flex;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slate-100)"><span style="font-size:13px;flex:none;line-height:1.3">'+histIcon(e.type)+'</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:'+col+';font-weight:600;word-break:break-word">'+esc(e.text)+'</div><div style="font-size:10px;color:var(--slate-400)">'+fmtDateTime(e.ts)+(e.by?' · '+esc(e.by):'')+'</div></div></div>';
+  }).join('');
+  return '<div class="sub-hd">Sipariş Geçmişi / Olay Akışı</div><div style="max-height:230px;overflow-y:auto;border:1px solid var(--slate-200);border-radius:8px;padding:2px 12px">'+rows+'</div>';
+}
+function tgCfg(){return {token:(DB.meta&&DB.meta.tgToken)||'',chat:(DB.meta&&DB.meta.tgChat)||''};}
+function sendTelegram(text){var c=tgCfg();if(!c.token||!c.chat)return false;try{fetch('https://api.telegram.org/bot'+c.token+'/sendMessage?chat_id='+encodeURIComponent(c.chat)+'&text='+encodeURIComponent(text),{mode:'no-cors'});return true;}catch(e){return false;}}
+function sendTelegramItiraz(o){var c=tgCfg();if(!c.token||!c.chat)return false;var msg='⚠️ SİPARİŞ İTİRAZI\n\nSipariş: #'+(o.no||'')+'\nMüşteri: '+(o.customer||'')+'\nHata: '+(o.itirazSebep||'(belirtilmedi)')+'\nDurum: '+statusLabel(o.status);return sendTelegram(msg);}
+function saveTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');DB.meta.tgToken=(t?t.value.trim():'');DB.meta.tgChat=(c?c.value.trim():'');logAct('Telegram ayarı güncellendi');saveDB();toast('Telegram ayarı kaydedildi');}
+function testTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');if(t)DB.meta.tgToken=t.value.trim();if(c)DB.meta.tgChat=c.value.trim();if(!DB.meta.tgToken||!DB.meta.tgChat){toast('Önce token ve chat ID girin');return;}sendTelegram('✅ Rota Sipariş — Telegram bildirim testi. Bağlantı çalışıyor.');toast('Test mesajı gönderildi — Telegram\'ı kontrol edin');}
+function waOnayModal(){
+  if(!editOrder||!editOrder.id){toast('Önce siparişi kaydedin');return;}
+  var o=DB.orders.find(function(x){return x.id===editOrder.id});if(!o)return;
+  o.onayNot=editOrder.onayNot||'';
+  waOnay(o.id);
 }
 function ensureOnayToken(o){if(!o.onayToken){o.onayToken=uid('ot')+Math.random().toString(36).slice(2,7);return true;}return false;}
 function orderOnayLink(o){return location.origin+'/onay/?t='+encodeURIComponent(o.onayToken);}
 function waOnay(id){
   var o=DB.orders.find(function(x){return x.id===id});if(!o)return;
   if(!canEdit()){toast('Yetkiniz yok');return}
-  if(ensureOnayToken(o)){logAct('Onay linki oluşturuldu: #'+o.no);saveDB();}
+  ensureOnayToken(o);
+  var resend=(o.musteriOnay==='itiraz');
+  pushHist(o,'gonderildi',(resend?'Düzeltme sonrası yeniden onay linki gönderildi':'Onay linki WhatsApp ile gönderildi')+(o.onayNot?' · Not: '+o.onayNot:''));
+  logAct('Onay linki gönderildi: #'+o.no);saveDB();
   var c=custById(o.customerId), link=orderOnayLink(o);
   var lines=(o.lines||[]).map(function(l){return '• '+l.code+': '+fmtN(l.qty)+' çuval'}).join('\n');
-  var msg='Sayın '+o.customer+',\n\n'+fmtDate(o.date)+' tarihli siparişinizi ONAYLAMANIZ için aşağıdaki bağlantıya tıklayınız:\n'+link+'\n\nSipariş özeti:\n'+lines+'\nTeslim tarihi: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—')+'\n\nLütfen ürün ve teslim bilgilerini kontrol edip onaylayınız.\nRota SMI';
+  var msg='Sayın '+o.customer+',\n\n'+fmtDate(o.date)+' tarihli siparişinizi ONAYLAMANIZ için aşağıdaki bağlantıya tıklayınız:\n'+link+'\n\nSipariş özeti:\n'+lines+'\nTeslim tarihi: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—');
+  if(o.onayNot)msg+='\n\n⚠️ ÖNEMLİ NOT:\n'+o.onayNot;
+  msg+='\n\nLütfen ürün ve teslim bilgilerini kontrol edip onaylayınız.\nRota SMI';
   var txt=encodeURIComponent(msg);
   if(c&&c.phone){window.open('https://wa.me/'+phoneClean(c.phone)+'?text='+txt,'_blank');toast('WhatsApp onay mesajı hazırlandı');}
   else{window.open('https://wa.me/?text='+txt,'_blank');toast('Müşteri telefonu kayıtlı değil — numarayı WhatsApp\'ta seçin');}
@@ -1734,6 +1763,11 @@ function renderSettings(c,tb){
     </div>
     <div style="margin-top:16px;font-size:11.5px;color:var(--slate-500)">Veri kaynağı: ${esc(DB.meta.source||'manuel')} · İçe aktarım: ${esc(DB.meta.imported||'—')} · ${DB.orders.length} sipariş, ${DB.customers.length} müşteri</div>
   </div></div>
+  <div class="card"><div class="card-hd"><h3>Telegram Bildirimleri</h3><span style="font-size:11px;color:var(--slate-400)">Müşteri siparişe itiraz edince Telegram'a uyarı gönderir</span></div><div class="card-bd" style="padding:18px">
+    <div class="fgrid"><div class="fld"><label>Bot Token</label><input id="tgT" value="${esc(DB.meta.tgToken||'')}" placeholder="123456789:ABCdef..." onchange="DB.meta.tgToken=this.value.trim()"></div><div class="fld"><label>Chat ID</label><input id="tgC" value="${esc(DB.meta.tgChat||'')}" placeholder="-1001234567890" onchange="DB.meta.tgChat=this.value.trim()"></div></div>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-grn btn-sm" onclick="saveTelegram()">Kaydet</button><button class="btn btn-gray btn-sm" onclick="testTelegram()">Test Mesajı Gönder</button></div>
+    <div style="margin-top:12px;font-size:11px;color:var(--slate-500)">@BotFather'dan bot oluşturup token alın · botu bildirim grubuna ekleyin · grup/kişi chat ID'sini girin. Boş bırakılırsa bildirim gönderilmez (itiraz yine ekranda görünür).</div>
+  </div></div>
   <div class="card"><div class="card-hd"><h3>İşlem Geçmişi (son 30)</h3></div><div class="card-bd"><table class="tbl"><tbody>${(DB.log||[]).slice(0,30).map(l=>`<tr><td style="font-size:11px;color:var(--slate-400);white-space:nowrap">${new Date(l.ts).toLocaleString('tr-TR')}</td><td style="font-size:11px">${esc(l.user)}</td><td>${esc(l.action)}</td></tr>`).join('')||'<tr><td class="tbl-empty">Kayıt yok</td></tr>'}</tbody></table></div></div>`;
   c.innerHTML=h;
 }
@@ -1766,13 +1800,18 @@ window.__applyOnaylar=function(map){
   Object.keys(map).forEach(function(oid){
     var rec=map[oid];if(!rec)return;
     var o=DB.orders.find(function(x){return x.id===oid});if(!o)return;
+    var ts=rec.ts||new Date().toISOString();
     if(rec.onay==='onaylandi'){
-      if(o.musteriOnay!=='onaylandi'){o.musteriOnay='onaylandi';o.musteriOnayTs=rec.ts||new Date().toISOString();o.musteriOnayAd=rec.ad||'';if(o.status==='beklemede')o.status='onay';chg++;}
+      if(o.musteriOnay!=='onaylandi'){o.musteriOnay='onaylandi';o.musteriOnayTs=ts;o.musteriOnayAd=rec.ad||'';o.itirazSebep='';o.itirazNotified=false;if(o.status==='beklemede')o.status='onay';pushHist(o,'onay','Müşteri siparişi ONAYLADI'+(rec.notOkundu?' (notu okudu)':''));chg++;}
     }else if(rec.onay==='itiraz'){
-      if(!o.musteriOnay){o.musteriOnay='itiraz';o.musteriOnayTs=rec.ts||new Date().toISOString();chg++;}
+      var same=(o.musteriOnay==='itiraz'&&(o.itirazSebep||'')===(rec.sebep||''));
+      if(!same&&o.musteriOnay!=='onaylandi'){o.musteriOnay='itiraz';o.musteriOnayTs=ts;o.itirazSebep=rec.sebep||'';o.itirazNotified=false;pushHist(o,'itiraz','Müşteri İTİRAZ etti'+(rec.sebep?': '+rec.sebep:''));chg++;}
     }
   });
-  if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+' sipariş)');saveDB();}catch(e){}try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
+  if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+')');saveDB();}catch(e){}}
+  // Bildirilmemiş itirazları Telegram'a gönder (her çağrıda)
+  try{var sent=0;(DB.orders||[]).forEach(function(o){if(o.musteriOnay==='itiraz'&&!o.itirazNotified){if(sendTelegramItiraz(o)){o.itirazNotified=true;sent++;}}});if(sent)saveDB();}catch(e){}
+  if(chg){try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
 };
 </script>
 <!-- Firebase senkron katmanı (cihazlar arası veri) -->
