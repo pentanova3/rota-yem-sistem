@@ -78,12 +78,13 @@ button{font-family:inherit}
 .grid-2{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
 @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
 /* cashflow table */
-.cf-scroll{overflow-x:auto}
+.cf-scroll{overflow:auto;max-height:calc(100vh - 165px)}
 table.cf{border-collapse:collapse;width:100%;min-width:760px;font-size:12.5px}
 table.cf th,table.cf td{padding:8px 10px;border-bottom:1px solid var(--slate-100);text-align:right;white-space:nowrap}
 table.cf th:first-child,table.cf td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1;min-width:160px}
-table.cf thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--slate-200)}
+table.cf thead th{background:var(--slate-50);font-size:11px;font-weight:700;color:var(--slate-600);text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid var(--slate-200);position:sticky;top:0;z-index:2}
 table.cf thead th.today{background:var(--blue-100);color:var(--blue-800)}
+table.cf thead th:first-child{z-index:3}
 table.cf .grp td{background:var(--slate-50);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--slate-500)}
 table.cf .grp.in td{color:var(--green-700);background:#f0fdf4}
 table.cf .grp.out td{color:var(--red-700);background:#fef2f2}
