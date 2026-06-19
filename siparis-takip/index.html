@@ -689,7 +689,7 @@ function refreshOrders(){
 function orderTable(arr){
   if(!arr.length)return `<div class="tbl-empty">Sipariş bulunamadı</div>`;
   const priceCol=canSeePrice();
-  return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Müşteri Onayı</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
+  return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Müşteri Onayı</th><th>Fabrika Onayı</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
     const prods=(o.lines||[]).map(l=>l.code).join(', ');
     const kom=o.komisyoncuId?komById(o.komisyoncuId):null;
     return `<tr class="${kom?('row-'+kom.type):''}">
@@ -704,6 +704,7 @@ function orderTable(arr){
       ${priceCol?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
       <td style="font-size:11.5px">${esc(o.kargo||'—')}</td>
       <td>${musteriOnayCell(o)}</td>
+      <td>${fabrikaOnayCell(o)}</td>
       <td>${statusBadge(o.status)}</td>
       <td style="white-space:nowrap"><button class="btn-ic" onclick="openOrder('${o.id}')" title="Detay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${custById(o.customerId)?.phone?`<button class="btn-ic" onclick="waOrder('${o.id}')" title="WhatsApp" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>
     </tr>`}).join('')}</tbody></table>`;
@@ -981,6 +982,10 @@ function musteriOnayCell(o){
   var btn=canEdit()?' <button onclick="waOnay(\''+o.id+'\')" title="'+(hasPhone?'WhatsApp ile onay linki gönder':'Telefon kayıtlı değil — WhatsApp\'ta numarayı seçin')+'" style="background:'+(hasPhone?'#25D366':'#94A3B8')+';color:#fff;border:none;padding:2px 7px;font-size:10px;font-weight:700;border-radius:5px;cursor:pointer;vertical-align:middle">WA Onay</button>':'';
   return '<span class="badge" style="background:#FEF3C7;color:#92400E">Onay Bekleniyor</span>'+btn+extra;
 }
+function fabrikaOnayCell(o){
+  if(o.fabrikaOnay&&o.fabrikaOnay.by)return '<span class="badge st-teslim" title="'+esc('Fabrika onayı: '+o.fabrikaOnay.by+(o.fabrikaOnay.ts?' · '+fmtDate(o.fabrikaOnay.ts):''))+'">✓ Onaylandı</span>';
+  return '<span class="badge" style="background:#FEF3C7;color:#92400E" title="Telegram\'dan fabrika onayı bekleniyor">Onay Bekliyor</span>';
+}
 function pushHist(o,type,text){o.history=o.history||[];o.history.unshift({ts:new Date().toISOString(),type:type,text:text,by:(typeof USER!=='undefined'&&USER?USER.username:'sistem')});if(o.history.length>120)o.history=o.history.slice(0,120);}
 function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':t==='sevk'?'🚚':t==='teslim'?'📦':t==='fabrika'?'🏭':'•';}
 function historyHTML(o){
@@ -1085,18 +1090,19 @@ function exportExcel(){
   var showP=canSeePrice();
   var oh=['No','Sipariş Tarihi','Teslim Tarihi','Müşteri','Firma','Bayi / Danışman','Ürünler','Kalem'];
   if(showP)oh.push('Toplam TL');
-  oh.push('Kargo','Müşteri Onayı','Durum');
+  oh.push('Kargo','Müşteri Onayı','Fabrika Onayı','Durum');
   var os=[oh];
   (DB.orders||[]).slice().sort(function(a,b){return (b.no||0)-(a.no||0)}).forEach(function(o){
     var kom=o.komisyoncuId?komById(o.komisyoncuId):null;
     var prods=(o.lines||[]).map(function(l){return l.code+' ('+fmtN(l.qty)+')'}).join(', ');
     var onay=o.musteriOnay==='onaylandi'?'Onaylandı':(o.musteriOnay==='itiraz'?'İtiraz':'Onay Bekleniyor');
+    var fonay=(o.fabrikaOnay&&o.fabrikaOnay.by)?('Onaylandı ('+o.fabrikaOnay.by+')'):'Onay Bekliyor';
     var row=[o.no||'',fmtDate(o.date),o.teslimTarihi?fmtDate(o.teslimTarihi):'',o.customer||'',o.firma||'',kom?kom.name:'',prods,(o.lines||[]).length];
     if(showP)row.push(orderTotal(o));
-    row.push(o.kargo||'',onay,statusLabel(o.status));
+    row.push(o.kargo||'',onay,fonay,statusLabel(o.status));
     os.push(row);
   });
-  var wo=XLSX.utils.aoa_to_sheet(os);wo['!cols']=[{wch:7},{wch:13},{wch:13},{wch:24},{wch:7},{wch:18},{wch:30},{wch:7}].concat(showP?[{wch:12}]:[]).concat([{wch:12},{wch:15},{wch:12}]);
+  var wo=XLSX.utils.aoa_to_sheet(os);wo['!cols']=[{wch:7},{wch:13},{wch:13},{wch:24},{wch:7},{wch:18},{wch:30},{wch:7}].concat(showP?[{wch:12}]:[]).concat([{wch:12},{wch:15},{wch:18},{wch:12}]);
   XLSX.utils.book_append_sheet(wb,wo,'Siparişler');
   XLSX.writeFile(wb,'ROTA YEM Kayitlar '+todayISO()+'.xlsx');
   toast('Excel indiriliyor ('+(DB.customers||[]).length+' müşteri, '+(DB.komisyoncular||[]).length+' bayi/danışman, '+(DB.orders||[]).length+' sipariş)');
