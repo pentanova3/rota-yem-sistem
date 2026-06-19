@@ -1,0 +1,13 @@
+{
+  "name": "rota-functions",
+  "description": "Rota SMI — Telegram sipariş onay webhook'u",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.1"
+  }
+}
