@@ -1331,24 +1331,24 @@ function tariffPDF(id){
 }
 // ============ STOCK ============
 const STOK_WARN_SVG='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
-function stokKalan(code){const s=(DB.stock||{})[code]||{};return (+s.stok||0)+(+s.uretim||0)-(+s.cikis||0)}
+function stokKalan(code){const s=(DB.stock||{})[code]||{};return (+s.stok||0)+(+s.uretim||0)-(+s.cikis||0)-(+s.fire||0)}
 function renderStock(c,tb){
   DB.stock=DB.stock||{};
   if(canEdit())tb.innerHTML=`<button class="btn btn-gray btn-sm" onclick="stokDevret()" title="Kalan stoğu ertesi günün açılışına taşı, üretim/çıkışı sıfırla">↻ Günü Kapat (Devret)</button>`;
   const lastDate=DB.products.map(p=>(DB.stock[p.code]||{}).date).filter(Boolean).sort().reverse()[0];
   const rows=DB.products.map(p=>{
     const s=DB.stock[p.code]||{};
-    const stok=+s.stok||0,uretim=+s.uretim||0,cikis=+s.cikis||0;
-    const kalan=stok+uretim-cikis;
+    const stok=+s.stok||0,uretim=+s.uretim||0,cikis=+s.cikis||0,fire=+s.fire||0;
+    const kalan=stok+uretim-cikis-fire;
     const warn=kalan>0&&kalan<20,neg=kalan<0;
     const kalanColor=neg?'color:#B91C1C':warn?'color:var(--red-700)':kalan===0?'color:var(--slate-400)':'';
-    const act=canEdit()?`<td class="num" style="white-space:nowrap"><button onclick="stokUretim('${esc(p.code)}')" style="border:1px solid #BBF7D0;background:#F0FDF4;color:#15803D;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">+ Üretim</button> <button onclick="stokCikis('${esc(p.code)}')" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">− Çıkış</button></td>`:'';
-    return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(stok)}</td><td class="num" style="${uretim?'color:#15803D':''}">${uretim?'+'+fmtN(uretim):'0'}</td><td class="num" style="${cikis?'color:#B91C1C':''}">${cikis?'−'+fmtN(cikis):'0'}</td><td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td>${act}</tr>`;
+    const act=canEdit()?`<td class="num" style="white-space:nowrap"><button onclick="stokUretim('${esc(p.code)}')" style="border:1px solid #BBF7D0;background:#F0FDF4;color:#15803D;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">+ Üretim</button> <button onclick="stokCikis('${esc(p.code)}')" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">− Çıkış</button> <button onclick="stokFire('${esc(p.code)}')" style="border:1px solid #FED7AA;background:#FFF7ED;color:#C2410C;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">− Fire Çıkış</button></td>`:'';
+    return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(stok)}</td><td class="num" style="${uretim?'color:#15803D':''}">${uretim?'+'+fmtN(uretim):'0'}</td><td class="num" style="${cikis?'color:#B91C1C':''}">${cikis?'−'+fmtN(cikis):'0'}</td><td class="num" style="${fire?'color:#C2410C':''}">${fire?'−'+fmtN(fire):'0'}</td><td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td>${act}</tr>`;
   }).join('');
-  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Kalan</th><th>Tarih</th>${canEdit()?'<th class="num">İşlem</th>':''}</tr></thead><tbody>${rows}</tbody></table></div></div>
-  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış.</b> Üretimi elle girersiniz; müşteri çıkışları stoğu düşürür (üretim olmasa bile). Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
+  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Fire Çıkış</th><th class="num">Kalan</th><th>Tarih</th>${canEdit()?'<th class="num">İşlem</th>':''}</tr></thead><tbody>${rows}</tbody></table></div></div>
+  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> Üretimi elle girersiniz; müşteri çıkışı ve fire çıkışı stoğu düşürür. Fire çıkışta sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
   const moves=(DB.stockMoves||[]).slice(0,15);
-  if(moves.length)h+=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Son Stok Hareketleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th class="num">Miktar</th><th>Kullanıcı</th></tr></thead><tbody>${moves.map(m=>`<tr><td style="font-size:11px;color:var(--slate-500)">${m.ts?fmtDate(m.ts.slice(0,10)):'—'}</td><td><b>${esc(m.code)}</b></td><td>${m.type==='uretim'?'<span style="color:#15803D;font-weight:600">Üretim</span>':m.type==='cikis'?'<span style="color:#B91C1C;font-weight:600">Çıkış</span>':'<span style="color:var(--slate-500)">Devret</span>'}</td><td class="num">${m.type==='cikis'?'−':m.type==='uretim'?'+':''}${fmtN(m.miktar)}</td><td style="font-size:11px;color:var(--slate-500)">${esc(m.user||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
+  if(moves.length)h+=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Son Stok Hareketleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th class="num">Miktar</th><th>Sebep / Not</th><th>Kullanıcı</th></tr></thead><tbody>${moves.map(m=>`<tr><td style="font-size:11px;color:var(--slate-500)">${m.ts?fmtDate(m.ts.slice(0,10)):'—'}</td><td><b>${esc(m.code)}</b></td><td>${m.type==='uretim'?'<span style="color:#15803D;font-weight:600">Üretim</span>':m.type==='cikis'?'<span style="color:#B91C1C;font-weight:600">Çıkış</span>':m.type==='fire'?'<span style="color:#C2410C;font-weight:600">Fire</span>':'<span style="color:var(--slate-500)">Devret</span>'}</td><td class="num">${m.type==='cikis'||m.type==='fire'?'−':m.type==='uretim'?'+':''}${fmtN(m.miktar)}</td><td style="font-size:11px;color:var(--slate-600)">${esc(m.not||'')}</td><td style="font-size:11px;color:var(--slate-500)">${esc(m.user||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
   c.innerHTML=h;
 }
 function stokMove(code,type,miktar,not){DB.stockMoves=DB.stockMoves||[];DB.stockMoves.unshift({ts:new Date().toISOString(),user:USER?USER.username:'?',code,type,miktar,not:not||''});if(DB.stockMoves.length>500)DB.stockMoves=DB.stockMoves.slice(0,500)}
@@ -1368,10 +1368,19 @@ function stokCikis(code){
   s.cikis=(+s.cikis||0)+out;s.date=todayISO();
   stokMove(code,'cikis',out);logAct('Stok çıkış: '+code+' −'+out);saveDB();toast(code+' çıkış −'+fmtN(out));render();
 }
+function stokFire(code){
+  const v=prompt('Fire çıkış — '+code+'\nFire miktarı (çuval):','');if(v==null)return;
+  const out=parseFloat(String(v).replace(',','.'))||0;if(!out){toast('Geçersiz miktar');return}
+  const sebep=prompt('Fire çıkış sebebi — '+code+' (zorunlu):','');if(sebep==null)return;
+  if(!sebep.trim()){toast('Fire sebebi gerekli');return}
+  DB.stock=DB.stock||{};const s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};
+  s.fire=(+s.fire||0)+out;s.date=todayISO();
+  stokMove(code,'fire',out,sebep.trim());logAct('Stok fire: '+code+' -'+out+' ('+sebep.trim()+')');saveDB();toast(code+' fire -'+fmtN(out));render();
+}
 function stokDevret(){
-  if(!confirm('Tüm ürünlerde kalan stok, açılış stoğuna devredilsin ve Üretim/Çıkış sıfırlansın mı?\n(Gün kapatma işlemi)'))return;
+  if(!confirm('Tüm ürünlerde kalan stok, açılış stoğuna devredilsin ve Üretim/Çıkış/Fire sıfırlansın mı?\n(Gün kapatma işlemi)'))return;
   DB.stock=DB.stock||{};
-  DB.products.forEach(p=>{const s=DB.stock[p.code]=DB.stock[p.code]||{stok:0,uretim:0,cikis:0};s.stok=(+s.stok||0)+(+s.uretim||0)-(+s.cikis||0);s.uretim=0;s.cikis=0;s.date=todayISO();});
+  DB.products.forEach(p=>{const s=DB.stock[p.code]=DB.stock[p.code]||{stok:0,uretim:0,cikis:0,fire:0};s.stok=(+s.stok||0)+(+s.uretim||0)-(+s.cikis||0)-(+s.fire||0);s.uretim=0;s.cikis=0;s.fire=0;s.date=todayISO();});
   stokMove('— TÜMÜ —','devret',0,'Gün kapatıldı');logAct('Stok devret (gün kapatıldı)');saveDB();toast('Devredildi · kalanlar açılış stoğuna taşındı');render();
 }
 // ============ REPORTS ============
