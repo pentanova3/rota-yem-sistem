@@ -949,7 +949,7 @@ function historyHTML(o){
 }
 function tgCfg(){return {token:(DB.meta&&DB.meta.tgToken)||'',chat:(DB.meta&&DB.meta.tgChat)||''};}
 function sendTelegram(text){var c=tgCfg();if(!c.token||!c.chat)return false;try{fetch('https://api.telegram.org/bot'+c.token+'/sendMessage?chat_id='+encodeURIComponent(c.chat)+'&text='+encodeURIComponent(text),{mode:'no-cors'});return true;}catch(e){return false;}}
-function sendTelegramItiraz(o){var c=tgCfg();if(!c.token||!c.chat)return false;var msg='⚠️ SİPARİŞ İTİRAZI\n\nSipariş: #'+(o.no||'')+'\nMüşteri: '+(o.customer||'')+'\nHata: '+(o.itirazSebep||'(belirtilmedi)')+'\nDurum: '+statusLabel(o.status);return sendTelegram(msg);}
+function sendTelegramItiraz(o){var c=tgCfg();if(!c.token||!c.chat)return false;var ph=(custById(o.customerId)||{}).phone||'—';var msg='⚠️ MÜŞTERİ HATA BİLDİRDİ!\n\n🧾 Sipariş: #'+(o.no||'')+'\n👤 Müşteri: '+(o.customer||'—')+'\n📞 Telefon: '+ph+'\n🧑‍💼 Sipariş alan: '+(o.alan||'—')+'\n📅 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—')+'\n\n📝 Müşteri Notu:\n'+(o.itirazSebep||'(belirtilmedi)')+'\n\n❗ Lütfen müşteri ile iletişime geçip bilgileri düzeltin.';return sendTelegram(msg);}
 function saveTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');DB.meta.tgToken=(t?t.value.trim():'');DB.meta.tgChat=(c?c.value.trim():'');logAct('Telegram ayarı güncellendi');saveDB();toast('Telegram ayarı kaydedildi');}
 function testTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');if(t)DB.meta.tgToken=t.value.trim();if(c)DB.meta.tgChat=c.value.trim();if(!DB.meta.tgToken||!DB.meta.tgChat){toast('Önce token ve chat ID girin');return;}sendTelegram('✅ Rota Sipariş — Telegram bildirim testi. Bağlantı çalışıyor.');toast('Test mesajı gönderildi — Telegram\'ı kontrol edin');}
 function waOnayModal(){
@@ -1808,10 +1808,9 @@ window.__applyOnaylar=function(map){
       if(!same&&o.musteriOnay!=='onaylandi'){o.musteriOnay='itiraz';o.musteriOnayTs=ts;o.itirazSebep=rec.sebep||'';o.itirazNotified=false;pushHist(o,'itiraz','Müşteri İTİRAZ etti'+(rec.sebep?': '+rec.sebep:''));chg++;}
     }
   });
-  if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+')');saveDB();}catch(e){}}
-  // Bildirilmemiş itirazları Telegram'a gönder (her çağrıda)
-  try{var sent=0;(DB.orders||[]).forEach(function(o){if(o.musteriOnay==='itiraz'&&!o.itirazNotified){if(sendTelegramItiraz(o)){o.itirazNotified=true;sent++;}}});if(sent)saveDB();}catch(e){}
-  if(chg){try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
+  // Not: İtiraz Telegram bildirimi müşterinin ONAY SAYFASINDAN tek sefer gönderilir.
+  // Birden fazla cihaz/sekmede açık olunca çift mesaj olmaması için admin tarafında otomatik gönderim YAPILMAZ.
+  if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+')');saveDB();}catch(e){}try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
 };
 </script>
 <!-- Firebase senkron katmanı (cihazlar arası veri) -->

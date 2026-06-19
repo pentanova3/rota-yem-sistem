@@ -88,7 +88,22 @@ function stateView(ic,bg,col,title,msg){
   APP.innerHTML=`<div class="card"><div class="state"><div class="ic" style="background:${bg};color:${col}">${ic}</div><h2>${esc(title)}</h2><p>${msg}</p></div></div>`;
 }
 
-let ORDER=null, ONAYREF=doc(db,'apps','onaylar');
+let ORDER=null, META={}, CUSTOMERS=[], ONAYREF=doc(db,'apps','onaylar');
+const AYTR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+const GUNTR=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+function tdLong(iso){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||''));if(!m)return '—';const dt=new Date(+m[1],+m[2]-1,+m[3]);return (+m[3])+' '+AYTR[+m[2]-1]+' '+m[1]+' '+GUNTR[dt.getDay()];}
+function tgSend(text){const tk=(META&&META.tgToken)||'',ch=(META&&META.tgChat)||'';if(!tk||!ch)return;try{fetch('https://api.telegram.org/bot'+tk+'/sendMessage?chat_id='+encodeURIComponent(ch)+'&text='+encodeURIComponent(text),{mode:'no-cors'});}catch(e){}}
+function itirazMsg(o,sebep){
+  const cust=CUSTOMERS.find(c=>c.id===o.customerId)||{};
+  return '⚠️ MÜŞTERİ HATA BİLDİRDİ!\n\n'+
+    '🧾 Sipariş: #'+(o.no||'')+'\n'+
+    '👤 Müşteri: '+(o.customer||'—')+'\n'+
+    '📞 Telefon: '+(cust.phone||'—')+'\n'+
+    '🧑‍💼 Sipariş alan: '+(o.alan||'—')+'\n'+
+    '📅 Teslim: '+(o.teslimTarihi?tdLong(o.teslimTarihi):'—')+'\n\n'+
+    '📝 Müşteri Notu:\n'+(sebep||'(belirtilmedi)')+'\n\n'+
+    '❗ Lütfen müşteri ile iletişime geçip bilgileri düzeltin.';
+}
 
 async function load(){
   const t=qs('t');
@@ -98,6 +113,7 @@ async function load(){
   catch(e){stateView('⚠','#fee2e2','#b91c1c','Bağlantı Hatası','Sipariş bilgilerine ulaşılamadı. Lütfen birkaç dakika sonra tekrar deneyin.');return;}
   let DBO=null;
   try{DBO=JSON.parse((data&&data['rota_so_v1'])||'null');}catch(e){}
+  META=(DBO&&DBO.meta)||{}; CUSTOMERS=(DBO&&DBO.customers)||[];
   const o=DBO&&Array.isArray(DBO.orders)?DBO.orders.find(x=>x.onayToken===t):null;
   if(!o){stateView('?','#fef3c7','#b45309','Sipariş Bulunamadı','Bu bağlantıya ait sipariş bulunamadı. Bağlantı yenilenmiş olabilir; lütfen bizimle iletişime geçin.');return;}
   ORDER=o;
@@ -178,6 +194,7 @@ async function submit(kind, sebep){
   }catch(e){
     stateView('⚠','#fee2e2','#b91c1c','Gönderilemedi','Onayınız kaydedilemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.');return;
   }
+  if(kind==='itiraz'){try{tgSend(itirazMsg(o,sebep));}catch(e){}}
   if(kind==='onaylandi')
     stateView('✓','#dcfce7','#16a34a','Teşekkürler!','Siparişiniz onaylandı ve Rota SMI ekibine iletildi. Hazırlık süreci başlatılacaktır.');
   else
