@@ -216,6 +216,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 @media(max-width:980px){.app.on{grid-template-columns:1fr}.sidebar{position:fixed;left:-260px;transition:left .25s;z-index:300;width:250px}.sidebar.open{left:0}.report-grid{grid-template-columns:1fr}.report-grid .full{grid-column:span 1}.fgrid,.fgrid.c3{grid-template-columns:1fr}.mob-menu{display:inline-flex!important}}
 .mob-menu{display:none}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -972,8 +973,54 @@ function custTableHTML(){
   return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th>Şehir/Konum</th><th>Firma</th><th>Telefon</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b></td><td style="font-size:11.5px"><span onclick="ilEdit(event,this,'${x.id}')" title="İl seç / düzelt" style="cursor:pointer;border-bottom:1px dashed var(--slate-300);color:${x.city?(ilMatch(x.city)?'var(--slate-600)':'#B45309'):'var(--slate-300)'}">${esc(x.city||'— il seç —')} ▾</span></td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td>${x.phone?esc(x.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${x.orderCount||0}</td><td><button class="btn-ic" onclick="openCust('${x.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshCust(){const el=document.getElementById('custCard');if(el)el.innerHTML=custTableHTML()}
+function exportExcel(){
+  if(typeof XLSX==='undefined'){toast('Excel kütüphanesi yükleniyor, birkaç saniye sonra tekrar deneyin');return;}
+  var wb=XLSX.utils.book_new();
+  var tdIsk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
+  function komName(id){var k=id?komById(id):null;return k?k.name:'';}
+  var assign={};(DB.customers||[]).forEach(function(c){if(c.bayiId)assign[c.bayiId]=(assign[c.bayiId]||0)+1;if(c.danismanId)assign[c.danismanId]=(assign[c.danismanId]||0)+1;});
+  // 1) Müşteriler
+  var m=[['Müşteri','İl / Şehir','Firma','Telefon','Tip','Sipariş Sayısı','Bayi','Teknik Danışman','Not']];
+  (DB.customers||[]).slice().sort(function(a,b){return (b.orderCount||0)-(a.orderCount||0)||a.name.localeCompare(b.name,'tr')}).forEach(function(c){
+    m.push([c.name||'',c.city||'',c.firma||'',c.phone||'',c.tip||'',c.orderCount||0,komName(c.bayiId),komName(c.danismanId),c.note||'']);
+  });
+  var wm=XLSX.utils.aoa_to_sheet(m);wm['!cols']=[{wch:26},{wch:14},{wch:8},{wch:16},{wch:10},{wch:13},{wch:18},{wch:18},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,wm,'Müşteriler');
+  // 2) Bayiler / 3) Teknik Danışmanlar
+  function komSheet(type,title){
+    var rows=[['Ad','Şehir','İskonto %','Telefon','Atanan Müşteri','Durum','Not']];
+    (DB.komisyoncular||[]).filter(function(k){return k.type===type}).sort(function(a,b){return a.name.localeCompare(b.name,'tr')}).forEach(function(k){
+      var isk=type==='danisman'?tdIsk:(k.rate||0);
+      rows.push([k.name||'',k.city||'',isk,k.phone||'',assign[k.id]||0,k.active!==false?'Aktif':'Pasif',k.note||'']);
+    });
+    var ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:24},{wch:14},{wch:10},{wch:16},{wch:14},{wch:9},{wch:28}];
+    XLSX.utils.book_append_sheet(wb,ws,title);
+  }
+  komSheet('bayi','Bayiler');komSheet('danisman','Teknik Danışmanlar');
+  // 4) Siparişler
+  var showP=canSeePrice();
+  var oh=['No','Sipariş Tarihi','Teslim Tarihi','Müşteri','Firma','Bayi / Danışman','Ürünler','Kalem'];
+  if(showP)oh.push('Toplam TL');
+  oh.push('Kargo','Müşteri Onayı','Durum');
+  var os=[oh];
+  (DB.orders||[]).slice().sort(function(a,b){return (b.no||0)-(a.no||0)}).forEach(function(o){
+    var kom=o.komisyoncuId?komById(o.komisyoncuId):null;
+    var prods=(o.lines||[]).map(function(l){return l.code+' ('+fmtN(l.qty)+')'}).join(', ');
+    var onay=o.musteriOnay==='onaylandi'?'Onaylandı':(o.musteriOnay==='itiraz'?'İtiraz':'Onay Bekleniyor');
+    var row=[o.no||'',fmtDate(o.date),o.teslimTarihi?fmtDate(o.teslimTarihi):'',o.customer||'',o.firma||'',kom?kom.name:'',prods,(o.lines||[]).length];
+    if(showP)row.push(orderTotal(o));
+    row.push(o.kargo||'',onay,statusLabel(o.status));
+    os.push(row);
+  });
+  var wo=XLSX.utils.aoa_to_sheet(os);wo['!cols']=[{wch:7},{wch:13},{wch:13},{wch:24},{wch:7},{wch:18},{wch:30},{wch:7}].concat(showP?[{wch:12}]:[]).concat([{wch:12},{wch:15},{wch:12}]);
+  XLSX.utils.book_append_sheet(wb,wo,'Siparişler');
+  XLSX.writeFile(wb,'ROTA YEM Kayitlar '+todayISO()+'.xlsx');
+  toast('Excel indiriliyor ('+(DB.customers||[]).length+' müşteri, '+(DB.komisyoncular||[]).length+' bayi/danışman, '+(DB.orders||[]).length+' sipariş)');
+}
 function renderCustomers(c,tb){
-  if(canEdit())tb.innerHTML=`<button class="btn btn-gray btn-sm" onclick="ilDuzelt()" title="İl/ilçe adı yazılanları il adına çevir, tanınmayanları temizle">🪄 Şehirleri Düzelt</button> <button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>`;
+  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">⬇ Excel İndir</button>';
+  if(canEdit())tb.innerHTML=_exp+' <button class="btn btn-gray btn-sm" onclick="ilDuzelt()" title="İl/ilçe adı yazılanları il adına çevir, tanınmayanları temizle">🪄 Şehirleri Düzelt</button> <button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>';
+  else tb.innerHTML=_exp;
   let h=`<div class="filters"><input class="fsearch" placeholder="Müşteri / şehir ara..." value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
   <div class="card" id="custCard">${custTableHTML()}</div>`;
   c.innerHTML=h;
@@ -1020,7 +1067,9 @@ function komTableHTML(){
 }
 function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
 function renderKomisyoncular(c,tb){
-  if(isAdmin())tb.innerHTML=`<button class="btn btn-pri" onclick="openKom('bayi')">+ Bayi</button> <button class="btn btn-pri" onclick="openKom('danisman')" style="background:var(--purple)">+ Danışman</button>`;
+  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">⬇ Excel İndir</button>';
+  if(isAdmin())tb.innerHTML=_exp+' <button class="btn btn-pri" onclick="openKom(\'bayi\')">+ Bayi</button> <button class="btn btn-pri" onclick="openKom(\'danisman\')" style="background:var(--purple)">+ Danışman</button>';
+  else tb.innerHTML=_exp;
   const bayiCount=(DB.komisyoncular||[]).filter(k=>k.type==='bayi').length;
   const danCount=(DB.komisyoncular||[]).filter(k=>k.type==='danisman').length;
   let h=`<div class="filters">
