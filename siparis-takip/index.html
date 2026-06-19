@@ -712,7 +712,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:false,nakliyeMusteri:false,hareketTarihi:'',hareketSaati:'',not:'',komisyoncuId:'',komisyonRate:null,musteriOnay:'',musteriOnayTs:'',yoneticiOnay:false,onayToken:''};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:false,nakliyeMusteri:false,hareketTarihi:'',hareketSaati:'',not:'',komisyoncuId:'',komisyonRate:null,musteriOnay:'',musteriOnayTs:'',yoneticiOnay:false,onayToken:'',fabrikaOnay:null};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -765,11 +765,13 @@ function renderOrderModal(){
       </div>
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
       <div class="fld"><label>Müşteriye Onay Notu <span style="font-weight:600;font-size:10.5px;color:var(--amber-700);text-transform:none;letter-spacing:0">— eksik/değişiklik varsa yaz, müşteri WhatsApp linkinde ayrıca onaylar</span></label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.onayNot=this.value" placeholder="Örn: 30 çuval yerine 20 çuval gönderilecektir.">${esc(o.onayNot||'')}</textarea></div>
+      ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">🏭 Fabrika Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">🏭 Fabrika onayı bekleniyor — Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
       ${o.id?historyHTML(o):''}
     </div>
     <div class="modal-ft">
       <div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna fabrika onay mesajı (butonlu) gönder">🏭 Fabrika Onayı İste</button>`:''}
         ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">📤 Onay Linki Gönder</button>`:''}
         ${o.id?`<button class="btn" style="background:#1D4ED8;color:#fff" onclick="waOrderModal()" title="Duruma göre sevk/teslimat bilgilendirme mesajı"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
@@ -913,7 +915,7 @@ function saveOrder(){
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
   if(o.komisyoncuId){const kom=komById(o.komisyoncuId);if(kom&&o.komisyonRate==null)o.komisyonRate=+kom.rate||(kom.type==='danisman'?((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT):0);const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonRate=null;o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);DB.orders[idx]=o;logAct('Sipariş güncellendi: '+o.customer);}
-  else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);}
+  else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();ensureOnayToken(o);DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);pushHist(o,'gonderildi','Sipariş alındı — fabrika onayı için Telegram gönderildi');if(sendTelegramSiparis(o))o.tgSiparisGonderildi=true;}
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim');
   if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();if(!o.hareketTarihi)o.hareketTarihi=todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
   if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
@@ -980,20 +982,31 @@ function musteriOnayCell(o){
   return '<span class="badge" style="background:#FEF3C7;color:#92400E">Onay Bekleniyor</span>'+btn+extra;
 }
 function pushHist(o,type,text){o.history=o.history||[];o.history.unshift({ts:new Date().toISOString(),type:type,text:text,by:(typeof USER!=='undefined'&&USER?USER.username:'sistem')});if(o.history.length>120)o.history=o.history.slice(0,120);}
-function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':t==='sevk'?'🚚':t==='teslim'?'📦':'•';}
+function histIcon(t){return t==='gonderildi'?'📤':t==='onay'?'✅':t==='itiraz'?'⚠️':t==='yonetici'?'🛠️':t==='sevk'?'🚚':t==='teslim'?'📦':t==='fabrika'?'🏭':'•';}
 function historyHTML(o){
   if(!o.history||!o.history.length)return '';
   var rows=o.history.map(function(e){
-    var col=(e.type==='onay'||e.type==='teslim')?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':e.type==='sevk'?'#1D4ED8':'var(--slate-600)';
+    var col=(e.type==='onay'||e.type==='teslim')?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':e.type==='sevk'?'#1D4ED8':e.type==='fabrika'?'#0E7490':'var(--slate-600)';
     return '<div style="display:flex;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slate-100)"><span style="font-size:13px;flex:none;line-height:1.3">'+histIcon(e.type)+'</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:'+col+';font-weight:600;word-break:break-word">'+esc(e.text)+'</div><div style="font-size:10px;color:var(--slate-400)">'+fmtDateTime(e.ts)+(e.by?' · '+esc(e.by):'')+'</div></div></div>';
   }).join('');
   return '<div class="sub-hd">Sipariş Geçmişi / Olay Akışı</div><div style="max-height:230px;overflow-y:auto;border:1px solid var(--slate-200);border-radius:8px;padding:2px 12px">'+rows+'</div>';
 }
 function tgCfg(){return {token:(DB.meta&&DB.meta.tgToken)||'',chat:(DB.meta&&DB.meta.tgChat)||''};}
 function sendTelegram(text){var c=tgCfg();if(!c.token||!c.chat)return false;try{fetch('https://api.telegram.org/bot'+c.token+'/sendMessage?chat_id='+encodeURIComponent(c.chat)+'&text='+encodeURIComponent(text),{mode:'no-cors'});return true;}catch(e){return false;}}
+function sendTelegramBtn(text,btnText,btnUrl){var c=tgCfg();if(!c.token||!c.chat)return false;try{var rm=JSON.stringify({inline_keyboard:[[{text:btnText,url:btnUrl}]]});fetch('https://api.telegram.org/bot'+c.token+'/sendMessage?chat_id='+encodeURIComponent(c.chat)+'&text='+encodeURIComponent(text)+'&reply_markup='+encodeURIComponent(rm),{mode:'no-cors'});return true;}catch(e){return false;}}
+function fabrikaLink(o){return 'https://rota-yem.web.app/fabrika-onay/?t='+encodeURIComponent(o.onayToken||'');}
+function sendTelegramSiparis(o){var c=tgCfg();if(!c.token||!c.chat)return false;var ph=(custById(o.customerId)||{}).phone||'\u2014';var lines=(o.lines||[]).map(function(l){return '\u2022 '+l.code+': '+fmtN(l.qty)+' \u00e7uval'}).join('\n');var msg='\ud83c\udd95 YEN\u0130 S\u0130PAR\u0130\u015e \u2014 FABR\u0130KA ONAYI BEKL\u0130YOR\n\n\ud83e\uddfe Sipari\u015f: #'+(o.no||'')+'\n\ud83d\udc64 M\u00fc\u015fteri: '+(o.customer||'\u2014')+'\n\ud83d\udcde Telefon: '+ph+'\n\ud83e\uddd1\u200d\ud83d\udcbc Sipari\u015f alan: '+(o.alan||'\u2014')+'\n\ud83d\udcc5 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'\u2014')+'\n\n\u00dcr\u00fcnler:\n'+lines+'\n\n\u00dcretime ba\u015flamak i\u00e7in onaylay\u0131n \ud83d\udc47';return sendTelegramBtn(msg,'\u2705 Sipari\u015fi Onayla',fabrikaLink(o));}
 function sendTelegramItiraz(o){var c=tgCfg();if(!c.token||!c.chat)return false;var ph=(custById(o.customerId)||{}).phone||'—';var msg='⚠️ MÜŞTERİ HATA BİLDİRDİ!\n\n🧾 Sipariş: #'+(o.no||'')+'\n👤 Müşteri: '+(o.customer||'—')+'\n📞 Telefon: '+ph+'\n🧑‍💼 Sipariş alan: '+(o.alan||'—')+'\n📅 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—')+'\n\n📝 Müşteri Notu:\n'+(o.itirazSebep||'(belirtilmedi)')+'\n\n❗ Lütfen müşteri ile iletişime geçip bilgileri düzeltin.';return sendTelegram(msg);}
 function saveTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');DB.meta.tgToken=(t?t.value.trim():'');DB.meta.tgChat=(c?c.value.trim():'');logAct('Telegram ayarı güncellendi');saveDB();toast('Telegram ayarı kaydedildi');}
 function testTelegram(){var t=document.getElementById('tgT'),c=document.getElementById('tgC');if(t)DB.meta.tgToken=t.value.trim();if(c)DB.meta.tgChat=c.value.trim();if(!DB.meta.tgToken||!DB.meta.tgChat){toast('Önce token ve chat ID girin');return;}sendTelegram('✅ Rota Sipariş — Telegram bildirim testi. Bağlantı çalışıyor.');toast('Test mesajı gönderildi — Telegram\'ı kontrol edin');}
+function tgSiparisModal(){
+  if(!editOrder||!editOrder.id){toast('Önce siparişi kaydedin');return;}
+  var o=DB.orders.find(function(x){return x.id===editOrder.id});if(!o)return;
+  if(!tgCfg().token||!tgCfg().chat){toast('Önce Ayarlar > Telegram bilgilerini girin');return;}
+  ensureOnayToken(o);
+  if(sendTelegramSiparis(o)){o.tgSiparisGonderildi=true;pushHist(o,'gonderildi','Fabrika onay mesajı Telegram\'a gönderildi');saveDB();toast('Telegram\'a fabrika onay mesajı gönderildi');}
+  else{toast('Gönderilemedi — Telegram ayarlarını kontrol edin');}
+}
 function waOnayModal(){
   if(!editOrder||!editOrder.id){toast('Önce siparişi kaydedin');return;}
   var o=DB.orders.find(function(x){return x.id===editOrder.id});if(!o)return;
@@ -1761,7 +1774,8 @@ function optsManagerHTML(){
     {key:'firma',title:'Firmalar',hint:'SMI, ROTA vb.'},
     {key:'odeme',title:'Ödeme / Vade Türleri',hint:'Peşin, 30 gün vade vb.'},
     {key:'kargo',title:'Kargo Tipleri',hint:'Kendi aracı, nakliye vb.'},
-    {key:'durum',title:'Sipariş Durumları',hint:'Çekirdek durumlar silinemez',isDurum:true}
+    {key:'durum',title:'Sipariş Durumları',hint:'Çekirdek durumlar silinemez',isDurum:true},
+    {key:'fabrikaCalisan',title:'Fabrika Onay Kişileri',hint:'Telegram onayında "kim onayladı" için isimler'}
   ];
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">`+blocks.map(b=>{
     const list=b.isDurum?optDurum():(DB.opts[b.key]||[]);
@@ -1844,7 +1858,7 @@ window.__applyOnaylar=function(map){
     var o=DB.orders.find(function(x){return x.id===oid});if(!o)return;
     var ts=rec.ts||new Date().toISOString();
     if(rec.onay==='onaylandi'){
-      if(o.musteriOnay!=='onaylandi'){o.musteriOnay='onaylandi';o.musteriOnayTs=ts;o.musteriOnayAd=rec.ad||'';o.itirazSebep='';o.itirazNotified=false;if(o.status==='beklemede')o.status='onay';pushHist(o,'onay','Müşteri siparişi ONAYLADI'+(rec.notOkundu?' (notu okudu)':''));chg++;}
+      if(o.musteriOnay!=='onaylandi'){o.musteriOnay='onaylandi';o.musteriOnayTs=ts;o.musteriOnayAd=rec.ad||'';o.itirazSebep='';o.itirazNotified=false;pushHist(o,'onay','Müşteri siparişi ONAYLADI'+(rec.notOkundu?' (notu okudu)':''));chg++;}
     }else if(rec.onay==='itiraz'){
       var same=(o.musteriOnay==='itiraz'&&(o.itirazSebep||'')===(rec.sebep||''));
       if(!same&&o.musteriOnay!=='onaylandi'){o.musteriOnay='itiraz';o.musteriOnayTs=ts;o.itirazSebep=rec.sebep||'';o.itirazNotified=false;pushHist(o,'itiraz','Müşteri İTİRAZ etti'+(rec.sebep?': '+rec.sebep:''));chg++;}
@@ -1853,6 +1867,21 @@ window.__applyOnaylar=function(map){
   // Not: İtiraz Telegram bildirimi müşterinin ONAY SAYFASINDAN tek sefer gönderilir.
   // Birden fazla cihaz/sekmede açık olunca çift mesaj olmaması için admin tarafında otomatik gönderim YAPILMAZ.
   if(chg){try{logAct('Müşteri onayı güncellendi ('+chg+')');saveDB();}catch(e){}try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişte müşteri onayı güncellendi');}catch(e){}}
+};
+window.__applyFabrika=function(map){
+  if(!map||typeof DB==='undefined'||!DB||!Array.isArray(DB.orders))return;
+  var chg=0;
+  Object.keys(map).forEach(function(oid){
+    var rec=map[oid];if(!rec||!rec.by)return;
+    var o=DB.orders.find(function(x){return x.id===oid});if(!o)return;
+    if(!o.fabrikaOnay||o.fabrikaOnay.ts!==rec.ts){
+      o.fabrikaOnay={by:rec.by,ts:rec.ts||new Date().toISOString()};
+      if(o.status==='beklemede')o.status='onay';
+      pushHist(o,'fabrika','Fabrika onayı: '+rec.by);
+      chg++;
+    }
+  });
+  if(chg){try{logAct('Fabrika onayı güncellendi ('+chg+')');saveDB();}catch(e){}try{if(typeof render==='function')render();}catch(e){}try{if(typeof toast==='function')toast(chg+' siparişe fabrika onayı geldi');}catch(e){}}
 };
 </script>
 <!-- Firebase senkron katmanı (cihazlar arası veri) -->
@@ -1884,6 +1913,10 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   try{const onayRef=doc(fdb,"apps","onaylar");
     try{const os=await getDoc(onayRef);if(os.exists()&&window.__applyOnaylar)window.__applyOnaylar(os.data()||{});}catch(e){}
     onSnapshot(onayRef,(s)=>{try{if(s.exists()&&window.__applyOnaylar)window.__applyOnaylar(s.data()||{});}catch(e){}});
+  }catch(e){}
+  try{const fabRef=doc(fdb,"apps","fabrikaonay");
+    try{const fs=await getDoc(fabRef);if(fs.exists()&&window.__applyFabrika)window.__applyFabrika(fs.data()||{});}catch(e){}
+    onSnapshot(fabRef,(s)=>{try{if(s.exists()&&window.__applyFabrika)window.__applyFabrika(s.data()||{});}catch(e){}});
   }catch(e){}
 })();
 </script>

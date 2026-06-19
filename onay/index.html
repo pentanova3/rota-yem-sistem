@@ -104,6 +104,15 @@ function itirazMsg(o,sebep){
     '📝 Müşteri Notu:\n'+(sebep||'(belirtilmedi)')+'\n\n'+
     '❗ Lütfen müşteri ile iletişime geçip bilgileri düzeltin.';
 }
+function onayMsg(o){
+  const cust=CUSTOMERS.find(c=>c.id===o.customerId)||{};
+  return '✅ MÜŞTERİ ONAYLADI\n\n'+
+    '🧾 Sipariş: #'+(o.no||'')+'\n'+
+    '👤 Müşteri: '+(o.customer||'—')+'\n'+
+    '📞 Telefon: '+(cust.phone||'—')+'\n'+
+    '📅 Teslim: '+(o.teslimTarihi?tdLong(o.teslimTarihi):'—')+'\n\n'+
+    'Müşteri siparişi onayladı. (Üretim için ayrıca fabrika onayı gerekir.)';
+}
 
 async function load(){
   const t=qs('t');
@@ -195,6 +204,7 @@ async function submit(kind, sebep){
     stateView('⚠','#fee2e2','#b91c1c','Gönderilemedi','Onayınız kaydedilemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.');return;
   }
   if(kind==='itiraz'){try{tgSend(itirazMsg(o,sebep));}catch(e){}}
+  if(kind==='onaylandi'){try{tgSend(onayMsg(o));}catch(e){}}
   if(kind==='onaylandi')
     stateView('✓','#dcfce7','#16a34a','Teşekkürler!','Siparişiniz onaylandı ve Rota SMI ekibine iletildi. Hazırlık süreci başlatılacaktır.');
   else
