@@ -189,6 +189,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .day-ord:hover{filter:brightness(.96)}
 .day-ord .do-name{display:block;font-size:11px;font-weight:600;color:var(--slate-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .day-ord .do-meta{display:block;font-size:9.5px;color:var(--slate-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-ord .do-disc{display:block;font-size:9.5px;font-weight:600;color:#15803D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .day-ord.st-dot-beklemede{border-left-color:#94A3B8;background:#F1F5F9}
 .day-ord.st-dot-onay{border-left-color:#2878C8;background:#EAF2FB}
 .day-ord.st-dot-hazir{border-left-color:#F59E0B;background:#FEF6E7}
@@ -478,6 +479,7 @@ function isoFromTR(t){const m=/^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(t||''));
 function publishSnapshot(dateISO,note){const id=uid('pl');priceLists().forEach(p=>p.active=false);priceLists().push({id,date:dateISO||todayISO(),note:note||'',createdAt:new Date().toISOString(),active:true,items:snapshotProducts()});DB.meta.activePriceListId=id;DB.meta.priceDate=fmtDate(dateISO||todayISO());return id;}
 function ensurePriceLists(){DB.priceLists=DB.priceLists||[];if(!DB.priceLists.length){const id=uid('pl');DB.priceLists.push({id,date:isoFromTR(DB.meta.priceDate)||todayISO(),note:'İlk fiyat listesi',createdAt:new Date().toISOString(),active:true,items:snapshotProducts()});DB.meta.activePriceListId=id;}if(!DB.meta.activePriceListId){const a=DB.priceLists.find(p=>p.active)||DB.priceLists[DB.priceLists.length-1];if(a)DB.meta.activePriceListId=a.id;}}
 function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0}return o.total||0}
+function orderIsk(o){try{const r=orderKomisyon(o);if(r&&r.type==='bayi'&&r.rate>0){const g=orderTotal(o);return {rate:r.rate,net:g-r.tutar};}}catch(e){}return null;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 function phoneClean(p){return String(p||'').replace(/[^0-9]/g,'').replace(/^0/,'90')}
 // ============ AUTH ============
@@ -600,7 +602,7 @@ function renderPanel(c,tb){
     const dayO=weekOrders.filter(o=>kanbanDate(o)===ds).sort((a,b)=>(a.status==='beklemede'?-1:1));
     const dayTotal=dayO.reduce((s,o)=>s+orderTotal(o),0);
     const isToday=ds===todayISO();
-    const ordList=dayO.length?dayO.map(o=>`<div class="day-ord st-dot-${o.status}" onclick="openOrder('${o.id}')" title="${esc(o.customer)} · ${statusLabel(o.status)}"><span class="do-name">${esc(o.customer)}</span><span class="do-meta">${o.firma?o.firma+' · ':''}${(o.lines||[]).length} kalem${canSeePrice()&&orderTotal(o)?' · '+fmtTL(orderTotal(o)):''}</span></div>`).join(''):`<div class="day-empty">—</div>`;
+    const ordList=dayO.length?dayO.map(o=>`<div class="day-ord st-dot-${o.status}" onclick="openOrder('${o.id}')" title="${esc(o.customer)} · ${statusLabel(o.status)}"><span class="do-name">${esc(o.customer)}</span><span class="do-meta">${o.firma?o.firma+' · ':''}${(o.lines||[]).length} kalem${canSeePrice()&&orderTotal(o)?' · '+fmtTL(orderTotal(o)):''}</span>${(function(){const isk=canSeePrice()?orderIsk(o):null;return isk?'<span class="do-disc">İskontolu: '+fmtTL(isk.net)+' · −%'+fmtN(isk.rate)+'</span>':'';})()}</div>`).join(''):`<div class="day-empty">—</div>`;
     h+=`<div class="day-box${isToday?' today':''}">
       <div class="day-hd"><span class="day-name">${GUN_TR[i]}</span><span class="day-date">${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}</span></div>
       <div class="day-stat"><span class="day-cnt">${dayO.length}</span><span class="day-cnt-lbl">sipariş</span>${canSeePrice()&&dayTotal?`<div class="day-tot">${fmtTL(dayTotal)}</div>`:''}</div>
