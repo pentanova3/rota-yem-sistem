@@ -153,7 +153,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 function fmtDate(s){if(!s)return '—';const p=String(s).split('-');if(p.length!==3)return s;return p[2]+'.'+p[1]+'.'+p[0]}
 function safeLink(u){u=String(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;return u}
 function trUp(s){return String(s||'').replace(/i/g,'İ').replace(/ı/g,'I').toUpperCase()}
-function loadSaha(){try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):{sozlesmeler:[]};}catch(e){DB={sozlesmeler:[]};}DB.sozlesmeler=DB.sozlesmeler||[];}
+function loadSaha(){try{const s=localStorage.getItem(LSKEY);DB=s?JSON.parse(s):{sozlesmeler:[]};}catch(e){DB={sozlesmeler:[]};}DB.sozlesmeler=DB.sozlesmeler||[];DB.komisyoncular=DB.komisyoncular||[];BAYILER=DB.komisyoncular;}
 function saveSaha(){localStorage.setItem(LSKEY,JSON.stringify(DB));}
 
 // ---- şehir -> plaka eşleme ----
@@ -186,7 +186,7 @@ function setTab(t){
   render();
 }
 function render(){
-  if((BAYILER===null||MUSTERILER===null)&&tab!=='sozlesme'){document.getElementById('content').innerHTML='<div class="empty">Sipariş Takip\'ten veriler yükleniyor…</div>';return;}
+  if(MUSTERILER===null&&(tab==='musteri'||tab==='firsat')){document.getElementById('content').innerHTML='<div class="empty">Sipariş Takip\'ten müşteri verileri yükleniyor…</div>';return;}
   if(tab==='harita')return renderHarita();
   if(tab==='musteri')return renderMusteriHarita();
   if(tab==='firsat')return renderFirsat();
@@ -342,10 +342,10 @@ function renderFirsat(){
 function renderListe(){
   const arr=[...(BAYILER||[])].sort((a,b)=>(a.type===b.type?0:a.type==='bayi'?-1:1)||0);
   const bayi=arr.filter(k=>k.type==='bayi'),dan=arr.filter(k=>k.type==='danisman');
-  let h=`<div class="lock-note"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Bu liste <b>Sipariş Takip → Bayi &amp; Danışman</b> bölümünden otomatik gelir. Buradan düzenlenemez; değişiklik Sipariş Takip'ten yapılır ve anında buraya yansır.</div>`;
-  h+=`<div class="card"><div class="card-hd"><h3>Bayi &amp; Danışman Listesi</h3><span class="hint">${bayi.length} bayi · ${dan.length} danışman</span></div>
-    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th>Oran</th><th>Telefon</th><th>Durum</th></tr></thead><tbody>`;
-  if(!arr.length)h+=`<tr><td colspan="6" class="empty">Kayıt yok.</td></tr>`;
+  let h=`<div class="lock-note"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Bayi & danışmanlar <b>buradan</b> yönetilir. Eklediğin/değiştirdiğin kayıtlar Sipariş Takip'te otomatik görünür.</div>`;
+  h+=`<div class="card"><div class="card-hd"><h3>Bayi &amp; Danışman Listesi</h3><div style="display:flex;gap:8px;align-items:center"><span class="hint">${bayi.length} bayi · ${dan.length} danışman</span><button class="btn btn-pri btn-sm" onclick="openKom('bayi')">+ Bayi</button><button class="btn btn-sm" style="background:#7C3AED;color:#fff" onclick="openKom('danisman')">+ Danışman</button></div></div>
+    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th>Oran</th><th>Telefon</th><th>Durum</th><th></th></tr></thead><tbody>`;
+  if(!arr.length)h+=`<tr><td colspan="7" class="empty">Kayıt yok — + Bayi / + Danışman ile ekleyin.</td></tr>`;
   arr.forEach(k=>{h+=`<tr>
     <td><b>${esc(k.name)}</b></td>
     <td><span class="tag ${k.type==='bayi'?'tag-bayi':'tag-dan'}">${k.type==='bayi'?'BAYİ':'DANIŞMAN'}</span></td>
@@ -353,9 +353,59 @@ function renderListe(){
     <td>${k.rate?`<span class="rate">%${esc(k.rate)} iskonto</span>`:'<span style="color:var(--slate-400)">—</span>'}</td>
     <td>${esc(k.phone||'—')}</td>
     <td><span class="badge ${k.active!==false?'b-on':'b-off'}">${k.active!==false?'Aktif':'Pasif'}</span></td>
+    <td style="white-space:nowrap"><button class="btn btn-sm" onclick="openKom(null,'${k.id}')">Düzenle</button></td>
   </tr>`;});
   h+=`</tbody></table></div></div>`;
   document.getElementById('content').innerHTML=h;
+}
+let editKom=null;
+function openKom(type,id){
+  editKom = id ? JSON.parse(JSON.stringify((DB.komisyoncular||[]).find(k=>k.id===id)||{})) : {id:null,name:'',type:type||'bayi',city:'',rate:0,phone:'',note:'',active:true};
+  if(!editKom)return; renderKomModal();
+}
+function setKomType(t){editKom.type=t;renderKomModal();}
+function renderKomModal(){
+  const o=editKom;
+  document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
+    <div class="modal-hd"><h3>${o.id?'Düzenle':'Yeni Kayıt'} — ${o.type==='bayi'?'Bayi':'Teknik Danışman'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
+    <div class="modal-bd">
+      <div class="fld-row">
+        <div class="fld"><label>Tip</label><select id="k_type" onchange="setKomType(this.value)"><option value="bayi" ${o.type!=='danisman'?'selected':''}>Bayi</option><option value="danisman" ${o.type==='danisman'?'selected':''}>Teknik Danışman</option></select></div>
+        <div class="fld"><label>Durum</label><select id="k_active"><option value="1" ${o.active!==false?'selected':''}>Aktif</option><option value="0" ${o.active===false?'selected':''}>Pasif</option></select></div>
+      </div>
+      <div class="fld"><label>Ad Soyad / Ünvan</label><input id="k_name" value="${esc(o.name||'')}" placeholder="Örn. ADEM ŞENGÜN"></div>
+      <div class="fld-row">
+        <div class="fld"><label>Şehir</label><input id="k_city" value="${esc(o.city||'')}" placeholder="Örn. AFYONKARAHİSAR"></div>
+        <div class="fld"><label>Telefon</label><input id="k_phone" value="${esc(o.phone||'')}" placeholder="05xx..."></div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label>İskonto Oranı (%)</label><input id="k_rate" type="number" step="0.1" value="${o.rate||''}" placeholder="Örn. 3"></div>
+        <div class="fld"><label>Not</label><input id="k_note" value="${esc(o.note||'')}" placeholder="İsteğe bağlı"></div>
+      </div>
+    </div>
+    <div class="modal-ft">${o.id?`<button class="btn btn-sm" style="margin-right:auto;color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
+  </div></div>`;
+  setTimeout(()=>{var n=document.getElementById('k_name');if(n)n.focus();},30);
+}
+function saveKom(){
+  const o=editKom;
+  o.name=(document.getElementById('k_name').value||'').trim();
+  if(!o.name){alert('İsim giriniz');return;}
+  o.type=document.getElementById('k_type').value;
+  o.city=(document.getElementById('k_city').value||'').trim();
+  o.phone=(document.getElementById('k_phone').value||'').trim();
+  o.rate=parseFloat(document.getElementById('k_rate').value)||0;
+  o.note=(document.getElementById('k_note').value||'').trim();
+  o.active=document.getElementById('k_active').value==='1';
+  DB.komisyoncular=DB.komisyoncular||[];
+  if(o.id){const i=DB.komisyoncular.findIndex(k=>k.id===o.id);if(i>=0)DB.komisyoncular[i]=o;else DB.komisyoncular.push(o);}
+  else{o.id='k'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);DB.komisyoncular.push(o);}
+  BAYILER=DB.komisyoncular; saveSaha(); closeModal(); render();
+}
+function delKom(id){
+  if(!confirm('Bu bayi/danışman kaydı silinsin mi?\n(Sipariş Takip listesinden de kalkar.)'))return;
+  DB.komisyoncular=(DB.komisyoncular||[]).filter(k=>k.id!==id);
+  BAYILER=DB.komisyoncular; saveSaha(); closeModal(); render();
 }
 
 // ====== SÖZLEŞMELER (link tabanlı) ======
@@ -413,7 +463,14 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';editId=n
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 
 // dış katmanlardan çağrılır
-window.__setSiparis=function(o){BAYILER=(o&&o.bayiler)||[];MUSTERILER=(o&&o.musteriler)||[];if(tab!=='sozlesme')render();};
+window.__setSiparis=function(o){
+  MUSTERILER=(o&&o.musteriler)||[];
+  var komRaw=(o&&o.komRaw)||[];
+  // Tek seferlik taşıma: Saha'da komisyoncu yoksa Sipariş Takip'ten içe aktar (id'ler korunur)
+  if((!DB.komisyoncular||!DB.komisyoncular.length)&&komRaw.length){DB.komisyoncular=JSON.parse(JSON.stringify(komRaw));saveSaha();}
+  BAYILER=DB.komisyoncular||[];
+  render();
+};
 window.__reloadSaha=function(){const t=tab;loadSaha();tab=t;render();};
 loadSaha();render();
 </script>
@@ -430,15 +487,15 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 const sref=doc(fdb,"apps","siparis");
 function extractSiparis(d){
   try{const raw=d&&d.data&&d.data['rota_so_v1'];if(!raw)return {bayiler:[],musteriler:[]};const o=JSON.parse(raw);
-    const bayiler=(o.komisyoncular||[]).map(k=>({name:k.name,type:k.type,city:k.city||'',rate:k.rate||0,phone:k.phone||'',active:k.active!==false}));
+    const komRaw=(o.komisyoncular||[]).map(k=>({id:k.id,name:k.name,type:k.type,city:k.city||'',rate:+k.rate||0,phone:k.phone||'',note:k.note||'',active:k.active!==false}));
     const musteriler=(o.customers||[]).map(c=>({name:c.name,city:c.city||'',firma:c.firma||'',phone:c.phone||'',orderCount:+c.orderCount||0}));
-    return {bayiler,musteriler};
-  }catch(e){console.warn('siparis parse',e);return {bayiler:[],musteriler:[]};}
+    return {komRaw,musteriler};
+  }catch(e){console.warn('siparis parse',e);return {komRaw:[],musteriler:[]};}
 }
 fbDot('#F59E0B','Bağlanıyor');
 (async function(){
-  try{const snap=await getDoc(sref);window.__setSiparis(snap.exists()?extractSiparis(snap.data()):{bayiler:[],musteriler:[]});fbDot('#16A34A','Senkron');}
-  catch(e){console.warn('siparis read',e);window.__setSiparis({bayiler:[],musteriler:[]});fbDot('#EF4444','Çevrimdışı');}
+  try{const snap=await getDoc(sref);window.__setSiparis(snap.exists()?extractSiparis(snap.data()):{komRaw:[],musteriler:[]});fbDot('#16A34A','Senkron');}
+  catch(e){console.warn('siparis read',e);window.__setSiparis({komRaw:[],musteriler:[]});fbDot('#EF4444','Çevrimdışı');}
   try{onSnapshot(sref,(snap)=>{if(snap.exists()){window.__setSiparis(extractSiparis(snap.data()));fbDot('#16A34A','Güncellendi');}});}catch(e){}
 })();
 
@@ -454,8 +511,8 @@ async function push(){try{lastUpdated=Date.now();await setDoc(zref,{data:collect
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isKey(k))_set(k,d[k]);});}finally{suppress=false;}}
 (async function(){
   try{const snap=await getDoc(zref);
-    if(snap.exists()&&snap.data().data){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;hydrated=true;if(window.__reloadSaha)window.__reloadSaha();}
-    else{hydrated=true;}
+    if(snap.exists()&&snap.data().data){applyRemote(snap.data().data);lastUpdated=snap.data().updated||0;hydrated=true;if(window.__reloadSaha)window.__reloadSaha();schedulePush();}
+    else{hydrated=true;schedulePush();}
   }catch(e){console.warn('saha init',e);}
   try{onSnapshot(zref,(snap)=>{if(!snap.exists())return;const d=snap.data();if(!d||(d.updated&&d.updated===lastUpdated))return;lastUpdated=d.updated||0;hydrated=true;applyRemote(d.data);if(window.__reloadSaha)window.__reloadSaha();});}catch(e){}
 })();

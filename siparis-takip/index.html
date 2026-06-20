@@ -1153,13 +1153,12 @@ function komFiltered(){
 function komTableHTML(){
   const arr=komFiltered();
   const assignCount={};DB.customers.forEach(c=>{if(c.bayiId)assignCount[c.bayiId]=(assignCount[c.bayiId]||0)+1;if(c.danismanId)assignCount[c.danismanId]=(assignCount[c.danismanId]||0)+1});
-  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td onclick="openKom(null,'${k.id}')" style="cursor:pointer"><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' iskonto':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="btn-ic" onclick="openKom(null,'${k.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
+  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' iskonto':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap">${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
 function renderKomisyoncular(c,tb){
   var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">⬇ Excel İndir</button>';
-  if(isAdmin())tb.innerHTML=_exp+' <button class="btn btn-pri" onclick="openKom(\'bayi\')">+ Bayi</button> <button class="btn btn-pri" onclick="openKom(\'danisman\')" style="background:var(--purple)">+ Danışman</button>';
-  else tb.innerHTML=_exp;
+  tb.innerHTML=_exp+' <span style="font-size:11px;color:var(--slate-400);align-self:center">Ekleme/düzenleme: <b>Bayi &amp; Danışman</b> modülünden (otomatik buraya gelir)</span>';
   const bayiCount=(DB.komisyoncular||[]).filter(k=>k.type==='bayi').length;
   const danCount=(DB.komisyoncular||[]).filter(k=>k.type==='danisman').length;
   let h=`<div class="filters">
@@ -1855,7 +1854,15 @@ loadDB();
 document.getElementById('lhint').innerHTML='Demo giriş: <b>admin</b> / <b>rota2026</b><br>(Sipariş personeli: siparis/siparis · fiyat görmez)';
 tryAutoLogin();
 // Firebase'den veri gelince yeniden yükle (cihazlar arası senkron)
-window.__reloadFromStorage=function(){window.__fbSuppress=true;try{loadDB();if(USER)initApp();}catch(e){console.warn(e)}window.__fbSuppress=false;};
+window.__KOMS=null;
+window.__setKoms=function(arr){
+  // apps/saha boşsa Sipariş Takip kendi komisyoncu listesini kullanmaya devam eder (geçiş boşluğu olmaz)
+  if(!arr||!arr.length)return;
+  window.__KOMS=arr;
+  if(typeof DB!=='undefined'&&DB)DB.komisyoncular=arr;
+  try{if(typeof render==='function'&&typeof USER!=='undefined'&&USER)render();}catch(e){}
+};
+window.__reloadFromStorage=function(){window.__fbSuppress=true;try{loadDB();if(window.__KOMS&&window.__KOMS.length)DB.komisyoncular=window.__KOMS;if(USER)initApp();}catch(e){console.warn(e)}window.__fbSuppress=false;};
 window.__applyOnaylar=function(map){
   if(!map||typeof DB==='undefined'||!DB||!Array.isArray(DB.orders))return;
   var chg=0;
@@ -1923,6 +1930,11 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   try{const fabRef=doc(fdb,"apps","fabrikaonay");
     try{const fs=await getDoc(fabRef);if(fs.exists()&&window.__applyFabrika)window.__applyFabrika(fs.data()||{});}catch(e){}
     onSnapshot(fabRef,(s)=>{try{if(s.exists()&&window.__applyFabrika)window.__applyFabrika(s.data()||{});}catch(e){}});
+  }catch(e){}
+  try{const sahaRef=doc(fdb,"apps","saha");
+    const exK=(d)=>{try{const raw=d&&d.data&&d.data['rota_saha_v1'];if(!raw)return null;const o=JSON.parse(raw);return (o&&o.komisyoncular)||null;}catch(e){return null;}};
+    try{const ss=await getDoc(sahaRef);if(ss.exists()){const k=exK(ss.data());if(k&&window.__setKoms)window.__setKoms(k);}}catch(e){}
+    onSnapshot(sahaRef,(s)=>{try{if(s.exists()){const k=exK(s.data());if(k&&window.__setKoms)window.__setKoms(k);}}catch(e){}});
   }catch(e){}
 })();
 </script>
