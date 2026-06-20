@@ -387,10 +387,11 @@ function seedKomisyon(){
 }
 function komById(id){return (DB.komisyoncular||[]).find(k=>k.id===id)}
 function komByType(t){return (DB.komisyoncular||[]).filter(k=>k.type===t).sort((a,b)=>a.name.localeCompare(b.name,'tr'))}
-function orderKomisyon(o){
-  if(!o||!o.komisyoncuId)return {kom:null,rate:0,tutar:0,type:''};
-  const kom=komById(o.komisyoncuId);
-  if(!kom)return {kom:null,rate:0,tutar:0,type:''};
+function ordBayi(o){var id=o&&o.bayiId;if(!id&&o&&o.komisyoncuId){var k=komById(o.komisyoncuId);if(k&&k.type==='bayi')id=o.komisyoncuId;}return id?komById(id):null;}
+function ordDanisman(o){var id=o&&o.danismanId;if(!id&&o&&o.komisyoncuId){var k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}return id?komById(id):null;}
+function orderKomisyon(o,komOverride){
+  const kom=komOverride||((o&&o.komisyoncuId)?komById(o.komisyoncuId):null);
+  if(!o||!kom)return {kom:null,rate:0,tutar:0,type:''};
   if(kom.type==='danisman'){
     // PRİM modeli: (Satış − Alış) × Miktar − Kargo ; Alış = Liste(Torbalı) × (1 − iskonto). İskonto SABİT %6.
     const isk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
@@ -628,9 +629,9 @@ function filteredOrders(){
   if(filt.from)arr=arr.filter(o=>o.date>=filt.from);
   if(filt.to)arr=arr.filter(o=>o.date<=filt.to);
   if(filt.kom){
-    if(filt.kom==='all-bayi')arr=arr.filter(o=>{const k=komById(o.komisyoncuId);return k&&k.type==='bayi'});
-    else if(filt.kom==='all-danisman')arr=arr.filter(o=>{const k=komById(o.komisyoncuId);return k&&k.type==='danisman'});
-    else arr=arr.filter(o=>o.komisyoncuId===filt.kom);
+    if(filt.kom==='all-bayi')arr=arr.filter(o=>ordBayi(o));
+    else if(filt.kom==='all-danisman')arr=arr.filter(o=>ordDanisman(o));
+    else arr=arr.filter(o=>{var b=ordBayi(o),d=ordDanisman(o);return (b&&b.id===filt.kom)||(d&&d.id===filt.kom);});
   }
   if(filt.year)arr=arr.filter(o=>(o.date||'').slice(0,4)===filt.year);
   if(filt.month)arr=arr.filter(o=>(o.date||'').slice(5,7)===filt.month);
@@ -691,14 +692,14 @@ function orderTable(arr){
   const priceCol=canSeePrice();
   return `<table class="tbl"><thead><tr><th>No</th><th>Alındı</th><th>Teslim</th><th>Müşteri</th><th>Firma</th><th>Bayi / Danışman</th><th>Ürünler</th><th class="num">Kalem</th>${priceCol?'<th class="num">Tutar</th>':''}<th>Kargo</th><th>Müşteri Onayı</th><th>Fabrika Onayı</th><th>Durum</th><th></th></tr></thead><tbody>${arr.map(o=>{
     const prods=(o.lines||[]).map(l=>l.code).join(', ');
-    const kom=o.komisyoncuId?komById(o.komisyoncuId):null;
+    const kom=ordDanisman(o)||ordBayi(o);
     return `<tr class="${kom?('row-'+kom.type):''}">
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap;font-weight:700;color:var(--blue-700)">${o.no?('#'+o.no):'—'}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap">${fmtDate(o.date)}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap;font-weight:600;color:var(--blue-700)">${o.teslimTarihi?fmtDate(o.teslimTarihi):'<span style="color:var(--slate-300)">—</span>'}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer"><b>${esc(o.customer)}</b>${(o.not&&String(o.not).trim())?`<span class="note-flag" title="${esc(o.not)}">Not Var</span>`:''}</td>
       <td>${o.firma?`<span class="firma-${o.firma}">${o.firma}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
-      <td>${kom?`<span class="kom-chip kom-${kom.type}" title="${kom.type==='danisman'?'Teknik Danışman':'Bayi'}">${esc(kom.name)}</span>`:'<span style="color:var(--slate-300)">—</span>'}</td>
+      <td>${(function(){var b=ordBayi(o),d=ordDanisman(o);var ch=[];if(b)ch.push('<span class="kom-chip kom-bayi" title="Bayi">'+esc(b.name)+'</span>');if(d)ch.push('<span class="kom-chip kom-danisman" title="Teknik Danışman">'+esc(d.name)+'</span>');return ch.length?ch.join(' '):'<span style=\'color:var(--slate-300)\'>—</span>';})()}</td>
       <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:var(--slate-500)" title="${esc(prods)}">${esc(prods)||'—'}</td>
       <td class="num">${(o.lines||[]).length}</td>
       ${priceCol?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
@@ -713,7 +714,7 @@ function orderTable(arr){
 let editOrder=null;
 function openOrder(id){
   if(id){editOrder=JSON.parse(JSON.stringify(DB.orders.find(o=>o.id===id)));}
-  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:false,nakliyeMusteri:false,hareketTarihi:'',hareketSaati:'',not:'',komisyoncuId:'',komisyonRate:null,musteriOnay:'',musteriOnayTs:'',yoneticiOnay:false,onayToken:'',fabrikaOnay:null};}
+  else{if(!canEdit()){toast('Yetkiniz yok');return}editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',firma:'',fiyatKademe:'fabrika',priceListId:(activePriceList()||{}).id||'',odeme:'',kargo:'',nakliye:0,status:'beklemede',lines:[{code:'',qty:'',price:''}],plaka:'',sofor:'',palet:'',strec:false,nakliyeMusteri:false,hareketTarihi:'',hareketSaati:'',not:'',komisyoncuId:'',bayiId:'',danismanId:'',komisyonRate:null,musteriOnay:'',musteriOnayTs:'',yoneticiOnay:false,onayToken:'',fabrikaOnay:null};}
   renderOrderModal();
 }
 function renderOrderModal(){
@@ -797,9 +798,8 @@ function orderLineRow(l,i,ro){
   </tr>`;
 }
 function orderKomisyonRow(o,ro){
-  const cur=o.komisyoncuId?komById(o.komisyoncuId):null;
-  const bayiName=(cur&&cur.type==='bayi')?cur.name:'';
-  const danName=(cur&&cur.type==='danisman')?cur.name:'';
+  const bayiKom=o.bayiId?komById(o.bayiId):null;
+  const danKom=o.danismanId?komById(o.danismanId):null;
   const bayiList=komByType('bayi').filter(k=>k.active!==false);
   const danList=komByType('danisman').filter(k=>k.active!==false);
   const c=custById(o.customerId);
@@ -807,41 +807,37 @@ function orderKomisyonRow(o,ro){
   const aDan=c&&c.danismanId?komById(c.danismanId):null;
   const hintB=aBayi?`<span style="font-size:9.5px;color:var(--blue-600);font-weight:500"> · Müşteri bayisi: ${esc(aBayi.name)}</span>`:'';
   const hintD=aDan?`<span style="font-size:9.5px;color:var(--purple);font-weight:500"> · Müşteri danışmanı: ${esc(aDan.name)}</span>`:'';
-  const r=orderKomisyon(o);
-  const isDan=cur&&cur.type==='danisman';
-  let komBox;
-  if(!canSeePrice())komBox='<div></div>';
-  else if(isDan)komBox=`<div class="fld"><label>İskonto (Sabit)</label><div style="padding:9px 11px;background:var(--slate-100);border-radius:6px;font-weight:700;color:var(--slate-600)">%${fmtN(r.rate)}</div></div>`;
-  else komBox=`<div class="fld"><label>İskonto</label><div style="padding:9px 11px;background:${r.kom?'var(--amber-100)':'var(--slate-100)'};border-radius:6px;font-weight:700;color:${r.kom?'var(--amber-700)':'var(--slate-400)'}">${r.kom?'%'+fmtN(r.rate)+' → '+fmtTL(r.tutar):'Seçilmedi'}</div></div>`;
   let danBreakdown='';
-  if(isDan&&canSeePrice()){
+  if(danKom&&canSeePrice()){
+    const r=orderKomisyon(o,danKom);
     const rows=(r.det||[]).map(d=>`<tr><td><b>${esc(d.code)}</b></td><td class="num">${fmtN(d.liste)}</td><td class="num" style="color:var(--slate-500)">${fmtN(d.alis)}</td><td class="num">${fmtN(d.satis)}</td><td class="num">${fmtN(d.qty)}</td><td class="num" style="font-weight:700;color:${d.prim>=0?'var(--green-700)':'var(--red-700)'}">${fmtTL(d.prim)}</td></tr>`).join('');
     danBreakdown=`<div style="margin-top:10px;border:1px solid var(--slate-200);border-radius:7px;overflow:hidden">
-      <table class="tbl" style="font-size:11.5px"><thead><tr><th>Ürün</th><th class="num">Liste (Torbalı)</th><th class="num">Alış (−%${fmtN(r.rate)})</th><th class="num">Satış</th><th class="num">Miktar</th><th class="num">Prim</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="tbl-empty" style="padding:14px">Ürün ekleyin</td></tr>'}</tbody>
+      <table class="tbl" style="font-size:11.5px"><thead><tr><th>Danışman: ${esc(danKom.name)}</th><th class="num">Liste (Torbalı)</th><th class="num">Alış (−%${fmtN(r.rate)})</th><th class="num">Satış</th><th class="num">Miktar</th><th class="num">Prim</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="tbl-empty" style="padding:14px">Ürün ekleyin</td></tr>'}</tbody>
       <tfoot><tr style="background:var(--blue-50)"><td colspan="5" style="text-align:right;font-weight:700;padding:8px 12px">${r.kargo?'Ara Prim − Kargo ('+fmtTL(r.kargo)+') = ':''}Toplam Prim</td><td class="num" style="font-weight:800;font-size:14px;color:var(--blue-900);padding:8px 12px">${fmtTL(r.tutar)}</td></tr></tfoot></table>
     </div>
     <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Danışman primi: <b>(Satış − Alış) × Miktar − Kargo</b>. Satış fiyatı = sipariş kalemindeki birim ₺. Alış = Torbalı liste × (1 − iskonto).</div>`;
   }
   let bayiBreakdown='';
-  if(cur&&cur.type==='bayi'&&canSeePrice()&&r.kom){
+  if(bayiKom&&canSeePrice()){
+    const r=orderKomisyon(o,bayiKom);
     const brut=orderTotal(o);const isk=r.tutar;const net=brut-isk;
     bayiBreakdown=`<div style="margin-top:10px;border:1px solid var(--amber-200);border-radius:7px;padding:11px 14px;background:#FFFBEB">
+      <div style="font-size:11px;color:var(--slate-500);margin-bottom:6px;font-weight:700">Bayi: ${esc(bayiKom.name)}</div>
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="color:var(--slate-600)">Brüt Tutar</span><b>${fmtTL(brut)}</b></div>
       <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--amber-700)"><span>İskonto (%${fmtN(r.rate)})</span><b>− ${fmtTL(isk)}</b></div>
       <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">Bayinin Ödeyeceği (Net)</span><b style="color:var(--blue-900)">${fmtTL(net)}</b></div>
     </div>
     <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg> Bayiye <b>ödeme yapılmaz</b>; iskonto, bayinin ödeyeceği tutardan düşülür. Sipariş tutarı brüt olarak kaydedilir.</div>`;
   }
-  return `<div class="sub-hd">Bayi / Danışman <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— biri seçilir${isDan?' · Danışman: PRİM (fatura karşılığı ödeme)':(cur?' · Bayi: % İSKONTO (ödeme yok)':'')}</span></div>
-  <div class="fgrid c3">
-    <div class="fld"><label>Bayi${hintB}</label><select ${ro?'disabled':''} onchange="pickKomSelect('bayi',this.value)"><option value="">— Bayi Seçiniz —</option>${bayiList.map(k=>`<option value="${k.id}" ${cur&&cur.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}${k.rate?' (%'+fmtN(k.rate)+' isk.)':''}</option>`).join('')}</select></div>
-    <div class="fld"><label>Teknik Danışman${hintD}</label><select ${ro?'disabled':''} onchange="pickKomSelect('danisman',this.value)"><option value="">— Danışman Seçiniz —</option>${danList.map(k=>`<option value="${k.id}" ${cur&&cur.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}</option>`).join('')}</select></div>
-    ${komBox}
-  </div>${danBreakdown}${bayiBreakdown}${cur?`<div style="margin-top:8px"><button class="btn btn-gray btn-sm" ${ro?'disabled':''} onclick="pickKomField('clear','')">✕ Seçimi kaldır</button></div>`:''}`;
+  return `<div class="sub-hd">Bayi / Danışman <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— bayi ve/veya danışman seçebilirsiniz</span></div>
+  <div class="fgrid c2">
+    <div class="fld"><label>Bayi${hintB}</label><select ${ro?'disabled':''} onchange="pickKomSelect('bayi',this.value)"><option value="">— Bayi Seçiniz —</option>${bayiList.map(k=>`<option value="${k.id}" ${bayiKom&&bayiKom.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}${k.rate?' (%'+fmtN(k.rate)+' isk.)':''}</option>`).join('')}</select></div>
+    <div class="fld"><label>Teknik Danışman${hintD}</label><select ${ro?'disabled':''} onchange="pickKomSelect('danisman',this.value)"><option value="">— Danışman Seçiniz —</option>${danList.map(k=>`<option value="${k.id}" ${danKom&&danKom.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}</option>`).join('')}</select></div>
+  </div>${danBreakdown}${bayiBreakdown}`;
 }
 function pickKomSelect(type,id){
-  if(!id){const cur=editOrder.komisyoncuId?komById(editOrder.komisyoncuId):null;if(cur&&cur.type===type){editOrder.komisyoncuId='';editOrder.komisyonRate=null;}}
-  else{editOrder.komisyoncuId=id;editOrder.komisyonRate=null;}
+  if(type==='bayi'){editOrder.bayiId=id||'';editOrder.komisyonRate=null;}
+  else{editOrder.danismanId=id||'';}
   renderOrderModal();
 }
 function pickKomField(type,name){
@@ -854,7 +850,7 @@ function pickKomField(type,name){
   else{toast('Eşleşen kayıt bulunamadı');}
   renderOrderModal();
 }
-function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma&&!editOrder.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);editOrder.komisyoncuId=c.bayiId||c.danismanId||'';}clearLinePrices();renderOrderModal()}
+function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma&&!editOrder.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);editOrder.bayiId=c.bayiId||'';editOrder.danismanId=c.danismanId||'';}clearLinePrices();renderOrderModal()}
 // Elle girilmemiş (kilitsiz) satırların birim fiyatını seçili tarifeden doldurur — "güncel tutarlar default gelsin"
 function applyTariffToLines(){const pl=orderPL(editOrder);(editOrder.lines||[]).forEach(l=>{if(!l._locked&&l.code){const v=tariffPrice(pl,l.code,editOrder.fiyatKademe);l.price=v||'';}})}
 function clearLinePrices(){applyTariffToLines();}
@@ -914,7 +910,7 @@ function saveOrder(){
   o.lines.forEach(l=>{if(l.price==null||l.price==='')l.price=0;else l.price=+l.price;delete l._locked;});
   o.total=orderTotal(o);
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
-  if(o.komisyoncuId){const kom=komById(o.komisyoncuId);if(kom&&o.komisyonRate==null)o.komisyonRate=+kom.rate||(kom.type==='danisman'?((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT):0);const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonRate=null;o.komisyonTutar=0;o.komisyonType='';}
+  if(o.bayiId){const bk=komById(o.bayiId);if(bk&&o.komisyonRate==null)o.komisyonRate=+bk.rate||0;}else{o.komisyonRate=null;}o.komisyoncuId=o.danismanId||o.bayiId||'';if(o.komisyoncuId){const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);DB.orders[idx]=o;logAct('Sipariş güncellendi: '+o.customer);}
   else{o.id=uid('o');o.no=nextOrderNo();o.createdAt=new Date().toISOString();if(!o.date)o.date=todayISO();ensureOnayToken(o);DB.orders.push(o);logAct('Yeni sipariş #'+o.no+': '+o.customer);pushHist(o,'gonderildi','Sipariş alındı — fabrika onayı için Telegram gönderildi');if(sendTelegramSiparis(o))o.tgSiparisGonderildi=true;}
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim');
@@ -1153,7 +1149,7 @@ function komFiltered(){
 function komTableHTML(){
   const arr=komFiltered();
   const assignCount={};DB.customers.forEach(c=>{if(c.bayiId)assignCount[c.bayiId]=(assignCount[c.bayiId]||0)+1;if(c.danismanId)assignCount[c.danismanId]=(assignCount[c.danismanId]||0)+1});
-  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' iskonto':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap">${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
+  return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th>Danışman</th><th class="num">Oran</th><th>Telefon</th><th class="num">Atanan Müşteri</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="firma-ROTA">BAYİ</span>':'<span class="firma-SMI">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11px">${k.type==='bayi'&&k.danismanId?(function(){var d=(DB.komisyoncular||[]).find(x=>x.id===k.danismanId);return d?'<span class="kom-chip kom-danisman">'+esc(d.name)+'</span>':'<span style="color:var(--slate-300)">—</span>';})():'<span style="color:var(--slate-300)">—</span>'}</td><td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' iskonto':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td class="num">${assignCount[k.id]||0}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap">${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="9" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
 function renderKomisyoncular(c,tb){
