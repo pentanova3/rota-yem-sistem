@@ -360,7 +360,7 @@ function renderListe(){
     <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th>Danışman</th><th>Oran</th><th>Telefon</th><th>Durum</th><th></th></tr></thead><tbody>`;
   if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt yok — + Bayi / + Danışman ile ekleyin.</td></tr>`;
   arr.forEach(k=>{h+=`<tr>
-    <td><b>${esc(k.name)}</b></td>
+    <td onclick="openKom(null,'${k.id}')" style="cursor:pointer" title="Düzenle / danışman ata"><b style="color:#1d4ed8;border-bottom:1px dashed #93c5fd">${esc(k.name)}</b></td>
     <td><span class="tag ${k.type==='bayi'?'tag-bayi':'tag-dan'}">${k.type==='bayi'?'BAYİ':'DANIŞMAN'}</span></td>
     <td>${esc(k.city||'—')}</td>
     <td>${k.type==='bayi'&&k.danismanId?(function(){var d=(DB.komisyoncular||[]).find(x=>x.id===k.danismanId);return d?`<span class="tag tag-dan" style="font-size:10px">${esc(d.name)}</span>`:'<span style="color:var(--slate-400)">—</span>';})():'<span style="color:var(--slate-300)">—</span>'}</td>
