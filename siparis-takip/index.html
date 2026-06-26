@@ -925,25 +925,25 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';editOrde
 // ============ WHATSAPP ============
 function buildShipMsg(o){
   const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
-  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır. 🚚\n\nÜrünler:\n${lines}\n`;
-  msg+=`\n🚛 Araç Plaka: ${o.plaka||'—'}`;
-  msg+=`\n👤 Şoför: ${o.sofor||'—'}`;
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır.\n\nÜrünler:\n${lines}\n`;
+  msg+=`\nAraç Plaka: ${o.plaka||'—'}`;
+  msg+=`\nŞoför: ${o.sofor||'—'}`;
   const htar=o.hareketTarihi||o.sevkTarih||todayISO();
-  msg+=`\n📅 Fabrikadan Hareket Tarihi: ${fmtDate(htar)}`;
-  msg+=`\n🕒 Fabrikadan Hareket Saati: ${o.hareketSaati||'Belirtilmedi'}`;
-  if(o.palet&&String(o.palet).trim())msg+=`\n📦 Palet: ${o.palet}`;
-  if(o.strec)msg+=`\n🧵 Streç: Evet`;
-  if(o.not&&String(o.not).trim())msg+=`\n📝 Not: ${o.not}`;
-  if(o.nakliyeMusteri)msg+=`\n💰 Nakliye ücreti tarafınıza aittir.`;
+  msg+=`\nFabrikadan Hareket Tarihi: ${fmtDate(htar)}`;
+  msg+=`\nFabrikadan Hareket Saati: ${o.hareketSaati||'Belirtilmedi'}`;
+  if(o.palet&&String(o.palet).trim())msg+=`\nPalet: ${o.palet}`;
+  if(o.strec)msg+=`\nStreç: Evet`;
+  if(o.not&&String(o.not).trim())msg+=`\nNot: ${o.not}`;
+  if(o.nakliyeMusteri)msg+=`\nNakliye ücreti tarafınıza aittir.`;
   msg+=`\n\nRota SMI`;
   return msg;
 }
 function buildDeliveredMsg(o){
   const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
   const tarih=o.teslimEdildiTarih?fmtDate(o.teslimEdildiTarih):(o.teslimTarihi?fmtDate(o.teslimTarihi):fmtDate(todayISO()));
-  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir. ✅\n\nTeslim Edilen Ürünler:\n${lines}\n`;
-  msg+=`\n📅 Teslim Tarihi: ${tarih}`;
-  msg+=`\n👤 Teslim Alan: ${o.customer}`;
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir.\n\nTeslim Edilen Ürünler:\n${lines}\n`;
+  msg+=`\nTeslim Tarihi: ${tarih}`;
+  msg+=`\nTeslim Alan: ${o.customer}`;
   msg+=`\n\nTeşekkür ederiz.\nRota SMI`;
   return msg;
 }
