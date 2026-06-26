@@ -1485,6 +1485,7 @@ function tariffArchiveCardHTML(){
         <button class="btn btn-gray btn-sm" onclick="viewTariff('${pl.id}')">Görüntüle</button>
         <button class="btn btn-gray btn-sm" onclick="tariffPDF('${pl.id}')">PDF</button>
         ${(isAdmin()&&!act)?`<button class="btn btn-gray btn-sm" onclick="setActiveTariff('${pl.id}')">Güncel Yap</button>`:''}
+        ${(isAdmin()&&!act)?`<button class="btn btn-gray btn-sm" title="Sil" style="color:var(--rose-600,#e11d48)" onclick="delTariff('${pl.id}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>`:''}
       </td>
     </tr>`;
   }).join('');
@@ -1498,6 +1499,14 @@ function setActiveTariff(id){
   priceLists().forEach(p=>p.active=false);pl.active=true;DB.meta.activePriceListId=id;DB.meta.priceDate=fmtDate(pl.date);
   (pl.items||[]).forEach(it=>{const prod=DB.products.find(p=>trNorm(p.code)===trNorm(it.code));if(prod){prod.fabrika=it.fabrika;prod.yakin=it.yakin;prod.uzak=it.uzak;prod.danismanListe=it.danismanListe;}});
   logAct('Güncel tarife değiştirildi: '+fmtDate(pl.date));saveDB();render();toast('Güncel tarife güncellendi');
+}
+function delTariff(id){
+  if(!isAdmin())return;
+  const pl=priceListById(id);if(!pl)return;
+  if(id===DB.meta.activePriceListId){alert('Güncel tarife silinemez. Önce başka bir tarifeyi "Güncel Yap" ile aktif edin.');return;}
+  if(!confirm(fmtDate(pl.date)+' tarifesini ('+(pl.note||'not yok')+') silmek istiyor musunuz? Bu işlem geri alınamaz.'))return;
+  DB.priceLists=priceLists().filter(p=>p.id!==id);
+  logAct('Fiyat tarifesi silindi: '+fmtDate(pl.date));saveDB();render();toast('Tarife silindi');
 }
 function viewTariff(id){
   const pl=priceListById(id);if(!pl)return;

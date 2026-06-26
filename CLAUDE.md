@@ -1,44 +1,19 @@
-# Rota Yem - Sipariş ve Takip Sistemi
+# Rota Yem — Proje Haritası
 
-Bu dosya Claude Code için proje bağlamını ve kurallarını içerir. Her oturum başında otomatik okunur.
+## Projeler
 
-## 🎯 Proje Özeti
+| Klasör | Ne İşe Yarar |
+|--------|-------------|
+| rota-yem-sistem | Genel yönetim ve takip sistemi (rota-yem.web.app) |
 
-Rota Yem firması için sipariş takip ve haftalık toplantı yönetim sistemi. Tek HTML dosyası mimarisi, vanilla JS, Firebase backend.
+## Teknoloji
 
-- **Sahip:** İsmail İzbudak (geliştirici + sistem sahibı)
-- **Yayında:** https://rota-yem.web.app
-- **Repo:** https://github.com/pentanova3/rota-yem-sistem (private)
+- HTML + CSS + JavaScript
+- Firebase Firestore
+- Firebase Hosting
 
-## 🏗️ Mimari
+## Önemli Notlar
 
-- **Frontend:** Vanilla JS, tek `index.html` dosyası
-- **Backend:** Firebase Firestore (NoSQL)
-- **Hosting:** Firebase Hosting
-- **Klasörler:** haftalik-toplanti/, siparis-takip/
-
-## 🚀 Deploy
-
-```bash
-git add .
-git commit -m "Açıklama"
-git push
-```
-
-## ⚙️ Geliştirme Kuralları
-
-- Türkçe değişken ve yorum kullan
-- Her değişiklikten sonra git commit at
-- Deploy öncesi her zaman onay iste
-- Risk varsa önce uyar, sonra hareket et
-
-## 🎨 Tasarım
-
-- Rota Yem kurumsal renkleri kullan
-- Sade, kullanımı kolay arayüz
-
-## 💡 İletişim Tarzı
-
-- Türkçe konuş
-- Kısa ve net cevap ver
-- Önemli komutları kod bloğunda göster
+- Sigorta prim kesintisi Excel takibi ayrı (bu klasörde değil)
+- GVK m.63/3 ve m.89/1 kapsamında sigorta kesintileri var
+- .env ve Firebase config'e dokunma
