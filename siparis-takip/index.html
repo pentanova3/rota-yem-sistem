@@ -735,7 +735,7 @@ function renderOrderModal(){
       <div class="fgrid c3">
         <div class="fld"><label>Sipariş Alındı</label><input value="${o.id?fmtDateTime(o.createdAt||o.date):'Kayıtta otomatik atanır'}" disabled title="Sistem tarafından otomatik"></div>
         <div class="fld"><label>Teslim Tarihi <span style="color:var(--red-500)">*</span></label><input type="date" value="${o.teslimTarihi||''}" min="${o.date||todayISO()}" ${ro?'disabled':''} onchange="editOrder.teslimTarihi=this.value" style="${!o.teslimTarihi&&!ro?'border-color:var(--amber-500);background:#FFFBEB':''}"></div>
-        <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="editOrder.status=this.value">${optDurum().filter(s=>!(s.v==='sevk'&&isSelfPickup(o)&&o.status!=='sevk')).map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="onChangeStatus(this.value)">${optDurum().filter(s=>!(s.v==='sevk'&&isSelfPickup(o)&&o.status!=='sevk')).map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
         <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
@@ -775,7 +775,7 @@ function renderOrderModal(){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna fabrika onay mesajı (butonlu) gönder">🏭 Fabrika Onayı İste</button>`:''}
         ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">📤 Onay Linki Gönder</button>`:''}
-        ${o.id?`<button class="btn" style="background:#1D4ED8;color:#fff" onclick="waOrderModal()" title="Duruma göre sevk/teslimat bilgilendirme mesajı"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
+        ${o.id?`<button id="stBtn" class="btn" ${(o.status==='sevk'||o.status==='teslim')?'':'disabled'} style="background:${(o.status==='sevk'||o.status==='teslim')?'#1D4ED8':'#94A3B8'};color:#fff${(o.status==='sevk'||o.status==='teslim')?'':';cursor:not-allowed'}" onclick="waOrderModal()" title="${(o.status==='sevk'||o.status==='teslim')?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın'}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
         <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
       </div>
@@ -963,6 +963,15 @@ function buildWaMsg(o){
   return msg;
 }
 function waOrder(id){const o=DB.orders.find(x=>x.id===id);if(o)openWa(o)}
+function onChangeStatus(v){
+  editOrder.status=v;
+  var b=document.getElementById('stBtn');if(!b)return;
+  var on=(v==='sevk'||v==='teslim');
+  b.disabled=!on;
+  b.style.background=on?'#1D4ED8':'#94A3B8';
+  b.style.cursor=on?'pointer':'not-allowed';
+  b.title=on?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın';
+}
 function waOrderModal(){openWa(editOrder)}
 function openWa(o){
   const c=custById(o.customerId);
