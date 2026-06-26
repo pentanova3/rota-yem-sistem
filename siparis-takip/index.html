@@ -917,35 +917,18 @@ function saveOrder(){
   if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();if(!o.hareketTarihi)o.hareketTarihi=todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
   if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
   saveDB();
-  if(_bildirim){if(confirm('Sipariş durumu "'+statusLabel(_yeniSt)+'" oldu.\n\nMüşteriye WhatsApp bilgilendirme mesajı gönderilsin mi?'))openWa(o);}
+  if(_bildirim){ensureOnayToken(o);if(confirm('Sipariş durumu "'+statusLabel(_yeniSt)+'" oldu.\n\nMüşteriye WhatsApp bilgilendirme mesajı gönderilsin mi?'))openWa(o);}
   closeModal();toast('Sipariş kaydedildi');render();
 }
 function delOrder(id){if(!confirm('Bu sipariş silinsin mi?'))return;DB.orders=DB.orders.filter(o=>o.id!==id);logAct('Sipariş silindi');saveDB();closeModal();toast('Silindi');render()}
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editOrder=null;editCust=null}
 // ============ WHATSAPP ============
+function bilgiLink(o){return 'https://rota-yem.web.app/bilgi/?t='+encodeURIComponent(o.onayToken||'');}
 function buildShipMsg(o){
-  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
-  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır.\n\nÜrünler:\n${lines}\n`;
-  msg+=`\nAraç Plaka: ${o.plaka||'—'}`;
-  msg+=`\nŞoför: ${o.sofor||'—'}`;
-  const htar=o.hareketTarihi||o.sevkTarih||todayISO();
-  msg+=`\nFabrikadan Hareket Tarihi: ${fmtDate(htar)}`;
-  msg+=`\nFabrikadan Hareket Saati: ${o.hareketSaati||'Belirtilmedi'}`;
-  if(o.palet&&String(o.palet).trim())msg+=`\nPalet: ${o.palet}`;
-  if(o.strec)msg+=`\nStreç: Evet`;
-  if(o.not&&String(o.not).trim())msg+=`\nNot: ${o.not}`;
-  if(o.nakliyeMusteri)msg+=`\nNakliye ücreti tarafınıza aittir.`;
-  msg+=`\n\nRota SMI`;
-  return msg;
+  return `Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır.\n\nAraç, şoför ve teslim bilgileri için aşağıdaki bağlantıya tıklayınız:\n${bilgiLink(o)}\n\nRota SMI Tarım ve Hayvancılık`;
 }
 function buildDeliveredMsg(o){
-  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
-  const tarih=o.teslimEdildiTarih?fmtDate(o.teslimEdildiTarih):(o.teslimTarihi?fmtDate(o.teslimTarihi):fmtDate(todayISO()));
-  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir.\n\nTeslim Edilen Ürünler:\n${lines}\n`;
-  msg+=`\nTeslim Tarihi: ${tarih}`;
-  msg+=`\nTeslim Alan: ${o.customer}`;
-  msg+=`\n\nTeşekkür ederiz.\nRota SMI`;
-  return msg;
+  return `Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir.\n\nTeslimat bilgileri için aşağıdaki bağlantıya tıklayınız:\n${bilgiLink(o)}\n\nTeşekkür ederiz.\nRota SMI Tarım ve Hayvancılık`;
 }
 function waStatusMsg(o){
   if(o.status==='sevk'&&!isSelfPickup(o))return buildShipMsg(o);
@@ -962,7 +945,7 @@ function buildWaMsg(o){
   msg+=`\n\nRota Yem · Sipariş Takip`;
   return msg;
 }
-function waOrder(id){const o=DB.orders.find(x=>x.id===id);if(o)openWa(o)}
+function waOrder(id){const o=DB.orders.find(x=>x.id===id);if(o){if(ensureOnayToken(o))saveDB();openWa(o);}}
 function onChangeStatus(v){
   editOrder.status=v;
   var b=document.getElementById('stBtn');if(!b)return;
@@ -972,7 +955,7 @@ function onChangeStatus(v){
   b.style.cursor=on?'pointer':'not-allowed';
   b.title=on?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın';
 }
-function waOrderModal(){openWa(editOrder)}
+function waOrderModal(){if(editOrder&&editOrder.id){var ro=DB.orders.find(function(x){return x.id===editOrder.id});if(ro){if(ensureOnayToken(ro))saveDB();editOrder.onayToken=ro.onayToken;}}openWa(editOrder);}
 function openWa(o){
   const c=custById(o.customerId);
   const msg=encodeURIComponent(waStatusMsg(o));
@@ -1024,7 +1007,7 @@ function waOnayModal(){
   waOnay(o.id);
 }
 function ensureOnayToken(o){if(!o.onayToken){o.onayToken=uid('ot')+Math.random().toString(36).slice(2,7);return true;}return false;}
-function orderOnayLink(o){return location.origin+'/onay/?t='+encodeURIComponent(o.onayToken);}
+function orderOnayLink(o){return 'https://rota-yem.web.app/onay/?t='+encodeURIComponent(o.onayToken);}
 function waOnay(id){
   var o=DB.orders.find(function(x){return x.id===id});if(!o)return;
   if(!canEdit()){toast('Yetkiniz yok');return}
@@ -1035,7 +1018,7 @@ function waOnay(id){
   var c=custById(o.customerId), link=orderOnayLink(o);
   var lines=(o.lines||[]).map(function(l){return '• '+l.code+': '+fmtN(l.qty)+' çuval'}).join('\n');
   var msg='Sayın '+o.customer+',\n\n'+fmtDate(o.date)+' tarihli siparişinizi ONAYLAMANIZ için aşağıdaki bağlantıya tıklayınız:\n'+link+'\n\nSipariş özeti:\n'+lines+'\nTeslim tarihi: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—');
-  if(o.onayNot)msg+='\n\n⚠️ ÖNEMLİ NOT:\n'+o.onayNot;
+  if(o.onayNot)msg+='\n\nÖNEMLİ NOT:\n'+o.onayNot;
   msg+='\n\nLütfen ürün ve teslim bilgilerini kontrol edip onaylayınız.\nRota SMI';
   var txt=encodeURIComponent(msg);
   if(c&&c.phone){window.open('https://wa.me/'+phoneClean(c.phone)+'?text='+txt,'_blank');toast('WhatsApp onay mesajı hazırlandı');}

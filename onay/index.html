@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Sipariş Onayı · Rota SMI</title>
 <link rel="icon" href="/icons/icon-192.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Rota SMI">
+<meta property="og:title" content="Sipariş Onayı · Rota SMI">
+<meta property="og:description" content="Siparişinizi görüntüleyip onaylamak için dokunun.">
+<meta property="og:image" content="https://rota-yem.web.app/og/onay.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://rota-yem.web.app/onay/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://rota-yem.web.app/og/onay.png">
 <style>
 :root{--navy:#0c1320;--blue:#1d4ed8;--blue7:#1d4ed8;--slate:#475569;--slate3:#cbd5e1;--line:#e2e8f0;--green:#16a34a;--amber:#b45309;--red:#b91c1c}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -166,7 +176,7 @@ function renderOrder(o){
       ${o.kargo?`<div class="row"><span class="k">Sevkiyat</span><span class="v">${esc(o.kargo)}</span></div>`:''}
       ${o.odeme?`<div class="row"><span class="k">Ödeme Tarihi</span><span class="v">${/^\d{4}-\d{2}-\d{2}/.test(o.odeme)?fmtDate(o.odeme):esc(o.odeme)}</span></div>`:''}
 
-      ${o.onayNot?`<div class="onaynot"><div class="on-t">⚠️ ÖNEMLİ NOT</div><div class="on-v">${esc(o.onayNot)}</div></div>`:''}
+      ${o.onayNot?`<div class="onaynot"><div class="on-t">ÖNEMLİ NOT</div><div class="on-v">${esc(o.onayNot)}</div></div>`:''}
       <div class="confirm">
         <label class="chk"><input type="checkbox" id="ack"><span>Yukarıdaki ürün, miktar ve teslim bilgilerini kontrol ettim; sipariş doğrudur.</span></label>
         ${o.onayNot?`<label class="chk" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px"><input type="checkbox" id="ackNot"><span><b>Yukarıdaki notu okudum</b> ve kabul ediyorum.</span></label>`:''}
