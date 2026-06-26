@@ -367,7 +367,7 @@ function renderListe(){
     <td>${k.rate?`<span class="rate">%${esc(k.rate)} iskonto</span>`:'<span style="color:var(--slate-400)">—</span>'}</td>
     <td>${esc(k.phone||'—')}</td>
     <td><span class="badge ${k.active!==false?'b-on':'b-off'}">${k.active!==false?'Aktif':'Pasif'}</span></td>
-    <td style="white-space:nowrap"><button class="btn btn-sm" onclick="sozlesmeIndir('${k.id}')" title="Sözleşme paketini otomatik doldurup indir">📄 Sözleşme</button> <button class="btn btn-sm" onclick="openKom(null,'${k.id}')">Düzenle</button></td>
+    <td style="white-space:nowrap"><button class="btn btn-sm" onclick="sozlesmeIndir('${k.id}')" title="Sözleşme paketini otomatik doldurup indir">Sözleşme</button> <button class="btn btn-sm" onclick="openKom(null,'${k.id}')">Düzenle</button></td>
   </tr>`;});
   h+=`</tbody></table></div></div>`;
   document.getElementById('content').innerHTML=h;
@@ -425,11 +425,11 @@ function renderKomModal(){
       </div>
       ${isBayi?`<div class="fld"><label>Bağlı Teknik Danışman <span style="font-weight:500;color:var(--slate-400);font-size:10.5px">— bu bayinin danışmanı (varsa)</span></label><select id="k_danisman"><option value="">— Yok —</option>${(DB.komisyoncular||[]).filter(k=>k.type==='danisman').sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(k=>`<option value="${k.id}" ${o.danismanId===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select></div>`:''}
       <details ${o.id?'':'open'} style="margin-top:10px;border-top:1px solid var(--slate-100);padding-top:8px">
-        <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--slate-700)">📄 Sözleşme Bilgileri <span style="font-weight:500;color:var(--slate-400);font-size:11px">— sözleşmeleri otomatik doldurmak için (isteğe bağlı)</span></summary>
+        <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--slate-700)">Sözleşme Bilgileri <span style="font-weight:500;color:var(--slate-400);font-size:11px">— sözleşmeleri otomatik doldurmak için (isteğe bağlı)</span></summary>
         <div style="margin-top:10px">${szHtml}</div>
       </details>
     </div>
-    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:8px"><button class="btn btn-sm btn-pri" onclick="sozlesmeIndir('${o.id}')">📄 Sözleşme İndir</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
+    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:8px"><button class="btn btn-sm btn-pri" onclick="sozlesmeIndir('${o.id}')">Sözleşme İndir</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
   </div></div>`;
   setTimeout(()=>{var n=document.getElementById('k_name');if(n)n.focus();},30);
 }

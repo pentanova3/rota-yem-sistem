@@ -767,14 +767,14 @@ function renderOrderModal(){
       </div>
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
       <div class="fld"><label>Müşteriye Onay Notu <span style="font-weight:600;font-size:10.5px;color:var(--amber-700);text-transform:none;letter-spacing:0">— eksik/değişiklik varsa yaz, müşteri WhatsApp linkinde ayrıca onaylar</span></label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.onayNot=this.value" placeholder="Örn: 30 çuval yerine 20 çuval gönderilecektir.">${esc(o.onayNot||'')}</textarea></div>
-      ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">🏭 Fabrika Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">🏭 Fabrika onayı bekleniyor — Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
+      ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">Fabrika Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">Fabrika onayı bekleniyor — Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
       ${o.id?historyHTML(o):''}
     </div>
     <div class="modal-ft">
       <div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna fabrika onay mesajı (butonlu) gönder">🏭 Fabrika Onayı İste</button>`:''}
-        ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">📤 Onay Linki Gönder</button>`:''}
+        ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna fabrika onay mesajı (butonlu) gönder">Fabrika Onayı İste</button>`:''}
+        ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">Onay Linki Gönder</button>`:''}
         ${o.id?`<button id="stBtn" class="btn" ${(o.status==='sevk'||o.status==='teslim')?'':'disabled'} style="background:${(o.status==='sevk'||o.status==='teslim')?'#1D4ED8':'#94A3B8'};color:#fff${(o.status==='sevk'||o.status==='teslim')?'':';cursor:not-allowed'}" onclick="waOrderModal()" title="${(o.status==='sevk'||o.status==='teslim')?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın'}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
         <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
@@ -981,7 +981,7 @@ function openWa(o){
 }
 function musteriOnayCell(o){
   if(o.musteriOnay==='onaylandi')return '<span class="badge st-teslim" title="Müşteri onayladı'+(o.musteriOnayTs?': '+fmtDate(o.musteriOnayTs):'')+'">✓ Onaylandı</span>';
-  if(o.musteriOnay==='itiraz')return '<span class="badge st-iptal" title="'+esc('Müşteri itirazı'+(o.itirazSebep?': '+o.itirazSebep:'')+' — düzeltip yeniden onay linki gönderin')+'">⚠ İtiraz</span>';
+  if(o.musteriOnay==='itiraz')return '<span class="badge st-iptal" title="'+esc('Müşteri itirazı'+(o.itirazSebep?': '+o.itirazSebep:'')+' — düzeltip yeniden onay linki gönderin')+'">İtiraz</span>';
   var extra=o.yoneticiOnay?'<div style="font-size:9px;color:#92400E;margin-top:2px">yönetici onayladı</div>':'';
   var hasPhone=(custById(o.customerId)||{}).phone;
   var btn=canEdit()?' <button onclick="waOnay(\''+o.id+'\')" title="'+(hasPhone?'WhatsApp ile onay linki gönder':'Telefon kayıtlı değil — WhatsApp\'ta numarayı seçin')+'" style="background:'+(hasPhone?'#25D366':'#94A3B8')+';color:#fff;border:none;padding:2px 7px;font-size:10px;font-weight:700;border-radius:5px;cursor:pointer;vertical-align:middle">WA Onay</button>':'';
@@ -997,7 +997,7 @@ function historyHTML(o){
   if(!o.history||!o.history.length)return '';
   var rows=o.history.map(function(e){
     var col=(e.type==='onay'||e.type==='teslim')?'#16A34A':e.type==='itiraz'?'#B91C1C':e.type==='yonetici'?'#92400E':e.type==='sevk'?'#1D4ED8':e.type==='fabrika'?'#0E7490':'var(--slate-600)';
-    return '<div style="display:flex;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slate-100)"><span style="font-size:13px;flex:none;line-height:1.3">'+histIcon(e.type)+'</span><div style="flex:1;min-width:0"><div style="font-size:12px;color:'+col+';font-weight:600;word-break:break-word">'+esc(e.text)+'</div><div style="font-size:10px;color:var(--slate-400)">'+fmtDateTime(e.ts)+(e.by?' · '+esc(e.by):'')+'</div></div></div>';
+    return '<div style="display:flex;gap:9px;padding:7px 2px;border-bottom:1px solid var(--slate-100)"><span style="flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:'+col+'"></span><div style="flex:1;min-width:0"><div style="font-size:12px;color:'+col+';font-weight:600;word-break:break-word">'+esc(e.text)+'</div><div style="font-size:10px;color:var(--slate-400)">'+fmtDateTime(e.ts)+(e.by?' · '+esc(e.by):'')+'</div></div></div>';
   }).join('');
   return '<div class="sub-hd">Sipariş Geçmişi / Olay Akışı</div><div style="max-height:230px;overflow-y:auto;border:1px solid var(--slate-200);border-radius:8px;padding:2px 12px">'+rows+'</div>';
 }
@@ -1113,8 +1113,8 @@ function exportExcel(){
   toast('Excel indiriliyor ('+(DB.customers||[]).length+' müşteri, '+(DB.komisyoncular||[]).length+' bayi/danışman, '+(DB.orders||[]).length+' sipariş)');
 }
 function renderCustomers(c,tb){
-  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">⬇ Excel İndir</button>';
-  if(canEdit())tb.innerHTML=_exp+' <button class="btn btn-gray btn-sm" onclick="ilDuzelt()" title="İl/ilçe adı yazılanları il adına çevir, tanınmayanları temizle">🪄 Şehirleri Düzelt</button> <button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>';
+  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">Excel İndir</button>';
+  if(canEdit())tb.innerHTML=_exp+' <button class="btn btn-gray btn-sm" onclick="ilDuzelt()" title="İl/ilçe adı yazılanları il adına çevir, tanınmayanları temizle">Şehirleri Düzelt</button> <button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>';
   else tb.innerHTML=_exp;
   let h=`<div class="filters"><input class="fsearch" placeholder="Müşteri / şehir ara..." value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
   <div class="card" id="custCard">${custTableHTML()}</div>`;
@@ -1162,7 +1162,7 @@ function komTableHTML(){
 }
 function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
 function renderKomisyoncular(c,tb){
-  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">⬇ Excel İndir</button>';
+  var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">Excel İndir</button>';
   tb.innerHTML=_exp+' <span style="font-size:11px;color:var(--slate-400);align-self:center">Ekleme/düzenleme: <b>Bayi &amp; Danışman</b> modülünden (otomatik buraya gelir)</span>';
   const bayiCount=(DB.komisyoncular||[]).filter(k=>k.type==='bayi').length;
   const danCount=(DB.komisyoncular||[]).filter(k=>k.type==='danisman').length;
@@ -1823,7 +1823,7 @@ function renderSettings(c,tb){
   <div class="card"><div class="card-hd"><h3>Veri Yedekleme</h3></div><div class="card-bd" style="padding:18px">
     <p style="font-size:12.5px;color:var(--slate-600);margin-bottom:14px">Tüm verileri (siparişler, müşteriler, ürünler) JSON dosyası olarak yedekleyin veya geri yükleyin. <b>Düzenli yedek alın</b> — tarayıcı verisi silinirse yedekten geri yüklenebilir.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-grn" onclick="exportData()">⬇ Yedek İndir (JSON)</button>
+      <button class="btn btn-grn" onclick="exportData()">Yedek İndir (JSON)</button>
       <button class="btn btn-gray" onclick="document.getElementById('importFile').click()">⬆ Yedek Yükle</button>
       <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(this)">
     </div>
