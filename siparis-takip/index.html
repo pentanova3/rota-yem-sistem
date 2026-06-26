@@ -925,10 +925,30 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';editOrde
 // ============ WHATSAPP ============
 function bilgiLink(o){return 'https://rota-yem.web.app/bilgi/?t='+encodeURIComponent(o.onayToken||'');}
 function buildShipMsg(o){
-  return `Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır.\n\nAraç, şoför ve teslim bilgileri için aşağıdaki bağlantıya tıklayınız:\n${bilgiLink(o)}\n\nRota SMI Tarım ve Hayvancılık`;
+  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
+  const htar=o.hareketTarihi||o.sevkTarih||todayISO();
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz yola çıkmıştır.\n\nÜrünler:\n${lines}\n`;
+  msg+=`\nAraç Plaka: ${o.plaka||'—'}`;
+  msg+=`\nŞoför: ${o.sofor||'—'}`;
+  msg+=`\nFabrikadan Hareket Tarihi: ${fmtDate(htar)}`;
+  msg+=`\nFabrikadan Hareket Saati: ${o.hareketSaati||'Belirtilmedi'}`;
+  if(o.palet&&String(o.palet).trim())msg+=`\nPalet: ${o.palet}`;
+  if(o.strec)msg+=`\nStreç: Evet`;
+  if(o.not&&String(o.not).trim())msg+=`\nNot: ${o.not}`;
+  if(o.nakliyeMusteri)msg+=`\nNakliye ücreti tarafınıza aittir.`;
+  msg+=`\n\nDetaylı görünüm: ${bilgiLink(o)}`;
+  msg+=`\n\nRota SMI Tarım ve Hayvancılık`;
+  return msg;
 }
 function buildDeliveredMsg(o){
-  return `Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir.\n\nTeslimat bilgileri için aşağıdaki bağlantıya tıklayınız:\n${bilgiLink(o)}\n\nTeşekkür ederiz.\nRota SMI Tarım ve Hayvancılık`;
+  const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
+  const tarih=o.teslimEdildiTarih?fmtDate(o.teslimEdildiTarih):(o.teslimTarihi?fmtDate(o.teslimTarihi):fmtDate(todayISO()));
+  let msg=`Sayın ${o.customer},\n\n${fmtDate(o.date)} tarihli siparişiniz teslim edilmiştir.\n\nTeslim Edilen Ürünler:\n${lines}\n`;
+  msg+=`\nTeslim Tarihi: ${tarih}`;
+  msg+=`\nTeslim Alan: ${o.customer}`;
+  msg+=`\n\nDetaylı görünüm: ${bilgiLink(o)}`;
+  msg+=`\n\nTeşekkür ederiz.\nRota SMI Tarım ve Hayvancılık`;
+  return msg;
 }
 function waStatusMsg(o){
   if(o.status==='sevk'&&!isSelfPickup(o))return buildShipMsg(o);
@@ -955,7 +975,18 @@ function onChangeStatus(v){
   b.style.cursor=on?'pointer':'not-allowed';
   b.title=on?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın';
 }
-function waOrderModal(){if(editOrder&&editOrder.id){var ro=DB.orders.find(function(x){return x.id===editOrder.id});if(ro){if(ensureOnayToken(ro))saveDB();editOrder.onayToken=ro.onayToken;}}openWa(editOrder);}
+function waOrderModal(){
+  if(editOrder&&editOrder.id){
+    var ro=DB.orders.find(function(x){return x.id===editOrder.id});
+    if(ro){
+      ['status','kargo','fiyatKademe','plaka','sofor','hareketTarihi','hareketSaati','palet','strec','not','nakliyeMusteri','teslimEdildiTarih','sevkTarih'].forEach(function(k){if(editOrder[k]!==undefined)ro[k]=editOrder[k];});
+      if(ro.status==='sevk'&&!ro.hareketTarihi)ro.hareketTarihi=todayISO();
+      ensureOnayToken(ro); editOrder.onayToken=ro.onayToken;
+      saveDB();
+    }
+  }
+  openWa(editOrder);
+}
 function openWa(o){
   const c=custById(o.customerId);
   const msg=encodeURIComponent(waStatusMsg(o));
