@@ -144,6 +144,14 @@ function parsePeriod(q){
 }
 
 // ---------- kart şablonları ----------
+// Tıklanır telefon (tel:) ve Google Haritalar adres bağlantısı
+const telLink=p=>p?`<a href="tel:${esc(String(p).replace(/\s/g,''))}" class="ka-tel">${esc(p)}</a>`:'—';
+function mapsLink(c){
+  const adres=(c.adres||'').trim(), city=(c.city||'').trim();
+  const txt=adres||city;if(!txt)return '—';
+  const sorgu=encodeURIComponent(adres?(adres+(city?' '+city:'')):city);
+  return `<a href="https://www.google.com/maps/search/?api=1&query=${sorgu}" target="_blank" rel="noopener" class="ka-maps" title="Google Haritalar'da aç">${esc(txt)}</a>`;
+}
 const card=(title,body,tone)=>`<div class="ka-card ${tone||''}"><div class="ka-card-t">${title}</div>${body}</div>`;
 const row=(k,v)=>`<div class="ka-row"><span>${esc(k)}</span><b>${v}</b></div>`;
 const table=(head,rows)=>`<div class="ka-tblwrap"><table class="ka-tbl"><thead><tr>${head.map(h=>`<th${h.n?' class="n"':''}>${esc(h.t)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -270,9 +278,11 @@ function ansMusteri(q){
   const son=os.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
   const bayi=c.bayiId?komById(c.bayiId):null,dan=c.danismanId?komById(c.danismanId):null;
   return card('Müşteri — '+esc(c.name),
-    row('Telefon',c.phone?`<a href="tel:${esc(c.phone)}" style="color:inherit">${esc(c.phone)}</a>`:'—')+
+    row('Telefon',telLink(c.phone))+
+    row('Adres',mapsLink(c))+
     row('Şehir / Bölge',esc(c.city||'—'))+(c.firma?row('Firma',esc(c.firma)):'')+
     (bayi?row('Bayisi',esc(bayi.name)):'')+(dan?row('Danışmanı',esc(dan.name)):'')+
+    (!bayi&&!dan?row('Bağlantı','Fabrika (direkt)'):'')+
     row('Sipariş Sayısı',os.length+(c.orderCount?' (+'+c.orderCount+' arşiv)':''))+
     (son?row('Son Sipariş',fmtDate(son.date)+' · #'+son.no):'')+
     `<a class="ka-link" href="siparis-takip/#musteriler">Müşteriler sayfasında aç</a>`);
@@ -309,12 +319,13 @@ function ansGenel(q){
   const mPer=D().personeller.filter(p=>nameScore(p.ad,qt)>=1).slice(0,5);
   const nq=norm(q).replace(/[\s-]/g,'');
   const mProd=D().products.filter(p=>nq.includes(norm(p.code).replace(/[\s-]/g,''))||qt.some(t=>norm(p.code).replace(/[\s-]/g,'').includes(t))).slice(0,5);
-  const li=(tip,ad,ek,href)=>`<tr><td><span class="ka-chip">${tip}</span></td><td><b>${esc(ad)}</b></td><td>${esc(ek||'')}</td><td><a class="ka-link" href="${href}">aç</a></td></tr>`;
+  const li=(tip,ad,ek,href)=>`<tr><td><span class="ka-chip">${tip}</span></td><td><b>${esc(ad)}</b></td><td>${ek||''}</td><td><a class="ka-link" href="${href}">aç</a></td></tr>`;
   let rows='';
-  mCust.forEach(c=>rows+=li('Müşteri',c.name,(c.city||'')+(c.phone?' · '+c.phone:''),'siparis-takip/#musteriler'));
-  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,k.city||'','saha/'));
-  mPer.forEach(p=>rows+=li('Personel',p.ad,p.gorev||'','hr/'));
-  mProd.forEach(p=>rows+=li('Ürün',p.code,p.pkg||'','siparis-takip/#urunler'));
+  mCust.forEach(c=>rows+=li('Müşteri',c.name,[telLink(c.phone),mapsLink(c)].filter(x=>x!=='—').join(' · ')||'',
+    'siparis-takip/#musteriler'));
+  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,esc(k.city||''),'saha/'));
+  mPer.forEach(p=>rows+=li('Personel',p.ad,esc(p.gorev||''),'hr/'));
+  mProd.forEach(p=>rows+=li('Ürün',p.code,esc(p.pkg||''),'siparis-takip/#urunler'));
   if(!rows)return null;
   return card('Arama Sonuçları',table([{t:''},{t:'Ad'},{t:'Bilgi'},{t:''}],rows));
 }
