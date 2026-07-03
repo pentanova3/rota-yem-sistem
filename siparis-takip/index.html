@@ -903,14 +903,22 @@ function orderKomisyonRow(o,ro){
       // BAYİYE SATIŞ — alım + iskonto mahsubu
       const avail=Math.max(0,bayiAvailable(o.bayiId,o.id));
       const tutar=orderTotal(o);
+      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayiKom.rate||0);
+      // Fabrika liste tutarı (iskontosuz) — bu siparişte uygulanan iskontoyu göstermek için
+      const plB=orderPL(o);let brutFab=0;
+      (o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(plB,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);brutFab+=f*(+l.qty||0);});
+      const buSiparisIsk=Math.max(0,brutFab-tutar);
       const manual=(o.iskontoMahsup!==''&&o.iskontoMahsup!=null);
       const mahsup=manual?Math.min(+o.iskontoMahsup||0,tutar,avail):Math.min(avail,tutar);
       const net=tutar-mahsup;
+      const brow=(k,v,stil)=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:5px;${stil||''}"><span style="color:var(--slate-600)">${k}</span><b style="white-space:nowrap">${v}</b></div>`;
       bayiBreakdown=`<div style="margin-top:10px;border:1px solid var(--amber-200);border-radius:7px;padding:11px 14px;background:#FFFBEB">
-        <div style="font-size:11px;color:var(--slate-500);margin-bottom:6px;font-weight:700;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>Bayi (alıcı): ${esc(bayiKom.name)}</span><span style="color:var(--green-700)">Kullanılabilir iskonto: ${fmtTL(avail)}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="color:var(--slate-600)">Tutar — Fabrika × (1 − %${fmtN((o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayiKom.rate||0))} isk.)</span><b>${fmtTL(tutar)}</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--amber-700)"><span>− Mahsup (biriken iskonto)</span><b>− ${fmtTL(mahsup)}</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">Bayinin Ödeyeceği (Net)</span><b style="color:var(--blue-900)">${fmtTL(net)}</b></div>
+        <div style="font-size:11px;color:var(--slate-500);margin-bottom:8px;font-weight:700;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>Bayi (alıcı): ${esc(bayiKom.name)}</span><span style="color:var(--green-700)">Kullanılabilir iskonto alacağı: ${fmtTL(avail)}</span></div>
+        ${brow('Fabrika Liste Tutarı <span style="font-size:10px;color:var(--slate-400)">— iskontosuz fabrika fiyatından</span>',fmtTL(brutFab))}
+        ${brow('− İskonto (%'+fmtN(bRate)+') <span style="font-size:10px;color:var(--slate-400)">— bu siparişte bayiye uygulanan indirim</span>','<span style="color:var(--amber-700)">− '+fmtTL(buSiparisIsk)+'</span>')}
+        ${brow('İskontolu Tutar <span style="font-size:10px;color:var(--slate-400)">— fatura tutarı</span>',fmtTL(tutar),'border-top:1px dashed var(--amber-200);padding-top:6px')}
+        ${brow('− Mahsup <span style="font-size:10px;color:var(--slate-400)">— önceki satışlardan biriken iskonto alacağı</span>','<span style="color:var(--amber-700)">− '+fmtTL(mahsup)+'</span>')}
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">Bayinin Ödeyeceği (Net)</span><b style="color:var(--blue-900);font-size:15px">${fmtTL(net)}</b></div>
         <div style="margin-top:8px;border-top:1px dashed var(--amber-200);padding-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;color:var(--slate-700)"><input type="checkbox" ${manual?'':'checked'} ${ro?'disabled':''} onchange="onMahsupAuto(this.checked)" style="width:16px;height:16px;accent-color:var(--amber-600)"> Tüm bakiyeden otomatik mahsup</label>
           ${manual?`<span style="font-size:11.5px;color:var(--slate-600)">Mahsup ₺: <input type="number" min="0" value="${esc(o.iskontoMahsup)}" ${ro?'disabled':''} onchange="editOrder.iskontoMahsup=this.value;renderOrderModal()" style="width:110px"></span>`:''}
