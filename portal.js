@@ -49,17 +49,33 @@ function applyAuthUI(){
     bar.innerHTML=`<button class="pa-btn" id="pa-login">Giriş Yap</button>`;
     document.getElementById('pa-login').onclick=()=>openLogin('');
   }
-  // kartları kilitle/aç
-  document.querySelectorAll('a.app[href]').forEach(a=>{
-    const href=a.getAttribute('href');
-    const mod=MODS.find(m=>m.href===href);if(!mod)return;
-    a.classList.remove('pa-locked');a.onclick=null;
-    if(!PUSER){a.onclick=e=>{e.preventDefault();openLogin(href);};return;}
+  // Kart görünürlüğü: kullanıcı yalnızca YETKİLİ olduğu kartları görür (site mimarisi sızmaz).
+  // Portal yöneticisi tümünü görür (yetkisizler kilit rozetiyle). Oturum yoksa kartlar gizlenir.
+  const isAdminP=!!(PUSER&&PUSER.portalYonetici);
+  let gorunen=0;
+  document.querySelectorAll('.app').forEach(a=>{
+    const href=a.getAttribute('href')||'';
+    const mod=MODS.find(m=>m.href===href);
+    a.classList.remove('pa-locked');a.style.display='';a.onclick=null;
+    if(!PUSER){a.style.display='none';return;}
+    if(a.classList.contains('soon')){if(!isAdminP)a.style.display='none';else gorunen++;return;}
+    if(!mod){gorunen++;return;}
     if(permOf(PUSER,mod.key)==='yok'){
-      a.classList.add('pa-locked');
-      a.onclick=e=>{e.preventDefault();alert('Bu modüle erişim yetkiniz yok. Yetki için yöneticinizle görüşün.');};
-    }
+      if(isAdminP){gorunen++;a.classList.add('pa-locked');a.onclick=e=>{e.preventDefault();alert('Bu modüle erişim yetkiniz yok.');};}
+      else a.style.display='none';
+    } else gorunen++;
   });
+  // Oturum yok / hiç yetki yok → bilgi kartı
+  const appsEl=document.getElementById('apps');
+  let ph=document.getElementById('pa-apps-ph');if(ph)ph.remove();
+  if(appsEl&&(!PUSER||gorunen===0)){
+    ph=document.createElement('div');ph.id='pa-apps-ph';
+    ph.style.cssText='grid-column:1/-1;background:#f6f9fc;border:1px dashed #c9d6e5;border-radius:16px;padding:34px 20px;text-align:center';
+    ph.innerHTML=PUSER
+      ?'<div style="font:700 14px var(--font);color:#0c2340;margin-bottom:6px">Yetkili olduğunuz uygulama bulunmuyor</div><div style="font-size:12.5px;color:#5b6b80">Erişim için yöneticinizle görüşün.</div>'
+      :'<div style="font:700 14px var(--font);color:#0c2340;margin-bottom:6px">Uygulamalar giriş yaptıktan sonra görüntülenir</div><div style="font-size:12.5px;color:#5b6b80;margin-bottom:14px">Yetkili olduğunuz modüller otomatik listelenir.</div><button class="pa-btn" onclick="document.getElementById(\'pa-login\')?document.getElementById(\'pa-login\').click():null">Giriş Yap</button>';
+    appsEl.appendChild(ph);
+  }
 }
 
 // ---------- giriş ----------
