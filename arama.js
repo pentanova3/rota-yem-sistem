@@ -277,7 +277,7 @@ function ansMusteri(q){
   const os=D().orders.filter(o=>o.customerId===c.id);
   const son=os.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
   const bayi=c.bayiId?komById(c.bayiId):null,dan=c.danismanId?komById(c.danismanId):null;
-  return card('Müşteri — '+esc(c.name),
+  return card('Müşteri — '+esc(c.name)+(c.arsiv?' <span style="font-size:10px;font-weight:700;background:#eef2f7;color:#8aa0b8;padding:2px 8px;border-radius:10px;vertical-align:middle">ARŞİVDE</span>':''),
     row('Telefon',telLink(c.phone))+
     row('Adres',mapsLink(c))+
     row('Şehir / Bölge',esc(c.city||'—'))+(c.firma?row('Firma',esc(c.firma)):'')+

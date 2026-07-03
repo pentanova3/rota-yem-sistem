@@ -785,7 +785,7 @@ function renderOrderModal(){
   const o=editOrder;const ro=!canEdit();
   const noShip=o.fiyatKademe==='fabrika';      // Fabrika tesliminde sevkiyat bilgisi girilmez
   const shipRO=ro||noShip;
-  const custOpts=DB.customers.slice().sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>`<option value="${c.id}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}${c.city?' · '+esc(c.city):''}</option>`).join('');
+  const custOpts=DB.customers.filter(c=>!c.arsiv||c.id===o.customerId).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>`<option value="${c.id}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}${c.city?' · '+esc(c.city):''}${c.arsiv?' (ARŞİV)':''}</option>`).join('');
   let lines=(o.lines||[]).map((l,i)=>orderLineRow(l,i,ro)).join('');
   const showPrice=canSeePrice();
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide" onclick="event.stopPropagation()">
@@ -1212,12 +1212,20 @@ function custBagHTML(x){
   if(d)h+='<div style="white-space:nowrap"><span style="font-size:9px;font-weight:700;color:#6D28D9">DAN.</span> <span style="font-size:11.5px">'+esc(d.name)+'</span></div>';
   return h;
 }
+// Arşiv: çalışmayı bırakan müşteri silinmez, arşive alınır (geçmişi korunur).
+function arsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Yetkiniz yok');return}
+  if(!confirm(c.name+' arşive alınsın mı?\n\nSilinmez; sipariş geçmişi korunur, listeden ve sipariş formundan kalkar. Arşiv sekmesinden geri alınabilir.'))return;
+  c.arsiv=true;c.arsivTarih=todayISO();logAct('Müşteri arşive alındı: '+c.name);saveDB();closeModal();toast(c.name+' arşive alındı');render();}
+function unarsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Yetkiniz yok');return}
+  c.arsiv=false;delete c.arsivTarih;logAct('Müşteri arşivden çıkarıldı: '+c.name);saveDB();closeModal();toast(c.name+' aktif listeye döndü');render();}
 function custTableHTML(){
-  let arr=DB.customers.slice();
+  const arsivMode=custTab==='arsiv';
+  let arr=DB.customers.filter(x=>!!x.arsiv===arsivMode);
   if(custQ){const q=trNorm(custQ);arr=arr.filter(x=>{
     const b=x.bayiId?komById(x.bayiId):null, d=x.danismanId?komById(x.danismanId):null;
     return trNorm(x.name).includes(q)||trNorm(x.city||'').includes(q)||trNorm(x.adres||'').includes(q)||(x.phone||'').includes(custQ)||(b&&trNorm(b.name).includes(q))||(d&&trNorm(d.name).includes(q));})}
   arr.sort((a,b)=>(b.orderCount||0)-(a.orderCount||0)||a.name.localeCompare(b.name,'tr'));
+  if(arsivMode)return `<div class="card-hd"><h3>${arr.length} Arşivli Müşteri</h3><span style="font-size:11px;color:var(--slate-400)">geçmişi korunur · sipariş formunda görünmez</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>İl</th><th>Arşiv Tarihi</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr style="opacity:.75"><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b></td><td>${x.phone?esc(x.phone):'—'}</td><td>${esc(x.city||'—')}</td><td>${x.arsivTarih?fmtDate(x.arsivTarih):'—'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap">${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${x.id}')">Geri Al</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" style="color:var(--red-700)" onclick="delCust('${x.id}')">Kalıcı Sil</button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Arşivde müşteri yok</td></tr>`}</tbody></table></div>`;
   return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>Adres</th><th>İl</th><th>Bayi / Danışman</th><th>Firma</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b>${x.tip?'<div style="font-size:10px;color:var(--slate-400)">'+esc(x.tip)+'</div>':''}</td><td style="white-space:nowrap">${x.phone?`<a href="tel:${esc(String(x.phone).replace(/\\s/g,''))}" style="color:var(--blue-700);text-decoration:none;font-weight:600">${esc(x.phone)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px;max-width:180px">${x.adres?`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.adres+(x.city?' '+x.city:''))}" target="_blank" title="Google Haritalar'da aç" style="color:var(--slate-600);text-decoration:underline dotted">${esc(x.adres)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px"><span onclick="ilEdit(event,this,'${x.id}')" title="İl seç / düzelt" style="cursor:pointer;border-bottom:1px dashed var(--slate-300);color:${x.city?(ilMatch(x.city)?'var(--slate-600)':'#B45309'):'var(--slate-300)'}">${esc(x.city||'— il seç —')} ▾</span></td><td>${custBagHTML(x)}</td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap"><button class="btn-ic" onclick="openCust('${x.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td></tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshCust(){const el=document.getElementById('custCard');if(el)el.innerHTML=custTableHTML()}
@@ -1270,12 +1278,14 @@ function renderCustomers(c,tb){
   var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">Excel İndir</button>';
   if(canEdit())tb.innerHTML=_exp+' <button class="btn btn-gray btn-sm" onclick="ilDuzelt()" title="İl/ilçe adı yazılanları il adına çevir, tanınmayanları temizle">Şehirleri Düzelt</button> <button class="btn btn-pri" onclick="openCust()">+ Yeni Müşteri</button>';
   else tb.innerHTML=_exp;
-  const tabs=`<div style="display:flex;gap:8px;margin-bottom:12px">
+  const arsivAdet=DB.customers.filter(x=>x.arsiv).length;
+  const tabs=`<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <button class="btn ${custTab==='liste'?'':'btn-gray'}" style="${custTab==='liste'?'background:var(--blue-800);color:#fff':''}" onclick="custTab='liste';render()">Müşteri Listesi</button>
     <button class="btn ${custTab==='rapor'?'':'btn-gray'}" style="${custTab==='rapor'?'background:var(--blue-800);color:#fff':''}" onclick="custTab='rapor';render()">Müşteri Raporu</button>
+    <button class="btn ${custTab==='arsiv'?'':'btn-gray'}" style="${custTab==='arsiv'?'background:var(--blue-800);color:#fff':''}" onclick="custTab='arsiv';render()">Müşteri Arşivi${arsivAdet?' ('+arsivAdet+')':''}</button>
   </div>`;
   if(custTab==='rapor'){c.innerHTML=tabs+custRaporHTML();return;}
-  let h=tabs+`<div class="filters"><input class="fsearch" placeholder="Müşteri / şehir / telefon / adres / bayi ara..." value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
+  let h=tabs+`<div class="filters"><input class="fsearch" placeholder="${custTab==='arsiv'?'Arşivde ara...':'Müşteri / şehir / telefon / adres / bayi ara...'}" value="${esc(custQ)}" oninput="custQ=this.value;refreshCust()"></div>
   <div class="card" id="custCard">${custTableHTML()}</div>`;
   c.innerHTML=h;
 }
@@ -1346,7 +1356,7 @@ function openCust(id){
   const o=editCust;const ro=!canEdit();
   const orders=o.id?DB.orders.filter(x=>x.customerId===o.id).sort((a,b)=>b.date.localeCompare(a.date)):[];
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-hd"><h2>${o.id?'Müşteri Detayı':'Yeni Müşteri'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
+    <div class="modal-hd"><h2>${o.id?'Müşteri Detayı':'Yeni Müşteri'}${o.arsiv?' <span style="font-size:10px;font-weight:700;background:var(--slate-100);color:var(--slate-500);padding:3px 10px;border-radius:12px;vertical-align:middle">ARŞİVDE'+(o.arsivTarih?' · '+fmtDate(o.arsivTarih):'')+'</span>':''}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
     <div class="modal-bd">
       <div class="fgrid"><div class="fld"><label>Müşteri Adı</label><input value="${esc(o.name)}" ${ro?'disabled':''} onchange="editCust.name=this.value"></div>
       <div class="fld"><label>Telefon (WhatsApp)</label><input value="${esc(o.phone)}" placeholder="05XX XXX XX XX" ${ro?'disabled':''} onchange="editCust.phone=this.value"></div></div>
@@ -1373,13 +1383,15 @@ function openCust(id){
         <div class="sub-hd">Sipariş Geçmişi (${orders.length})</div>
         <div style="max-height:260px;overflow:auto"><table class="tbl" style="font-size:12px"><thead><tr><th>Tarih</th><th>No</th><th>Ürünler</th><th class="num">Çuval</th>${canSeePrice()?'<th class="num">Tutar</th>':''}<th>Durum</th></tr></thead><tbody>${orders.map(x=>`<tr onclick="closeModal();openOrder('${x.id}')" style="cursor:pointer"><td style="white-space:nowrap">${fmtDate(x.date)}</td><td>#${esc(x.no||'')}</td><td style="font-size:11px">${esc((x.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', '))}</td><td class="num">${fmtN((x.lines||[]).reduce((s,l)=>s+(+l.qty||0),0))}</td>${canSeePrice()?`<td class="num">${fmtTL(orderTotal(x))}</td>`:''}<td>${statusBadge(x.status)}</td></tr>`).join('')||'<tr><td colspan="6" class="tbl-empty">Sipariş yok</td></tr>'}</tbody></table></div>`;})():''}
     </div>
-    <div class="modal-ft"><div>${o.id&&isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delCust('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
+    <div class="modal-ft"><div>${o.id?(o.arsiv
+      ?`${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${o.id}')">Arşivden Çıkar</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delCust('${o.id}')" style="color:var(--red-700)">Kalıcı Sil</button>`:''}`
+      :(canEdit()?`<button class="btn btn-gray btn-sm" onclick="arsivCust('${o.id}')" title="Silinmez; geçmişi korunarak arşive alınır"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg> Arşive Al</button>`:'')):''}</div>
     <div style="display:flex;gap:8px">${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/${phoneClean(o.phone)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp</button>`:''}${ro?'':`<button class="btn btn-grn" onclick="saveCust()">Kaydet</button>`}<button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
 function saveCust(){const o=editCust;if(!o.name.trim()){toast('İsim giriniz');return}if(o.bayiId&&o.danismanId){toast('Müşteriye ya bayi ya danışman atanabilir — birini temizleyin');return}if(o.id){const i=DB.customers.findIndex(x=>x.id===o.id);DB.customers[i]=o;}else{o.id=uid('c');o.orderCount=0;DB.customers.push(o);}logAct('Müşteri kaydı: '+o.name);saveDB();closeModal();toast('Müşteri kaydedildi');render()}
-function delCust(id){if(!confirm('Müşteri silinsin mi? Siparişleri silinmez.'))return;DB.customers=DB.customers.filter(c=>c.id!==id);saveDB();closeModal();toast('Silindi');render()}
+function delCust(id){const c=custById(id);if(!confirm((c?c.name:'Müşteri')+' KALICI olarak silinsin mi?\n\nBu işlem geri alınamaz (siparişleri silinmez). Genellikle arşive almak yeterlidir.'))return;DB.customers=DB.customers.filter(x=>x.id!==id);logAct('Müşteri kalıcı silindi: '+(c?c.name:id));saveDB();closeModal();toast('Kalıcı silindi');render()}
 // ============ KOMİSYONCULAR (BAYİ & DANIŞMAN) ============
 let komQ='',komTypeFilter='';
 function komFiltered(){
