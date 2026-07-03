@@ -219,6 +219,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .mob-menu{display:none}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="/portal-auth.js"></script>
 </head>
 <body>
 
@@ -482,7 +483,7 @@ function addDaysISO(iso,days){const d=new Date(iso||todayISO());if(isNaN(d))retu
 function fmtDateTime(d){if(!d)return '—';const x=new Date(d);if(isNaN(x))return fmtDate(d);return x.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 function nextOrderNo(){return (DB.orders||[]).reduce((m,o)=>Math.max(m,+o.no||0),0)+1}
 function kanbanDate(o){return (o&&(o.teslimTarihi||o.date))||''}  // kanban teslim tarihine göre (yoksa alım tarihi)
-function canSeePrice(){return USER && (USER.role==='admin'||USER.role==='sevkiyat'||USER.role==='goruntule')}
+function canSeePrice(){return USER && (USER.role==='admin'||USER.role==='sevkiyat'||USER.role==='goruntule'||USER.fiyatGor===true)}
 function canEdit(){return USER && (USER.role==='admin'||USER.role==='siparis'||USER.role==='sevkiyat')}
 function isAdmin(){return USER&&USER.role==='admin'}
 function statusLabel(v){const s=optDurum().find(x=>x.v===v);return s?s.l:v}
@@ -548,7 +549,7 @@ function doLogin(e){e.preventDefault();
   document.getElementById('app').classList.add('on');
   initApp();
 }
-function logout(){sessionStorage.removeItem('rota_so_user');USER=null;location.reload()}
+function logout(){sessionStorage.removeItem('rota_so_user');try{localStorage.removeItem('rota_portal_session')}catch(e){}USER=null;location.href='/'}
 function tryAutoLogin(){const u=sessionStorage.getItem('rota_so_user');if(u){const usr=DB.users.find(x=>x.username===u);if(usr){USER=usr;document.getElementById('loginWrap').classList.add('hidden');document.getElementById('app').classList.add('on');initApp();return true}}return false}
 // ============ İKONLAR (inline SVG, Lucide tarzı) ============
 const ICON_PATHS={
@@ -2182,6 +2183,29 @@ function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReade
 loadDB();
 document.getElementById('lhint').innerHTML='Demo giriş: <b>admin</b> / <b>rota2026</b><br>(Sipariş personeli: siparis/siparis · fiyat görmez)';
 tryAutoLogin();
+// Tek giriş (SSO): portal oturumu varsa modül girişi istenmez.
+// Portal verisi yoksa (ilk kurulum/çevrimdışı) eski giriş ekranı geçerli kalır.
+async function tryPortalLogin(){
+  if(USER||!window.PortalAuth)return;
+  try{
+    const d=await PortalAuth.getData();
+    if(!d||!Array.isArray(d.users)||!d.users.length)return;      // legacy: modül girişi
+    const s=PortalAuth.session();
+    if(!s){location.href='/?giris=1&next='+encodeURIComponent('/siparis-takip/');return;}
+    const pu=d.users.find(x=>x.username===s.u);
+    if(!pu){PortalAuth.clearSession();location.href='/?giris=1&next='+encodeURIComponent('/siparis-takip/');return;}
+    const lvl=(pu.perms&&pu.perms.siparis)||'yok';
+    if(lvl==='yok'){
+      document.getElementById('loginWrap').innerHTML='<div class="login-card" style="text-align:center"><h1 style="font-size:17px;color:#0C2340;margin-bottom:8px">Erişim Yetkiniz Yok</h1><p style="font-size:13px;color:#64748B;line-height:1.6">Sipariş Takip modülüne erişim yetkiniz bulunmuyor.<br>Yetki için yöneticinizle görüşün.</p><a href="/" style="display:inline-block;margin-top:14px;background:#0C2340;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 22px;border-radius:9px">Portala Dön</a></div>';
+      return;
+    }
+    USER={username:pu.username,name:pu.name||pu.username,role:lvl,fiyatGor:pu.fiyatGor===true};
+    document.getElementById('loginWrap').classList.add('hidden');
+    document.getElementById('app').classList.add('on');
+    initApp();
+  }catch(e){/* portal erişilemedi — eski giriş ekranı kalır */}
+}
+if(!USER)tryPortalLogin();
 // Firebase'den veri gelince yeniden yükle (cihazlar arası senkron)
 window.__KOMS=null;
 window.__setKoms=function(arr){

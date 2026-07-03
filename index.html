@@ -134,11 +134,44 @@ details.val .body p:first-child{margin-top:0;padding-top:14px;border-top:1px sol
 .ka-close:hover{background:#0c2340;color:#fff}
 @media(max-width:560px){.ka-bar button{padding:11px 14px}}
 
+
+/* ===== Portal Giriş & Erişim Yönetimi ===== */
+#pa-bar{display:flex;align-items:center;gap:8px}
+.pa-user{font-size:12px;font-weight:700;color:#0c2340}
+.pa-btn{background:#0c2340;color:#fff;border:none;border-radius:30px;font:700 11.5px var(--font);letter-spacing:.03em;padding:8px 16px;cursor:pointer;transition:.2s}
+.pa-btn:hover{background:#174b82}
+.pa-btn.pa-out{background:#eef2f7;color:#41546e;border:1px solid #dde5ee}
+.pa-btn.pa-out:hover{background:#e2e8f0}
+.pa-btn.pa-sm{padding:7px 13px;border-radius:9px}
+.pa-btn.pa-go{width:100%;padding:12px;border-radius:11px;font-size:13px;margin-top:14px}
+.pa-ic{width:32px;height:32px;border-radius:50%;border:1px solid #dde5ee;background:#eef2f7;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#41546e;transition:.2s}
+.pa-ic:hover{background:#0c2340;color:#fff;border-color:#0c2340}
+.pa-ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pa-locked{opacity:.45;filter:grayscale(.4)}
+.pa-locked::after{content:"KİLİTLİ";position:absolute;top:13px;right:15px;font:700 9px var(--font);letter-spacing:.1em;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);padding:4px 10px;border-radius:20px}
+.pa-bg{position:fixed;inset:0;background:rgba(7,26,50,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
+.pa-box{position:relative;background:#fff;border-radius:16px;padding:26px 28px;width:100%;max-width:360px;box-shadow:0 30px 80px -30px rgba(7,26,50,.6);text-align:left;max-height:92vh;overflow:auto}
+.pa-box.pa-wide{max-width:1180px}
+.pa-t{font:800 17px var(--font);color:#0c2340;margin-bottom:6px}
+.pa-s{font-size:12px;color:#5b6b80;line-height:1.6;margin-bottom:14px}
+.pa-l{display:block;font:700 10.5px var(--font);letter-spacing:.06em;text-transform:uppercase;color:#8aa0b8;margin:12px 0 5px}
+.pa-box input:not([type=checkbox]),.pa-box select{width:100%;border:1.5px solid #d5deea;border-radius:9px;padding:9px 11px;font:500 13px var(--font);color:#0c2340;outline:none}
+.pa-box input:focus,.pa-box select:focus{border-color:#0c2340}
+.pa-err{font-size:12px;color:#b91c1c;min-height:16px;margin-top:8px}
+.pa-x{position:absolute;top:12px;right:14px;background:none;border:none;font-size:16px;color:#8aa0b8;cursor:pointer}
+.pa-tblwrap{overflow-x:auto;margin:6px 0 10px;border:1px solid #e6ecf3;border-radius:10px}
+.pa-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.pa-tbl th{font:700 9.5px var(--font);letter-spacing:.05em;text-transform:uppercase;color:#8aa0b8;padding:8px;border-bottom:2px solid #e6ecf3;text-align:left;white-space:nowrap}
+.pa-tbl td{padding:6px 7px;border-bottom:1px solid #f2f5f9;vertical-align:middle}
+.pa-tbl input,.pa-tbl select{padding:6px 7px!important;font-size:12px!important;border-radius:7px!important}
+.pa-del{background:#fff1f2;color:#b91c1c;border:1px solid #fecdd3;border-radius:7px;font:600 11px var(--font);padding:5px 10px;cursor:pointer}
+.pa-onay{background:#f6f9fc;border:1px solid #e6ecf3;border-radius:10px;padding:12px 14px;font-size:12.5px;color:#41546e}
+
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="langbar"><div class="lang"><button id="lng-tr" class="on" onclick="setLang('tr')">TR</button><button id="lng-en" onclick="setLang('en')">EN</button></div></div>
+  <div class="langbar" style="gap:10px;display:flex;align-items:center;justify-content:flex-end"><div id="pa-bar"></div><div class="lang"><button id="lng-tr" class="on" onclick="setLang('tr')">TR</button><button id="lng-en" onclick="setLang('en')">EN</button></div></div>
 
   <header class="head">
     <span class="logo-plate"><img src="rota-smi.png" alt="Rota SMI Tarım"></span>
@@ -309,6 +342,7 @@ try{const s=localStorage.getItem('rota_portal_lang');if(s==='en'||s==='tr')LANG=
 render();
 </script>
 <script type="module" src="arama.js"></script>
+<script type="module" src="portal.js"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
 </body>
 </html>
