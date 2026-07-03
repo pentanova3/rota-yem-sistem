@@ -518,14 +518,56 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   }
   const M=d.muhasebeOnay||{};const alicilar=M.alicilar||[];const gerekli=Math.min(+M.gerekli||1,alicilar.length||1);
   if(!alicilar.length)return;                                       // alıcı tanımlı değil → eski şifre geçerli
+  // ---- Giriş geçmişi (denetim kaydı): kim, ne zaman girdi, ne kadar kaldı (apps/muhasebeLog) ----
+  const LKEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
+  const LOGURL='https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/apps/muhasebeLog?key='+LKEY;
+  async function logGet(){try{const r=await fetch(LOGURL);if(!r.ok)return [];const j=await r.json();const s=j.fields&&j.fields.data&&j.fields.data.mapValue&&j.fields.data.mapValue.fields&&j.fields.data.mapValue.fields.rota_muhlog_v1;return (s&&s.stringValue)?JSON.parse(s.stringValue):[];}catch(e){return [];}}
+  async function logSet(list,ka){const body=JSON.stringify({fields:{data:{mapValue:{fields:{rota_muhlog_v1:{stringValue:JSON.stringify(list)}}}}}});try{await fetch(LOGURL,{method:'PATCH',headers:{'Content-Type':'application/json'},body:body,keepalive:!!ka});}catch(e){}}
+  async function logStart(){
+    const entry={id:'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),u:(u.name||u.username),un:u.username,giris:new Date().toISOString(),son:new Date().toISOString()};
+    sessionStorage.setItem('rota_muh_logid',entry.id);
+    const list=await logGet();list.push(entry);await logSet(list.slice(-300));
+  }
+  async function logBeat(ka){
+    const id=sessionStorage.getItem('rota_muh_logid');if(!id)return;
+    const list=await logGet();const e=list.find(x=>x.id===id);if(!e)return;
+    e.son=new Date().toISOString();await logSet(list,ka);
+  }
+  function logButton(){
+    if(document.getElementById('muhLogBtn'))return;
+    const b=document.createElement('button');b.id='muhLogBtn';b.textContent='Giriş Geçmişi';
+    b.style.cssText='position:fixed;bottom:16px;right:16px;z-index:90;background:#0C2340;color:#fff;border:none;border-radius:22px;padding:10px 18px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;box-shadow:0 8px 20px rgba(12,35,64,.35)';
+    b.onclick=showLog;document.body.appendChild(b);
+  }
+  async function showLog(){
+    const eski=document.getElementById('muhLogOv');if(eski)eski.remove();
+    const ov=document.createElement('div');ov.id='muhLogOv';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(12,35,64,.5);z-index:120;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:82vh;overflow:auto;padding:22px 24px;position:relative"><div style="font:800 15px Inter,system-ui;color:#0C2340;margin-bottom:4px">Muhasebe Giriş Geçmişi</div><div style="font-size:11.5px;color:#64748B;margin-bottom:12px">Telegram onaylı girişler · son görülme ekran açıkken 30 sn aralıkla güncellenir</div><div id="muhLogIc" style="font-size:12.5px;color:#64748B">Yükleniyor…</div><button onclick="this.closest(\'#muhLogOv\').remove()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:16px;color:#94A3B8;cursor:pointer">✕</button></div>';
+    ov.onclick=function(e){if(e.target===ov)ov.remove();};
+    document.body.appendChild(ov);
+    const list=(await logGet()).slice().reverse().slice(0,60);
+    const fmt=function(iso){const d2=new Date(iso);return d2.toLocaleDateString('tr-TR')+' '+d2.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});};
+    const dur=function(a,b){const ms=new Date(b)-new Date(a);if(ms<60000)return "1 dk'dan az";const m=Math.round(ms/60000);return m<60?(m+' dk'):(Math.floor(m/60)+' sa '+(m%60)+' dk');};
+    const now=Date.now();
+    const rows=list.map(function(e){
+      const aktif=(now-new Date(e.son).getTime())<150000;
+      const ad=String(e.u||'').replace(/</g,'&lt;');
+      return '<tr><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9"><b style="color:#0C2340">'+ad+'</b></td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap">'+fmt(e.giris)+'</td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap">'+(aktif?'<span style="color:#15803D;font-weight:700">şu an içeride</span>':fmt(e.son))+'</td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;font-weight:700;color:#0C2340;white-space:nowrap">'+dur(e.giris,e.son)+'</td></tr>';
+    }).join('');
+    document.getElementById('muhLogIc').innerHTML=list.length
+      ?'<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr><th style="text-align:left;padding:6px 10px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#94A3B8;border-bottom:2px solid #E2E8F0">Kullanıcı</th><th style="text-align:left;padding:6px 10px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#94A3B8;border-bottom:2px solid #E2E8F0">Giriş</th><th style="text-align:left;padding:6px 10px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#94A3B8;border-bottom:2px solid #E2E8F0">Son Görülme</th><th style="text-align:left;padding:6px 10px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#94A3B8;border-bottom:2px solid #E2E8F0">Kalış</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      :'Henüz giriş kaydı yok.';
+  }
   // Onay oturumu kuralı: ekran açık kaldıkça geçerli (30 sn'de bir "son görülme" damgası).
   // Sayfadan ayrılıp 10 dk içinde dönülürse onaysız girilir; 10 dk aşılırsa süre aşımı → yeniden onay.
   // Site/sekme kapatılırsa sessionStorage silindiği için her durumda yeniden onay istenir.
   const ONAY_MS=10*60*1000;
   function muhHeartbeat(){
+    let tik=0;
     const beat=function(){try{sessionStorage.setItem('rota_muh_seen',String(Date.now()))}catch(e){}};
-    beat();setInterval(beat,30000);
-    window.addEventListener('pagehide',beat);
+    beat();setInterval(function(){beat();if(++tik%4===0)logBeat();},30000);
+    window.addEventListener('pagehide',function(){beat();logBeat(true);});
     document.addEventListener('visibilitychange',beat);
   }
   const onayVar=sessionStorage.getItem('rota_muh_onay')==='1';
@@ -533,8 +575,10 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   const sureAsimi=onayVar&&(!seen||(Date.now()-seen)>ONAY_MS);
   if(onayVar&&!sureAsimi){sessionStorage.setItem('rota_nakit_ok','1');
     document.getElementById('gate').classList.add('hidden');document.getElementById('app').classList.remove('hidden');
-    if(window.__reloadMuhasebe)window.__reloadMuhasebe();muhHeartbeat();return;}
-  if(sureAsimi){sessionStorage.removeItem('rota_muh_onay');sessionStorage.removeItem('rota_muh_seen');}
+    if(window.__reloadMuhasebe)window.__reloadMuhasebe();muhHeartbeat();
+    if(sessionStorage.getItem('rota_muh_logid'))logBeat();else logStart();
+    logButton();return;}
+  if(sureAsimi){sessionStorage.removeItem('rota_muh_onay');sessionStorage.removeItem('rota_muh_seen');sessionStorage.removeItem('rota_muh_logid');}
   // onay gerekli: uygulamayı kapat, gate'i onay ekranına çevir
   sessionStorage.removeItem('rota_nakit_ok');
   document.getElementById('app').classList.add('hidden');
@@ -563,7 +607,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     const oks=Object.keys(f).filter(k=>k.indexOf('ok_')===0);
     st.textContent='Onay bekleniyor… ('+oks.length+'/'+gerekli+')';
     if(oks.length>=gerekli){clearInterval(timer);
-      sessionStorage.setItem('rota_muh_onay','1');sessionStorage.setItem('rota_nakit_ok','1');sessionStorage.setItem('rota_muh_seen',String(Date.now()));
+      sessionStorage.setItem('rota_muh_onay','1');sessionStorage.setItem('rota_nakit_ok','1');sessionStorage.setItem('rota_muh_seen',String(Date.now()));sessionStorage.removeItem('rota_muh_logid');
       st.textContent='Onaylandı — açılıyor…';st.style.color='#15803D';
       setTimeout(function(){location.reload();},700);}
   },2500);
