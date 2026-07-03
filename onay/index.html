@@ -84,7 +84,7 @@ import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/fireb
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(firebaseConfig), db=getFirestore(app);
 
-const KADEME={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi Satış',uzak:'Uzak Bayi Satış'};
+const KADEME={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi Satış',uzak:'Uzak Bayi Satış',bayi:'Bayi Satış'};
 const APP=document.getElementById('app');
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function fmtN(n){n=+n||0;return n.toLocaleString('tr-TR',{maximumFractionDigits:2})}

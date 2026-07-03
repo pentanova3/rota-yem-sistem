@@ -217,6 +217,23 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 .priceHidden{color:var(--slate-300)!important;font-style:italic}
 @media(max-width:980px){.app.on{grid-template-columns:1fr}.sidebar{position:fixed;left:-260px;transition:left .25s;z-index:300;width:250px}.sidebar.open{left:0}.report-grid{grid-template-columns:1fr}.report-grid .full{grid-column:span 1}.fgrid,.fgrid.c3{grid-template-columns:1fr}.mob-menu{display:inline-flex!important}}
 .mob-menu{display:none}
+/* ===== Aranabilir açılır liste (combobox) ===== */
+.combo{position:relative}
+.combo>input{width:100%;padding:9px 30px 9px 11px;border:1px solid var(--slate-300);border-radius:6px;font-size:13px;color:var(--slate-800);background:#fff}
+.combo>input:focus{border-color:var(--blue-500);outline:none}
+.combo>input:disabled{background:var(--slate-50)}
+.combo::after{content:"";position:absolute;right:11px;top:50%;width:7px;height:7px;margin-top:-5px;border-right:2px solid var(--slate-400);border-bottom:2px solid var(--slate-400);transform:rotate(45deg);pointer-events:none}
+.combo-list{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:60;background:#fff;border:1px solid var(--slate-300);border-radius:8px;max-height:250px;overflow:auto;box-shadow:0 14px 34px -14px rgba(15,23,42,.3);display:none}
+.combo-list.open{display:block}
+.combo-it{padding:8px 12px;font-size:12.5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--slate-50)}
+.combo-it:hover,.combo-it.hl{background:var(--blue-50)}
+.combo-it .cs{color:var(--slate-400);font-size:11px;white-space:nowrap}
+.combo-it.combo-clear{color:var(--slate-400);font-style:italic}
+.combo-empty{padding:12px;font-size:12px;color:var(--slate-400);text-align:center;display:none}
+/* otomatik atama bilgi kutuları */
+.atama-box{display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:8px;font-size:12.5px;margin-top:2px}
+.atama-box b{font-size:13px}
+.atama-tag{font-size:9px;font-weight:800;letter-spacing:.05em;padding:3px 9px;border-radius:10px;white-space:nowrap}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="/portal-auth.js"></script>
@@ -783,9 +800,9 @@ function openOrder(id){
 }
 function renderOrderModal(){
   const o=editOrder;const ro=!canEdit();
-  const noShip=o.fiyatKademe==='fabrika';      // Fabrika tesliminde sevkiyat bilgisi girilmez
+  const noShip=o.fiyatKademe==='fabrika'&&!o.aliciBayi;   // Fabrika tesliminde sevkiyat girilmez (bayi satışında girilir)
   const shipRO=ro||noShip;
-  const custOpts=DB.customers.filter(c=>!c.arsiv||c.id===o.customerId).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>`<option value="${c.id}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}${c.city?' · '+esc(c.city):''}${c.arsiv?' (ARŞİV)':''}</option>`).join('');
+  const custItems=DB.customers.filter(c=>!c.arsiv||c.id===o.customerId).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>({v:c.id,l:c.name+(c.arsiv?' (ARŞİV)':''),s:c.city||''}));
   let lines=(o.lines||[]).map((l,i)=>orderLineRow(l,i,ro)).join('');
   const showPrice=canSeePrice();
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal wide" onclick="event.stopPropagation()">
@@ -793,7 +810,7 @@ function renderOrderModal(){
     <div class="modal-bd">
       <div class="fgrid c3">
         <div class="fld"><label>Sipariş No</label><input value="${o.no?('#'+o.no):('#'+nextOrderNo()+' · otomatik')}" disabled style="font-weight:700;color:var(--blue-800)"></div>
-        <div class="fld"><label>Müşteri</label><select ${ro?'disabled':''} onchange="onPickCustomer(this.value)"><option value="">— Seçiniz —</option>${custOpts}</select></div>
+        <div class="fld"><label>Müşteri${o.aliciBayi?' <span style="font-weight:600;font-size:10px;color:var(--amber-700);text-transform:none;letter-spacing:0">— alıcı bayi, müşteri seçilmez</span>':''}</label>${o.aliciBayi?'<input value="—" disabled>':comboHTML({id:'comboCust',items:custItems,value:o.customerId,ph:'Müşteri ara / seç...',pick:'pickOrderCustomer',ro})}</div>
         <div class="fld"><label>Firma</label><select ${ro?'disabled':''} onchange="editOrder.firma=this.value"><option value="">—</option>${optFirma().map(f=>`<option value="${esc(f)}" ${o.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
@@ -802,7 +819,7 @@ function renderOrderModal(){
         <div class="fld"><label>Durum</label><select ${ro?'disabled':''} onchange="onChangeStatus(this.value)">${optDurum().filter(s=>!(s.v==='sevk'&&isSelfPickup(o)&&o.status!=='sevk')).map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''}>${esc(s.l)}</option>`).join('')}</select></div>
       </div>
       <div class="fgrid c3">
-        <div class="fld"><label>Teslim Noktası</label><select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select></div>
+        <div class="fld"><label>Teslim Noktası</label>${o.aliciBayi?'<select disabled title="Bayiye satışta teslim noktası otomatik Bayi Satış olur"><option>Bayi Satış</option></select>':`<select ${ro?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select>`}</div>
         <div class="fld"><label>Ödeme Tarihi</label>${odemeFieldHTML(o,ro)}</div>
         <div class="fld"><label>Sipariş Alan</label><select ${ro?'disabled':''} onchange="editOrder.alan=this.value"><option value="">— Seçiniz —</option>${optAlan().map(a=>`<option value="${esc(a)}" ${o.alan===a?'selected':''}>${esc(a)}</option>`).join('')}${o.alan&&!optAlan().includes(o.alan)?`<option value="${esc(o.alan)}" selected>${esc(o.alan)}</option>`:''}</select>${optAlan().length?'':'<div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Ayarlar → Sipariş Alan Kişiler\'den ekleyin</div>'}</div>
       </div>
@@ -869,12 +886,6 @@ function orderKomisyonRow(o,ro){
   const bayiKom=o.bayiId?komById(o.bayiId):null;
   const danKom=o.danismanId?komById(o.danismanId):null;
   const bayiList=komByType('bayi').filter(k=>k.active!==false);
-  const danList=komByType('danisman').filter(k=>k.active!==false);
-  const c=custById(o.customerId);
-  const aBayi=c&&c.bayiId?komById(c.bayiId):null;
-  const aDan=c&&c.danismanId?komById(c.danismanId):null;
-  const hintB=aBayi?`<span style="font-size:9.5px;color:var(--blue-600);font-weight:500"> · Müşteri bayisi: ${esc(aBayi.name)}</span>`:'';
-  const hintD=aDan?`<span style="font-size:9.5px;color:var(--purple);font-weight:500"> · Müşteri danışmanı: ${esc(aDan.name)}</span>`:'';
   let danBreakdown='';
   if(danKom&&canSeePrice()&&!o.aliciBayi){
     const r=orderKomisyon(o,danKom);
@@ -930,12 +941,28 @@ function orderKomisyonRow(o,ro){
     }
   }
   const toggle=`<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:700;text-transform:none;letter-spacing:0;color:${aliciBayi?'var(--amber-700)':'var(--slate-500)'}"><input type="checkbox" ${aliciBayi?'checked':''} ${ro?'disabled':''} onchange="onToggleAliciBayi(this.checked)" style="width:17px;height:17px;accent-color:var(--amber-600)"> Alıcı: Bayi (bayiye satış)</label>`;
-  const danSelect=aliciBayi?'':`<div class="fld"><label>Teknik Danışman${hintD}</label><select ${ro?'disabled':''} onchange="pickKomSelect('danisman',this.value)"><option value="">— Danışman Seçiniz —</option>${danList.map(k=>`<option value="${k.id}" ${danKom&&danKom.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}</option>`).join('')}</select></div>`;
-  return `<div class="sub-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>Bayi / Danışman <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— ${aliciBayi?'bayiye satış · alıcı bayi':'ya bayi ya danışman seçilir'}</span></span>${toggle}</div>
-  <div class="fgrid ${aliciBayi?'':'c2'}">
-    <div class="fld"><label>Bayi${hintB}</label><select ${ro?'disabled':''} onchange="pickKomSelect('bayi',this.value)"><option value="">— Bayi Seçiniz —</option>${bayiList.map(k=>`<option value="${k.id}" ${bayiKom&&bayiKom.id===k.id?'selected':''}>${esc(k.name)}${k.city?' · '+esc(k.city):''}${k.rate?' (%'+fmtN(k.rate)+' isk.)':''}</option>`).join('')}</select></div>
-    ${danSelect}
-  </div>${aliciBayi&&!bayiKom?'<div style="margin-top:8px;font-size:11.5px;color:var(--amber-700);background:#FFFBEB;border:1px solid var(--amber-200);border-radius:7px;padding:8px 11px">Bayiye satış için yukarıdan bir <b>bayi</b> seçin.</div>':''}${danBreakdown}${bayiBreakdown}`;
+  const kart=(tag,tagBg,tagCol,ad,detay)=>`<div class="atama-box" style="background:${tagBg}18;border:1px solid ${tagBg}55"><span class="atama-tag" style="background:${tagBg};color:${tagCol}">${tag}</span><span><b>${esc(ad)}</b>${detay?' <span style="color:var(--slate-500)">· '+detay+'</span>':''}</span></div>`;
+  let atama='';
+  if(aliciBayi){
+    // BAYİYE SATIŞ: aranabilir bayi seçimi + bağlı danışman otomatik
+    const bayiItems=bayiList.map(k=>({v:k.id,l:k.name,s:(k.city||'')+(k.rate?' · %'+fmtN(k.rate)+' isk.':'')}));
+    const viaDan=bayiKom&&bayiKom.danismanId?komById(bayiKom.danismanId):null;
+    atama=`<div class="fgrid c2">
+      <div class="fld"><label>Bayi (Alıcı)</label>${comboHTML({id:'comboBayi',items:bayiItems,value:o.bayiId,ph:'Bayi ara / seç...',pick:'pickOrderBayi',ro})}</div>
+      <div class="fld"><label>Teknik Danışman <span style="font-weight:600;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0">— bayi kartından otomatik</span></label>
+        ${!bayiKom?'<input value="—" disabled>':(viaDan?kart('DANIŞMAN','#6D28D9','#fff',viaDan.name,'bayi üzerinden komisyon kazanır'):kart('FABRİKA','#64748B','#fff','Danışman atanmamış','fabrikanın müşterisi — komisyon işlenmez'))}
+      </div>
+    </div>${!bayiKom?'<div style="margin-top:8px;font-size:11.5px;color:var(--amber-700);background:#FFFBEB;border:1px solid var(--amber-200);border-radius:7px;padding:8px 11px">Bayiye satış için bir <b>bayi</b> seçin — birim fiyatlar fabrika fiyatından bayi iskontosu düşülerek otomatik gelir.</div>':''}`;
+  } else {
+    // MÜŞTERİYE SATIŞ: atama müşteri kartından OTOMATİK — elle seçim yok
+    if(!o.customerId)atama=`<div class="atama-box" style="background:var(--slate-50);border:1px dashed var(--slate-300);color:var(--slate-500)">Önce müşteri seçin — müşterinin atanmış bayisi veya teknik danışmanı otomatik uygulanır.</div>`;
+    else if(bayiKom)atama=kart('BAYİ','#B45309','#fff',bayiKom.name,'%'+fmtN((o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayiKom.rate||0))+' iskonto · müşteri kartından otomatik');
+    else if(danKom)atama=kart('DANIŞMAN','#6D28D9','#fff',danKom.name,'komisyon hesaplanır · müşteri kartından otomatik');
+    else atama=kart('FABRİKA','#64748B','#fff','Fabrika müşterisi (direkt)','bayi / danışman ataması yok');
+    if(o.customerId)atama+=`<div style="font-size:10px;color:var(--slate-400);margin-top:5px">Atamayı değiştirmek için Müşteriler sayfasından müşteri kartını düzenleyin; yeni siparişe otomatik yansır.</div>`;
+  }
+  return `<div class="sub-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>Bayi / Danışman <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— ${aliciBayi?'bayiye satış · alıcı bayi':'müşteri kartındaki atamaya göre otomatik'}</span></span>${toggle}</div>
+  ${atama}${danBreakdown}${bayiBreakdown}`;
 }
 function pickKomSelect(type,id){
   if(type==='bayi'){editOrder.bayiId=id||'';editOrder.komisyonRate=null;if(id)editOrder.danismanId='';if(editOrder.aliciBayi)applyBayiPricesToLines();}
@@ -945,8 +972,15 @@ function pickKomSelect(type,id){
 function onToggleAliciBayi(checked){
   editOrder.aliciBayi=!!checked;
   editOrder.iskontoMahsup='';
-  if(checked){editOrder.danismanId='';applyBayiPricesToLines();}
-  else applyTariffToLines();
+  if(checked){
+    editOrder.danismanId='';editOrder.customerId='';editOrder.customer='';
+    editOrder.fiyatKademe='bayi';               // teslim noktası otomatik: Bayi Satış
+    applyBayiPricesToLines();
+  } else {
+    editOrder.bayiId='';editOrder.danismanId='';
+    editOrder.fiyatKademe='fabrika';
+    applyTariffToLines();
+  }
   renderOrderModal();
 }
 function onMahsupAuto(checked){
@@ -964,7 +998,38 @@ function pickKomField(type,name){
   else{toast('Eşleşen kayıt bulunamadı');}
   renderOrderModal();
 }
-function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma&&!editOrder.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);if(c.bayiId){editOrder.bayiId=c.bayiId;editOrder.danismanId='';}else{editOrder.bayiId='';editOrder.danismanId=c.danismanId||'';}}clearLinePrices();renderOrderModal()}
+// Müşteri seçilince: firma, teslim kademesi ve bayi/danışman ataması OTOMATİK gelir (müşteri kartından).
+function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);if(c.bayiId){editOrder.bayiId=c.bayiId;editOrder.danismanId='';}else{editOrder.bayiId='';editOrder.danismanId=c.danismanId||'';}}else{editOrder.bayiId='';editOrder.danismanId='';}clearLinePrices();renderOrderModal()}
+// ===== Aranabilir açılır liste (combobox) =====
+// comboHTML({id, items:[{v,l,s}], value, ph, pick:'fnAdi', ro}) — pick(v) seçimde çağrılır.
+function comboHTML(o2){
+  const sel=o2.items.find(i=>i.v===o2.value);
+  return `<div class="combo" id="${o2.id}" data-pick="${o2.pick}">
+    <input placeholder="${esc(o2.ph||'Ara / seç...')}" value="${esc(sel?sel.l:'')}" ${o2.ro?'disabled':''} autocomplete="off"
+      oninput="comboFilter('${o2.id}')" onfocus="comboOpen('${o2.id}')" onkeydown="comboKey(event,'${o2.id}')">
+    <div class="combo-list">
+      ${o2.value?`<div class="combo-it combo-clear" onmousedown="comboPick(event,'${o2.id}','')">— Temizle —</div>`:''}
+      ${o2.items.map(i=>`<div class="combo-it" data-v="${esc(i.v)}" data-t="${esc(trNorm(i.l+' '+(i.s||'')))}" onmousedown="comboPick(event,'${o2.id}','${esc(i.v)}')"><span>${esc(i.l)}</span>${i.s?`<span class="cs">${esc(i.s)}</span>`:''}</div>`).join('')}
+      <div class="combo-empty">Eşleşen kayıt yok</div>
+    </div></div>`;
+}
+function comboOpen(id){const c=document.getElementById(id);if(!c)return;c.querySelector('.combo-list').classList.add('open');c.querySelector('input').select();comboFilter(id,true);}
+function comboFilter(id,keep){
+  const c=document.getElementById(id);if(!c)return;
+  const list=c.querySelector('.combo-list');list.classList.add('open');
+  const q=keep?'':trNorm(c.querySelector('input').value);
+  let n=0;
+  c.querySelectorAll('.combo-it[data-v]').forEach(it=>{const show=!q||it.dataset.t.includes(q);it.style.display=show?'':'none';if(show)n++;});
+  const emp=c.querySelector('.combo-empty');if(emp)emp.style.display=n?'none':'block';
+}
+function comboPick(ev,id,v){ev.preventDefault();const c=document.getElementById(id);const fn=c.dataset.pick;if(fn&&typeof window[fn]==='function')window[fn](v);}
+function comboKey(e,id){
+  if(e.key==='Escape'){const c=document.getElementById(id);c.querySelector('.combo-list').classList.remove('open');return;}
+  if(e.key==='Enter'){e.preventDefault();const c=document.getElementById(id);const ilk=[...c.querySelectorAll('.combo-it[data-v]')].find(it=>it.style.display!=='none');if(ilk){const fn=c.dataset.pick;if(fn)window[fn](ilk.dataset.v);}}
+}
+document.addEventListener('click',function(e){document.querySelectorAll('.combo-list.open').forEach(function(l){if(!l.parentElement.contains(e.target))l.classList.remove('open');});});
+window.pickOrderCustomer=function(id){onPickCustomer(id);};
+window.pickOrderBayi=function(id){pickKomSelect('bayi',id);};
 // Elle girilmemiş (kilitsiz) satırların birim fiyatını seçili tarifeden doldurur — "güncel tutarlar default gelsin"
 function applyTariffToLines(){const pl=orderPL(editOrder);(editOrder.lines||[]).forEach(l=>{if(!l._locked&&l.code){const v=tariffPrice(pl,l.code,editOrder.fiyatKademe);l.price=v||'';}})}
 // Bayiye satış birim fiyatı: FABRİKA fiyatı × (1 − bayi iskontosu). Örn. 850, %3 → 824,50.
@@ -1020,6 +1085,7 @@ function saveOrder(){
     if(!o.bayiId){toast('Bayiye satış için bayi seçiniz');return}
     const _b=komById(o.bayiId);o.customer=_b?('Bayi: '+_b.name):'';o.customerId='';
     o.danismanId=(_b&&_b.danismanId)||'';  // bayinin bağlı danışmanı — bayi üzerinden komisyon kazanır (sipariş anında kilitlenir)
+    o.fiyatKademe='bayi';                  // teslim noktası: Bayi Satış
   } else {
     o.iskontoMahsup='';
     if(!o.customerId){toast('Müşteri seçiniz');return}
@@ -1960,7 +2026,7 @@ function silUretim(id){const u=(DB.uretimler||[]).find(x=>x.id===id);if(!u)retur
 function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k=>k.hammaddeId))].map(hammaddeById).filter(h=>hamLow(h));if(low.length)toast('⚠ Düşük stok: '+low.map(h=>h.ad).join(', '));/* TODO: Telegram entegrasyonu (alt limit altı bildirim) sonra eklenecek */}
 
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi'};
+const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi',bayi:'Bayi Satış'};
 const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 // ============ TONAJ & HEDEF RAPORU ============
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
