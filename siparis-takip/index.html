@@ -1735,6 +1735,7 @@ function stokDevret(){
 }
 // ============ REPORTS ============
 let repView='aylik',repCharts=[],repFilt={year:'',month:''};
+let repTab='tonaj',tonajSel={year:'',month:''};
 // ============================================================
 // HAMMADDE STOK & REÇETE & ÜRETİM  (ana omurga)
 // ============================================================
@@ -1848,9 +1849,161 @@ function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi'};
 const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
+// ============ TONAJ & HEDEF RAPORU ============
+function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
+function tonOf(code,qty){return (+qty||0)*prodKg(code)/1000;}
+function tonajHedefMap(){DB.meta=DB.meta||{};return (DB.meta.tonajHedef=DB.meta.tonajHedef||{});}
+function setTonajHedef(key,val){if(!isAdmin())return;const m=tonajHedefMap();const v=parseFloat(String(val).replace(',','.'));if(isNaN(v)||v<=0)delete m[key];else m[key]=v;logAct('Aylık tonaj hedefi: '+key+' → '+(m[key]!=null?m[key]+' ton':'kaldırıldı'));saveDB();render();}
+function fmtTon(t){return (+t||0).toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1});}
+function tonajData(){
+  const now=new Date();
+  const orders=DB.orders.filter(o=>o.status!=='iptal'&&o.date);
+  const years=[...new Set(orders.map(o=>o.date.slice(0,4)))].sort();
+  if(!tonajSel.year||years.indexOf(tonajSel.year)<0)tonajSel.year=years.indexOf(String(now.getFullYear()))>=0?String(now.getFullYear()):(years[years.length-1]||String(now.getFullYear()));
+  const Y=tonajSel.year;
+  if(!tonajSel.month)tonajSel.month=(Y===String(now.getFullYear()))?String(now.getMonth()+1).padStart(2,'0'):'12';
+  const M=tonajSel.month;
+  const yearOrders=orders.filter(o=>o.date.slice(0,4)===Y);
+  // aylık: ay → ürün → ton
+  const byMonthProd={},byMonthTot={},prodTotY={};
+  yearOrders.forEach(o=>{const m=o.date.slice(5,7);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byMonthProd[m]=byMonthProd[m]||{})[l.code]=(byMonthProd[m][l.code]||0)+t;byMonthTot[m]=(byMonthTot[m]||0)+t;prodTotY[l.code]=(prodTotY[l.code]||0)+t;});});
+  const yearTot=Object.values(byMonthTot).reduce((a,b)=>a+b,0);
+  // günlük (seçili ay): gün → ürün → ton
+  const daysInM=new Date(+Y,+M,0).getDate();
+  const byDayProd={},byDayTot={},prodTotM={};
+  yearOrders.filter(o=>o.date.slice(5,7)===M).forEach(o=>{const d=o.date.slice(8,10);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byDayProd[d]=byDayProd[d]||{})[l.code]=(byDayProd[d][l.code]||0)+t;byDayTot[d]=(byDayTot[d]||0)+t;prodTotM[l.code]=(prodTotM[l.code]||0)+t;});});
+  const monthTot=Object.values(byDayTot).reduce((a,b)=>a+b,0);
+  // yıllık: yıl → ürün → ton
+  const byYearProd={},byYearTot={},prodAll={};
+  orders.forEach(o=>{const y=o.date.slice(0,4);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byYearProd[y]=byYearProd[y]||{})[l.code]=(byYearProd[y][l.code]||0)+t;byYearTot[y]=(byYearTot[y]||0)+t;prodAll[l.code]=(prodAll[l.code]||0)+t;});});
+  // hedef & tempo
+  const H=tonajHedefMap();
+  const isCurMonth=(Y===String(now.getFullYear())&&M===String(now.getMonth()+1).padStart(2,'0'));
+  const dayOfM=isCurMonth?now.getDate():daysInM;
+  const aktifGun=Object.keys(byDayTot).length;
+  const takvimOrt=dayOfM?monthTot/dayOfM:0;
+  const proj=isCurMonth?takvimOrt*daysInM:monthTot;
+  const hedefM=+H[Y+'-'+M]||0;
+  const kalanGun=Math.max(0,daysInM-dayOfM);
+  const gerekliTempo=(hedefM>monthTot&&kalanGun)?(hedefM-monthTot)/kalanGun:0;
+  let hedefYtoplam=0;for(let i=1;i<=12;i++){hedefYtoplam+=(+H[Y+'-'+String(i).padStart(2,'0')]||0);}
+  return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam};
+}
+function tonajBar(pct,col){const w=Math.max(0,Math.min(100,pct));return `<div style="background:var(--slate-200);height:7px;border-radius:4px;min-width:70px"><div style="width:${w}%;background:${col};height:7px;border-radius:4px"></div></div>`;}
+function tonajCols(prodTot,max){const arr=Object.entries(prodTot).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);return arr.length>max?{cols:arr.slice(0,max),other:arr.slice(max)}:{cols:arr,other:[]};}
+function tonajRaporuHTML(){
+  const D=tonajData();window._tonaj=D;
+  const admin=isAdmin();
+  const mmKey=i=>D.Y+'-'+String(i).padStart(2,'0');
+  const gerc=i=>D.byMonthTot[String(i).padStart(2,'0')]||0;
+  const pctM=D.hedefM?D.monthTot/D.hedefM*100:0;
+  const pctY=D.hedefYtoplam?D.yearTot/D.hedefYtoplam*100:0;
+  // --- İçgörüler ---
+  let enAy=null;for(let i=1;i<=12;i++){const g=gerc(i);if(g>0&&(!enAy||g>enAy.t))enAy={i,t:g};}
+  let enGun=null;Object.entries(D.byDayTot).forEach(([d,t])=>{if(!enGun||t>enGun.t)enGun={d,t};});
+  const liderU=Object.entries(D.prodTotY).sort((a,b)=>b[1]-a[1])[0]||null;
+  // son 3 tam ayın ortalaması (hedef önerisi)
+  const curMi=D.isCurMonth?+D.M-1:12;let s3=0,c3=0;for(let i=curMi;i>=1&&c3<3;i--){const g=gerc(i);if(g>0){s3+=g;c3++;}}
+  const oneri3=c3?s3/c3:0;
+  // --- KPI ---
+  let h=`<div class="rep-filter">
+    <span class="rf-lbl">Tonaj Dönemi</span>
+    <select onchange="tonajSel.year=this.value;tonajSel.month='';render()">${D.years.map(y=>`<option value="${y}" ${D.Y===y?'selected':''}>${y}</option>`).join('')}</select>
+    <select onchange="tonajSel.month=this.value;render()">${AYLAR_TR.map((m,i)=>{const mv=String(i+1).padStart(2,'0');return `<option value="${mv}" ${D.M===mv?'selected':''}>${m}</option>`}).join('')}</select>
+    <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">1 çuval = 25 kg · İptal siparişler hariç · tüm değerler TON</span>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} Tonaj</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
+    <div class="kpi ${D.hedefM?(pctM>=100?'g':(pctM>=70?'a':'r')):''}"><div class="kl">${AYLAR_TR[+D.M-1]} Hedef</div><div class="kv" style="font-size:18px">${D.hedefM?fmtTon(D.hedefM)+' t':'—'}</div><div class="ks">${D.hedefM?'Gerçekleşme %'+fmtN(Math.round(pctM)):'hedef girilmedi'}</div></div>
+    ${D.isCurMonth?`<div class="kpi p"><div class="kl">Ay Sonu Projeksiyon</div><div class="kv" style="font-size:18px">${fmtTon(D.proj)} t</div><div class="ks">günlük ort. ${fmtTon(D.takvimOrt)} t × ${D.daysInM} gün</div></div>`:''}
+    ${(D.isCurMonth&&D.hedefM)?`<div class="kpi ${D.gerekliTempo>D.takvimOrt?'r':'g'}"><div class="kl">Hedef İçin Gerekli Tempo</div><div class="kv" style="font-size:18px">${D.gerekliTempo?fmtTon(D.gerekliTempo)+' t/gün':'Tamamlandı'}</div><div class="ks">kalan ${D.kalanGun} gün</div></div>`:''}
+    <div class="kpi"><div class="kl">${D.Y} Yıl Toplamı</div><div class="kv" style="font-size:18px">${fmtTon(D.yearTot)} t</div></div>
+    <div class="kpi ${D.hedefYtoplam?(pctY>=100?'g':(pctY>=70?'a':'r')):''}"><div class="kl">${D.Y} Yıl Hedefi</div><div class="kv" style="font-size:18px">${D.hedefYtoplam?fmtTon(D.hedefYtoplam)+' t':'—'}</div><div class="ks">${D.hedefYtoplam?'Gerçekleşme %'+fmtN(Math.round(pctY)):'aylık hedefleri girin'}</div></div>
+  </div>`;
+  // --- Grafik + Hedef takip tablosu ---
+  h+=`<div class="report-grid">
+  <div class="card full"><div class="card-hd"><h3>${D.Y} Aylık Tonaj — Hedef Karşılaştırma</h3></div><div class="card-bd" style="padding:16px"><div class="chart-cv"><canvas id="rcTonaj"></canvas></div></div></div>
+  <div class="card full"><div class="card-hd"><h3>Hedef Takip — ${D.Y} <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— ${admin?'hedefleri buradan girebilirsiniz (ton)':'aylık ton hedefleri'}</span></h3></div><div class="card-bd" style="overflow-x:auto">
+    <table class="tbl"><thead><tr><th>Ay</th><th class="num">Hedef (t)</th><th class="num">Gerçekleşen (t)</th><th class="num">Fark (t)</th><th class="num">Gerçekleşme</th><th style="width:120px"></th><th>Durum</th></tr></thead><tbody>
+    ${AYLAR_TR.map((ad,i)=>{
+      const key=mmKey(i+1),hv=+D.H[key]||0,g=gerc(i+1);
+      const pct=hv?g/hv*100:0;
+      const gecmis=(D.Y<String(D.now.getFullYear()))||(D.Y===String(D.now.getFullYear())&&(i+1)<(D.now.getMonth()+1));
+      const buAy=(D.Y===String(D.now.getFullYear())&&(i+1)===(D.now.getMonth()+1));
+      let durum='<span style="color:var(--slate-300)">—</span>';
+      if(hv&&(gecmis||buAy)){
+        if(g>=hv)durum='<span class="badge st-teslim">Hedef aşıldı</span>';
+        else if(buAy)durum='<span class="badge" style="background:#DBEAFE;color:#1E40AF">Devam ediyor</span>';
+        else durum='<span class="badge st-iptal">Hedef altı</span>';
+      } else if(!hv&&g>0){durum='<span style="font-size:11px;color:var(--slate-400)">hedef yok</span>';}
+      const col=pct>=100?'#16A34A':(pct>=70?'#F59E0B':'#DC2626');
+      return `<tr ${buAy?'style="background:#F0F7FF"':''}><td><b>${ad}</b>${buAy?' <span style="font-size:9.5px;color:var(--blue-600);font-weight:700">BU AY</span>':''}</td>
+        <td class="num">${admin?`<input type="number" min="0" step="1" value="${hv||''}" placeholder="—" onchange="setTonajHedef('${key}',this.value)" style="width:88px;text-align:right;padding:5px 8px;border:1px solid var(--slate-300);border-radius:6px;font-size:12.5px">`:(hv?fmtTon(hv):'—')}</td>
+        <td class="num"><b>${g?fmtTon(g):'—'}</b></td>
+        <td class="num" style="color:${hv?(g>=hv?'var(--green-700)':'var(--red-700)'):'var(--slate-400)'}">${hv?((g>=hv?'+':'')+fmtTon(g-hv)):'—'}</td>
+        <td class="num">${hv?'%'+fmtN(Math.round(pct)):'—'}</td>
+        <td>${hv?tonajBar(pct,col):''}</td>
+        <td>${durum}</td></tr>`;
+    }).join('')}
+    </tbody><tfoot><tr style="background:#E8F1FB;font-weight:700"><td>TOPLAM</td><td class="num">${D.hedefYtoplam?fmtTon(D.hedefYtoplam):'—'}</td><td class="num">${fmtTon(D.yearTot)}</td><td class="num">${D.hedefYtoplam?((D.yearTot>=D.hedefYtoplam?'+':'')+fmtTon(D.yearTot-D.hedefYtoplam)):'—'}</td><td class="num">${D.hedefYtoplam?'%'+fmtN(Math.round(pctY)):'—'}</td><td colspan="2"></td></tr></tfoot></table>
+  </div></div>`;
+  // --- Günlük kırılım ---
+  const cM=tonajCols(D.prodTotM,8);
+  const dayKeys=Object.keys(D.byDayTot).sort();
+  let kum=0;
+  h+=`<div class="card full"><div class="card-hd"><h3>Günlük Ürün Kırılımı — ${AYLAR_TR[+D.M-1]} ${D.Y} <span style="font-size:11px;font-weight:500;color:var(--slate-400)">(ton)</span></h3></div><div class="card-bd" style="overflow-x:auto">
+    ${dayKeys.length?`<table class="tbl"><thead><tr><th>Gün</th>${cM.cols.map(p=>`<th class="num">${esc(p)}</th>`).join('')}${cM.other.length?'<th class="num">Diğer</th>':''}<th class="num" style="background:#EFF6FF">Günlük Toplam</th><th class="num" style="background:#F0FDF4">Kümülatif</th></tr></thead><tbody>
+    ${dayKeys.map(d=>{const row=D.byDayProd[d]||{};const rt=D.byDayTot[d]||0;kum+=rt;const oth=cM.other.reduce((s,p)=>s+(row[p]||0),0);
+      return `<tr><td><b>${d}.${D.M}</b></td>${cM.cols.map(p=>`<td class="num">${row[p]?fmtTon(row[p]):'<span style="color:var(--slate-300)">—</span>'}</td>`).join('')}${cM.other.length?`<td class="num">${oth?fmtTon(oth):'<span style="color:var(--slate-300)">—</span>'}</td>`:''}<td class="num" style="background:#F8FAFF"><b>${fmtTon(rt)}</b></td><td class="num" style="background:#F7FDF9;color:var(--green-700);font-weight:600">${fmtTon(kum)}</td></tr>`;}).join('')}
+    </tbody><tfoot><tr style="background:#E8F1FB;font-weight:700"><td>TOPLAM</td>${cM.cols.map(p=>`<td class="num">${fmtTon(D.prodTotM[p]||0)}</td>`).join('')}${cM.other.length?`<td class="num">${fmtTon(cM.other.reduce((s,p)=>s+(D.prodTotM[p]||0),0))}</td>`:''}<td class="num">${fmtTon(D.monthTot)}</td><td class="num">${fmtTon(D.monthTot)}</td></tr></tfoot></table>`:'<div class="tbl-empty">Bu ayda satış kaydı yok</div>'}
+  </div></div>`;
+  // --- Aylık ürün kırılımı (ton) ---
+  const cY=tonajCols(D.prodTotY,8);
+  h+=`<div class="card full"><div class="card-hd"><h3>Aylık Ürün Kırılımı — ${D.Y} <span style="font-size:11px;font-weight:500;color:var(--slate-400)">(ton)</span></h3></div><div class="card-bd" style="overflow-x:auto">
+    ${cY.cols.length?`<table class="tbl"><thead><tr><th>Ay</th>${cY.cols.map(p=>`<th class="num">${esc(p)}</th>`).join('')}${cY.other.length?'<th class="num">Diğer</th>':''}<th class="num" style="background:#EFF6FF">Aylık Toplam</th></tr></thead><tbody>
+    ${AYLAR_TR.map((ad,i)=>{const mm=String(i+1).padStart(2,'0');const row=D.byMonthProd[mm];if(!row)return '';const rt=D.byMonthTot[mm]||0;const oth=cY.other.reduce((s,p)=>s+(row[p]||0),0);
+      return `<tr><td><b>${ad.slice(0,3)} ${D.Y.slice(2)}</b></td>${cY.cols.map(p=>`<td class="num">${row[p]?fmtTon(row[p]):'<span style="color:var(--slate-300)">—</span>'}</td>`).join('')}${cY.other.length?`<td class="num">${oth?fmtTon(oth):'<span style="color:var(--slate-300)">—</span>'}</td>`:''}<td class="num" style="background:#F8FAFF"><b>${fmtTon(rt)}</b></td></tr>`;}).join('')}
+    </tbody><tfoot><tr style="background:#E8F1FB;font-weight:700"><td>YIL TOPLAMI</td>${cY.cols.map(p=>`<td class="num">${fmtTon(D.prodTotY[p]||0)}</td>`).join('')}${cY.other.length?`<td class="num">${fmtTon(cY.other.reduce((s,p)=>s+(D.prodTotY[p]||0),0))}</td>`:''}<td class="num">${fmtTon(D.yearTot)}</td></tr></tfoot></table>`:'<div class="tbl-empty">Bu yılda satış kaydı yok</div>'}
+  </div></div>`;
+  // --- Yıllık özet ---
+  const cA=tonajCols(D.prodAll,8);
+  const yrs=Object.keys(D.byYearTot).sort();
+  h+=`<div class="card full"><div class="card-hd"><h3>Yıllık Özet <span style="font-size:11px;font-weight:500;color:var(--slate-400)">(ton · tüm yıllar)</span></h3></div><div class="card-bd" style="overflow-x:auto">
+    <table class="tbl"><thead><tr><th>Yıl</th>${cA.cols.map(p=>`<th class="num">${esc(p)}</th>`).join('')}${cA.other.length?'<th class="num">Diğer</th>':''}<th class="num" style="background:#EFF6FF">Yıl Toplamı</th></tr></thead><tbody>
+    ${yrs.map(y=>{const row=D.byYearProd[y]||{};const oth=cA.other.reduce((s,p)=>s+(row[p]||0),0);
+      return `<tr><td><b>${y}</b></td>${cA.cols.map(p=>`<td class="num">${row[p]?fmtTon(row[p]):'<span style="color:var(--slate-300)">—</span>'}</td>`).join('')}${cA.other.length?`<td class="num">${oth?fmtTon(oth):'<span style="color:var(--slate-300)">—</span>'}</td>`:''}<td class="num" style="background:#F8FAFF"><b>${fmtTon(D.byYearTot[y])}</b></td></tr>`;}).join('')}
+    </tbody></table>
+  </div></div>`;
+  // --- İçgörüler ---
+  const payLider=liderU&&D.yearTot?Math.round(liderU[1]/D.yearTot*100):0;
+  h+=`<div class="card full"><div class="card-hd"><h3>Öne Çıkanlar — ${D.Y}</h3></div><div class="card-bd" style="padding:16px 18px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;font-size:12.5px">
+      ${enAy?`<div style="padding:12px 14px;background:#F0F7FF;border:1px solid #DBEAFE;border-radius:8px"><div style="font-size:11px;color:var(--slate-500);font-weight:700;margin-bottom:4px">EN YÜKSEK TONAJLI AY</div><b style="font-size:15px">${AYLAR_TR[enAy.i-1]}</b> · ${fmtTon(enAy.t)} t</div>`:''}
+      ${enGun?`<div style="padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px"><div style="font-size:11px;color:var(--slate-500);font-weight:700;margin-bottom:4px">EN YOĞUN GÜN (${AYLAR_TR[+D.M-1].toUpperCase()})</div><b style="font-size:15px">${enGun.d}.${D.M}.${D.Y}</b> · ${fmtTon(enGun.t)} t</div>`:''}
+      ${liderU?`<div style="padding:12px 14px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px"><div style="font-size:11px;color:var(--slate-500);font-weight:700;margin-bottom:4px">LİDER ÜRÜN</div><b style="font-size:15px">${esc(liderU[0])}</b> · ${fmtTon(liderU[1])} t (%${payLider} pay)</div>`:''}
+      ${oneri3?`<div style="padding:12px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px"><div style="font-size:11px;color:var(--slate-500);font-weight:700;margin-bottom:4px">SON ${c3} TAM AY ORTALAMASI</div><b style="font-size:15px">${fmtTon(oneri3)} t/ay</b> · hedef belirlerken referans</div>`:''}
+    </div>
+    <div style="font-size:11px;color:var(--slate-400);margin-top:12px;line-height:1.6">Ton hesabı: çuval adedi × ambalaj (25 kg) ÷ 1000. İptal edilen siparişler tüm tablolara dahil edilmez. Projeksiyon, ayın bugüne kadarki takvim-günü ortalamasının ay sonuna uzatılmasıyla hesaplanır. Hedefler yalnızca yönetici tarafından düzenlenebilir ve işlem geçmişine kaydedilir.</div>
+  </div></div>
+  </div>`;
+  return h;
+}
+function drawTonajChart(){
+  if(typeof Chart==='undefined'||!window._tonaj)return;
+  const D=window._tonaj;const el=document.getElementById('rcTonaj');if(!el)return;
+  repCharts.push(new Chart(el,{type:'bar',data:{labels:AY_KISA.map(a=>a+' '+D.Y.slice(2)),datasets:[
+    {type:'bar',label:'Gerçekleşen (t)',data:AY_KISA.map((_,i)=>Math.round(((D.byMonthTot[String(i+1).padStart(2,'0')]||0))*10)/10),backgroundColor:AY_KISA.map((_,i)=>{const g=D.byMonthTot[String(i+1).padStart(2,'0')]||0;const hv=+D.H[D.Y+'-'+String(i+1).padStart(2,'0')]||0;return hv?(g>=hv?'#16A34A':'rgba(40,120,200,.75)'):'rgba(40,120,200,.75)';}),borderRadius:5,order:1},
+    {type:'line',label:'Hedef (t)',data:AY_KISA.map((_,i)=>{const hv=+D.H[D.Y+'-'+String(i+1).padStart(2,'0')]||0;return hv||null;}),borderColor:'#DC2626',borderWidth:2,borderDash:[6,4],pointRadius:3,pointBackgroundColor:'#DC2626',fill:false,stepped:true,order:0}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11},boxWidth:12}}},scales:{y:{title:{display:true,text:'ton',font:{size:10}}}}}}));
+}
 function renderReports(c,tb){
   if(!canSeePrice()){c.innerHTML=`<div class="tbl-empty card" style="padding:50px">Raporları görüntüleme yetkiniz bulunmuyor.</div>`;return}
   tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
+  const _tabs=`<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn" style="${repTab==='tonaj'?'background:var(--blue-800);color:#fff;border-color:var(--blue-800)':'background:#fff;color:var(--slate-600);border:1px solid var(--slate-300)'}" onclick="repTab='tonaj';render()">Tonaj & Hedef</button>
+    <button class="btn" style="${repTab==='genel'?'background:var(--blue-800);color:#fff;border-color:var(--blue-800)':'background:#fff;color:var(--slate-600);border:1px solid var(--slate-300)'}" onclick="repTab='genel';render()">Genel Rapor</button>
+  </div>`;
+  if(repTab==='tonaj'){c.innerHTML=_tabs+tonajRaporuHTML();repCharts.forEach(x=>{try{x.destroy()}catch(e){}});repCharts=[];setTimeout(()=>drawTonajChart(),30);return;}
   // ---- dönem filtresi ----
   let orders=DB.orders.slice();
   if(repFilt.year)orders=orders.filter(o=>(o.date||'').slice(0,4)===repFilt.year);
@@ -1914,7 +2067,7 @@ function renderReports(c,tb){
     <div class="card"><div class="card-hd"><h3>En Çok Ciro Yapan 10 Müşteri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Müşteri</th><th class="num">Ciro</th></tr></thead><tbody>${topCust.length?topCust.map(([n,v])=>`<tr><td>${esc(n)}</td><td class="num"><b>${fmtTL(v)}</b></td></tr>`).join(''):'<tr><td colspan="2" class="tbl-empty">Veri yok</td></tr>'}</tbody></table></div></div>
     <div class="card"><div class="card-hd"><h3>Bayi & Danışman Performansı</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th class="num">Adet</th><th class="num">Ciro</th><th class="num">Prim/Kom.</th></tr></thead><tbody>${komRows.length?komRows.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td><span class="kom-chip kom-${k.type}">${k.type==='danisman'?'Danışman':'Bayi'}</span></td><td class="num">${k.adet}</td><td class="num"><b>${fmtTL(k.ciro)}</b></td><td class="num">${fmtTL(k.kom)}</td></tr>`).join(''):'<tr><td colspan="5" class="tbl-empty">Bu dönemde bayi/danışmanlı sipariş yok</td></tr>'}</tbody></table></div></div>
   </div>`;
-  c.innerHTML=h;
+  c.innerHTML=_tabs+h;
   setTimeout(()=>drawReportCharts(),30);
 }
 let _rep={};
