@@ -92,6 +92,48 @@ details.val .body p:first-child{margin-top:0;padding-top:14px;border-top:1px sol
 .pn-sub{font-size:8.5px;letter-spacing:.26em;text-transform:uppercase;color:#0c1320;font-weight:600}
 .sec{margin-bottom:42px}
 @media(max-width:720px){.apps,.vm{grid-template-columns:1fr}.apps{grid-auto-rows:auto}.app.meeting{grid-column:auto;width:auto}.app-go{display:none}}
+
+/* ===== Kurumsal Arama ===== */
+.ka-box{max-width:760px;margin:0 auto 46px;position:relative;z-index:2}
+.ka-bar{display:flex;gap:10px;background:#fff;border:1.5px solid #d5deea;border-radius:16px;padding:8px 8px 8px 18px;box-shadow:0 18px 40px -26px rgba(12,35,64,.35);transition:border-color .2s}
+.ka-bar:focus-within{border-color:#0c2340}
+.ka-bar svg{width:20px;height:20px;align-self:center;flex:none;color:#94a3b8;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ka-bar input{flex:1;border:none;outline:none;font:500 14.5px var(--font);color:#0c2340;background:transparent;min-width:0}
+.ka-bar input::placeholder{color:#9aabc0}
+.ka-bar button{background:#0c2340;color:#fff;border:none;border-radius:11px;font:700 13px var(--font);padding:11px 22px;cursor:pointer;transition:.2s;flex:none}
+.ka-bar button:hover{background:#174b82}
+.ka-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
+.ka-chips button{background:#eef2f7;border:1px solid #dde5ee;border-radius:30px;color:#41546e;font:600 11.5px var(--font);padding:7px 14px;cursor:pointer;transition:.2s}
+.ka-chips button:hover{background:#0c2340;color:#fff;border-color:#0c2340}
+.ka-scope{text-align:center;font-size:10.5px;color:#8aa0b8;margin-top:10px;line-height:1.6}
+#ka-out{display:none;margin-top:16px}
+.ka-card{background:#fff;border:1px solid #dde5ee;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 14px 34px -26px rgba(12,35,64,.3);text-align:left}
+.ka-card-t{font:700 13.5px var(--font);color:#0c2340;margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid #edf1f6}
+.ka-card.ka-red{border-color:#fecaca;background:#fff8f8}
+.ka-card.ka-red .ka-card-t{color:#b91c1c;border-color:#fee2e2}
+.ka-row{display:flex;justify-content:space-between;gap:14px;font-size:13px;color:#5b6b80;padding:5.5px 0;border-bottom:1px dashed #edf1f6}
+.ka-row:last-of-type{border-bottom:none}
+.ka-row b{color:#0c2340;text-align:right}
+.ka-big{font-size:17px;font-weight:800}
+.ka-sub{font:700 10.5px var(--font);letter-spacing:.08em;text-transform:uppercase;color:#8aa0b8;margin:12px 0 4px}
+.ka-p{font-size:13px;color:#41546e;line-height:1.65}
+.ka-ul{margin:8px 0 0 18px;font-size:12.5px;color:#5b6b80;line-height:2}
+.ka-note{font-size:11px;color:#8aa0b8;margin-top:10px;line-height:1.5}
+.ka-link{display:inline-block;margin-top:10px;font:600 12px var(--font);color:#174b82;text-decoration:none}
+.ka-link:hover{text-decoration:underline}
+.ka-tblwrap{overflow-x:auto;margin:4px 0}
+.ka-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ka-tbl th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8aa0b8;padding:6px 8px;border-bottom:2px solid #edf1f6}
+.ka-tbl td{padding:7px 8px;border-bottom:1px solid #f2f5f9;color:#0c2340}
+.ka-tbl .n{text-align:right}
+.ka-chip{display:inline-block;font:700 9.5px var(--font);letter-spacing:.05em;text-transform:uppercase;background:#eef2f7;color:#41546e;border-radius:20px;padding:3px 9px}
+.ka-loading{display:flex;align-items:center;gap:10px;justify-content:center;padding:26px;color:#5b6b80;font-size:13px;background:#fff;border:1px solid #dde5ee;border-radius:14px}
+.ka-spin{width:18px;height:18px;border:3px solid #dde5ee;border-top-color:#0c2340;border-radius:50%;animation:kasp .8s linear infinite}
+@keyframes kasp{to{transform:rotate(360deg)}}
+.ka-close{display:block;margin:2px auto 0;background:#eef2f7;border:1px solid #dde5ee;border-radius:30px;color:#41546e;font:600 11.5px var(--font);padding:7px 18px;cursor:pointer}
+.ka-close:hover{background:#0c2340;color:#fff}
+@media(max-width:560px){.ka-bar button{padding:11px 14px}}
+
 </style>
 </head>
 <body>
@@ -105,6 +147,23 @@ details.val .body p:first-child{margin-top:0;padding-top:14px;border-top:1px sol
     <div class="slogan" id="slogan"></div>
     <div class="slogan-line"></div>
   </header>
+
+  <section class="ka-box">
+    <div class="ka-bar">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="ka-q" type="search" placeholder="Kurumsal arama: bayiler, fiyatlar, tonaj, izinler, siparişler…" autocomplete="off">
+      <button id="ka-btn">Ara</button>
+    </div>
+    <div class="ka-chips">
+      <button onclick="kaAsk('Afyonkarahisar bayimiz kim?')">Afyon'da hangi bayimiz var?</button>
+      <button onclick="kaAsk('BK-300 Plus fiyatı ne kadar?')">BK-300 Plus fiyatı</button>
+      <button onclick="kaAsk('Geçen ay kaç ton sattık?')">Geçen ay kaç ton sattık?</button>
+      <button onclick="kaAsk('Kimin kaç gün izni kaldı?')">İzin durumu</button>
+      <button onclick="kaAsk('Danışman komisyon bakiyeleri')">Komisyon bakiyeleri</button>
+    </div>
+    <div class="ka-scope">Arama kapsamı: siparişler · müşteriler · bayi &amp; danışmanlar · ürün fiyatları · tonaj · İK izinleri · hedefler<br><b>Muhasebe ve finans verileri aramaya kapalıdır.</b></div>
+    <div id="ka-out"></div>
+  </section>
 
   <section class="sec">
     <div class="seclabel" id="lbl-apps">Uygulamalar</div>
@@ -249,6 +308,7 @@ function setLang(l){LANG=l;try{localStorage.setItem('rota_portal_lang',l)}catch(
 try{const s=localStorage.getItem('rota_portal_lang');if(s==='en'||s==='tr')LANG=s;}catch(e){}
 render();
 </script>
+<script type="module" src="arama.js"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
 </body>
 </html>
