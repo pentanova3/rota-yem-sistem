@@ -258,9 +258,9 @@ function detailHtml(plate,m){
       <span class="tag tag-bayi">BAYİ</span>
       ${b.rate?`<span class="rate">%${esc(b.rate)} iskonto</span>`:''}
       ${b.city?`<span>📍 ${esc(b.city)}</span>`:''}
-      ${b.phone?`<span>📞 ${esc(b.phone)}</span>`:''}
+      ${b.phone?`<a href="tel:${esc(String(b.phone).replace(/\s/g,''))}" style="color:#174B82;text-decoration:none;font-weight:700">📞 ${esc(b.phone)}</a>`:''}
       <span class="badge ${b.active!==false?'b-on':'b-off'}">${b.active!==false?'Aktif':'Pasif'}</span>
-    </div></div>`).join('')}</div></div>`;
+    </div>${(b.sz&&b.sz.adres)?`<div class="dm" style="margin-top:4px"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.sz.adres+' '+(b.city||''))}" target="_blank" rel="noopener" title="Google Haritalar'da aç" style="color:#475569;text-decoration:underline dotted">📍 ${esc(b.sz.adres)}</a></div>`:''}</div>`).join('')}</div></div>`;
 }
 
 // ====== MÜŞTERİ HARİTASI (Görev 2) ======
@@ -306,7 +306,8 @@ function musteriDetailHtml(plate,m){
       ${c.firma?`<span class="tag tag-bayi">${esc(c.firma)}</span>`:''}
       ${c.orderCount?`<span class="rate">${c.orderCount} sipariş</span>`:''}
       ${c.city?`<span>📍 ${esc(c.city)}</span>`:''}
-    </div></div>`).join('')}</div></div>`;
+      ${c.phone?`<a href="tel:${esc(String(c.phone).replace(/\s/g,''))}" style="color:#174B82;text-decoration:none;font-weight:700">📞 ${esc(c.phone)}</a>`:''}
+    </div>${c.adres?`<div class="dm" style="margin-top:4px"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.adres+' '+(c.city||''))}" target="_blank" rel="noopener" title="Google Haritalar'da aç" style="color:#475569;text-decoration:underline dotted">📍 ${esc(c.adres)}</a></div>`:''}</div>`).join('')}</div></div>`;
 }
 
 // ====== BAYİ FIRSATI (Görev 3 — bayi yok, müşteri var) ======
@@ -623,7 +624,7 @@ const sref=doc(fdb,"apps","siparis");
 function extractSiparis(d){
   try{const raw=d&&d.data&&d.data['rota_so_v1'];if(!raw)return {bayiler:[],musteriler:[]};const o=JSON.parse(raw);
     const komRaw=(o.komisyoncular||[]).map(k=>({id:k.id,name:k.name,type:k.type,city:k.city||'',rate:+k.rate||0,phone:k.phone||'',note:k.note||'',active:k.active!==false}));
-    const musteriler=(o.customers||[]).map(c=>({name:c.name,city:c.city||'',firma:c.firma||'',phone:c.phone||'',orderCount:+c.orderCount||0}));
+    const musteriler=(o.customers||[]).map(c=>({name:c.name,city:c.city||'',firma:c.firma||'',phone:c.phone||'',adres:c.adres||'',orderCount:+c.orderCount||0}));
     return {komRaw,musteriler};
   }catch(e){console.warn('siparis parse',e);return {komRaw:[],musteriler:[]};}
 }
