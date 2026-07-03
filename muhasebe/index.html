@@ -518,14 +518,28 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   }
   const M=d.muhasebeOnay||{};const alicilar=M.alicilar||[];const gerekli=Math.min(+M.gerekli||1,alicilar.length||1);
   if(!alicilar.length)return;                                       // alıcı tanımlı değil → eski şifre geçerli
-  if(sessionStorage.getItem('rota_muh_onay')==='1'){sessionStorage.setItem('rota_nakit_ok','1');
+  // Onay oturumu kuralı: ekran açık kaldıkça geçerli (30 sn'de bir "son görülme" damgası).
+  // Sayfadan ayrılıp 10 dk içinde dönülürse onaysız girilir; 10 dk aşılırsa süre aşımı → yeniden onay.
+  // Site/sekme kapatılırsa sessionStorage silindiği için her durumda yeniden onay istenir.
+  const ONAY_MS=10*60*1000;
+  function muhHeartbeat(){
+    const beat=function(){try{sessionStorage.setItem('rota_muh_seen',String(Date.now()))}catch(e){}};
+    beat();setInterval(beat,30000);
+    window.addEventListener('pagehide',beat);
+    document.addEventListener('visibilitychange',beat);
+  }
+  const onayVar=sessionStorage.getItem('rota_muh_onay')==='1';
+  const seen=+sessionStorage.getItem('rota_muh_seen')||0;
+  const sureAsimi=onayVar&&(!seen||(Date.now()-seen)>ONAY_MS);
+  if(onayVar&&!sureAsimi){sessionStorage.setItem('rota_nakit_ok','1');
     document.getElementById('gate').classList.add('hidden');document.getElementById('app').classList.remove('hidden');
-    if(window.__reloadMuhasebe)window.__reloadMuhasebe();return;}
+    if(window.__reloadMuhasebe)window.__reloadMuhasebe();muhHeartbeat();return;}
+  if(sureAsimi){sessionStorage.removeItem('rota_muh_onay');sessionStorage.removeItem('rota_muh_seen');}
   // onay gerekli: uygulamayı kapat, gate'i onay ekranına çevir
   sessionStorage.removeItem('rota_nakit_ok');
   document.getElementById('app').classList.add('hidden');
   const gate=document.getElementById('gate');gate.classList.remove('hidden');
-  gate.innerHTML='<div style="max-width:360px;margin:0 auto;text-align:center;padding:40px 20px"><h1 style="font-size:19px;color:#0C2340;margin-bottom:6px">Giriş Onayı Bekleniyor</h1><div style="font-size:13px;color:#64748B;line-height:1.7;margin-bottom:18px">Güvenlik gereği muhasebe ekranına giriş için onay mesajı gönderildi.<br><b>'+alicilar.map(a=>String(a.ad||a.chatId).replace(/</g,'&lt;')).join('</b> ve <b>')+'</b> Telegram üzerinden onaylayınca ekran açılacak.'+(gerekli>1?' (<b>'+gerekli+' kişinin de onayı</b> gerekli)':'')+'</div><div id="mgDurum" style="font-size:13px;font-weight:700;color:#1D62A8">Onay mesajı gönderiliyor…</div><a href="/" style="display:inline-block;margin-top:22px;font-size:12px;color:#64748B">Portala dön</a></div>';
+  gate.innerHTML='<div style="max-width:360px;margin:0 auto;text-align:center;padding:40px 20px">'+(sureAsimi?'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:9px 13px;font-size:12px;color:#92400E;font-weight:600;margin-bottom:14px">Oturum süresi doldu (10 dk) — güvenlik gereği yeniden onay gerekiyor.</div>':'')+'<h1 style="font-size:19px;color:#0C2340;margin-bottom:6px">Giriş Onayı Bekleniyor</h1><div style="font-size:13px;color:#64748B;line-height:1.7;margin-bottom:18px">Güvenlik gereği muhasebe ekranına giriş için onay mesajı gönderildi.<br><b>'+alicilar.map(a=>String(a.ad||a.chatId).replace(/</g,'&lt;')).join('</b> ve <b>')+'</b> Telegram üzerinden onaylayınca ekran açılacak.<br><span style=\'font-size:11px;color:#94A3B8\'>Onay, ekran açık kaldığı sürece geçerlidir; 10 dakikadan uzun ayrılır veya siteyi kapatırsanız yeniden onay istenir.</span>'+(gerekli>1?' (<b>'+gerekli+' kişinin de onayı</b> gerekli)':'')+'</div><div id="mgDurum" style="font-size:13px;font-weight:700;color:#1D62A8">Onay mesajı gönderiliyor…</div><a href="/" style="display:inline-block;margin-top:22px;font-size:12px;color:#64748B">Portala dön</a></div>';
   const st=document.getElementById('mgDurum');
   // tgToken apps/siparis meta'dan
   const KEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
@@ -549,7 +563,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     const oks=Object.keys(f).filter(k=>k.indexOf('ok_')===0);
     st.textContent='Onay bekleniyor… ('+oks.length+'/'+gerekli+')';
     if(oks.length>=gerekli){clearInterval(timer);
-      sessionStorage.setItem('rota_muh_onay','1');sessionStorage.setItem('rota_nakit_ok','1');
+      sessionStorage.setItem('rota_muh_onay','1');sessionStorage.setItem('rota_nakit_ok','1');sessionStorage.setItem('rota_muh_seen',String(Date.now()));
       st.textContent='Onaylandı — açılıyor…';st.style.color='#15803D';
       setTimeout(function(){location.reload();},700);}
   },2500);
