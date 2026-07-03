@@ -1545,13 +1545,15 @@ function komDetayData(komId,from,to){
   if(from)orders=orders.filter(o=>o.date>=from);
   if(to)orders=orders.filter(o=>o.date<=to);
   orders.sort((a,b)=>a.date.localeCompare(b.date));
-  const rows=[];let totTutar=0,totPrim=0,totKargo=0;
+  const rows=[];let totTutar=0,totPrim=0,totKargo=0;const aylik={};
   orders.forEach(o=>{
     const cust=custById(o.customerId);const adres=cust?(cust.city||''):'';
     const bayiAd=(ordBayi(o)||{}).name||'';
     const r=orderKomisyon(o,kom);
     (r.det||[]).forEach((d,i)=>{const tutar=d.satis*d.qty;rows.push({tarih:o.date,musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?(r.kargo||0):0,prim:d.prim});totTutar+=tutar;totPrim+=d.prim;});
     totKargo+=(r.kargo||0);
+    const ayKey=(o.date||'').slice(0,7);                       // YYYY-MM
+    if(ayKey){const a=aylik[ayKey]||(aylik[ayKey]={siparis:0,prim:0});a.siparis++;a.prim+=(r.tutar||0);}  // net prim (kargo düşülmüş, bayi üzerinden dahil)
   });
   const netPrim=totPrim-totKargo;
   // ödemeler (dönem filtresine göre)
@@ -1560,7 +1562,7 @@ function komDetayData(komId,from,to){
   if(to)odemeler=odemeler.filter(p=>!p.odemeTarihi||p.odemeTarihi<=to);
   odemeler.sort((a,b)=>(a.odemeTarihi||'').localeCompare(b.odemeTarihi||''));
   const totOdenen=odemeler.reduce((s,p)=>s+(+p.odenenTutar||0),0);
-  return {kom,rows,totTutar,totPrim,totKargo,netPrim,odemeler,totOdenen,kalanBakiye:netPrim-totOdenen,from,to};
+  return {kom,rows,aylik,totTutar,totPrim,totKargo,netPrim,odemeler,totOdenen,kalanBakiye:netPrim-totOdenen,from,to};
 }
 function komDetayCSV(komId){
   const d=komDetayData(komId,komRepFrom,komRepTo);
@@ -1585,6 +1587,15 @@ function komDetayCSV(komId){
   lines.push(['—','Toplam Hakediş','+'+nf(d.netPrim),'',nf(bal)].map(q).join(sep));
   d.odemeler.forEach(p=>{bal-=(+p.odenenTutar||0);lines.push([fmtDate(p.odemeTarihi),'Ödeme'+(p.faturaNo?' - Fatura '+p.faturaNo:''),'','-'+nf(p.odenenTutar),nf(bal)].map(q).join(sep));});
   lines.push(['','KALAN BAKİYE','+'+nf(d.netPrim),'-'+nf(d.totOdenen),nf(d.kalanBakiye)].map(q).join(sep));
+  // Aylık prim özeti
+  const ayKeys=Object.keys(d.aylik||{}).sort();
+  if(ayKeys.length){
+    const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+    lines.push('');lines.push('"AYLIK PRİM ÖZETİ"');
+    lines.push(['Ay','Sipariş','Kazanılan Prim (net)'].map(q).join(sep));
+    ayKeys.forEach(k=>lines.push([AY[+k.slice(5,7)-1]+' '+k.slice(0,4),d.aylik[k].siparis,nf(d.aylik[k].prim)].map(q).join(sep)));
+    lines.push(['TOPLAM',ayKeys.reduce((s,k)=>s+d.aylik[k].siparis,0),nf(d.netPrim)].map(q).join(sep));
+  }
   dl(lines,'Prim');
 }
 function openKomDetay(komId){
@@ -1616,6 +1627,17 @@ function openKomDetay(komId){
     <div class="ph"><div><div class="badge">${isDan?'TEKNİK DANIŞMAN PRİM DÖKÜMÜ':'BAYİ İSKONTO RAPORU — '+esc(d.yil||'')}</div><h1>${esc(d.kom.name)}</h1><div class="s">ROTA YEM · Sipariş Takip Sistemi</div></div><div class="meta"><b>${isDan?donem:('Yıl: '+esc(d.yil||''))}</b><br>${isDan?'İskonto: %'+fmtN((DB.meta&&DB.meta.tdIskonto)||6):'İskonto: %'+fmtN(d.kom.rate)}<br>${isDan?d.rows.length+' kalem':d.A.rows.length+' alım'}</div></div>
     <table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>
     ${isDan?'<p style="font-size:10.5px;color:#64748B;margin-top:10px">Müşteriye direkt: Prim = (Satış − Alış) × Miktar − Kargo; Alış = Torbalı Liste × (1 − %6). BAYİ ÜZERİNDEN (bayiye satış): Komisyon = (Bayi Alış − Danışman Alış) × Miktar; Bayi Alış = Fabrika × (1 − bayi iskontosu), Danışman Alış = Torbalı × (1 − %6). Bayi sütunu ilgili bayiyi gösterir.</p>':''}
+    ${isDan?(function(){
+      const keys=Object.keys(d.aylik||{}).sort();
+      if(!keys.length)return '';
+      const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+      const lbl=k=>AY[+k.slice(5,7)-1]+' '+k.slice(0,4);
+      return `<h2 style="font-size:14px;color:#0C2340;margin:24px 0 8px;border-bottom:2px solid #E2E8F0;padding-bottom:6px">Aylık Prim Özeti</h2>
+      <table style="margin-top:0"><thead><tr><th>Ay</th><th class="num">Sipariş</th><th class="num">Kazanılan Prim (net) ₺</th></tr></thead><tbody>
+      ${keys.map(k=>`<tr><td><b>${lbl(k)}</b></td><td class="num">${d.aylik[k].siparis}</td><td class="num" style="font-weight:700;color:${d.aylik[k].prim>=0?'#15803D':'#B91C1C'}">${fmtTL(d.aylik[k].prim)}</td></tr>`).join('')}
+      </tbody><tfoot><tr style="background:#E8F1FB;font-weight:700"><td>TOPLAM</td><td class="num">${keys.reduce((s,k)=>s+d.aylik[k].siparis,0)}</td><td class="num" style="font-size:13px;color:#0C2340">${fmtTL(d.netPrim)}</td></tr></tfoot></table>
+      <p style="font-size:10px;color:#94A3B8;margin-top:6px">Aylık prim, siparişin net komisyonudur (kargo düşülmüş; bayi üzerinden kazançlar dahil). Sipariş tarihi esas alınır.</p>`;
+    })():''}
     ${isDan?`<h2 style="font-size:14px;color:#0C2340;margin:24px 0 8px;border-bottom:2px solid #E2E8F0;padding-bottom:6px">Hesap Hareketleri</h2>
     <table style="margin-top:0"><thead><tr><th>Tarih</th><th>Açıklama</th><th class="num">Hak Edilen (Prim) ₺</th><th class="num">Ödeme ₺</th><th class="num">Bakiye ₺</th></tr></thead><tbody>
       <tr><td>—</td><td><b>Toplam Hakediş (Prim)</b></td><td class="num" style="color:#15803D;font-weight:700">+${fmtTL(d.netPrim)}</td><td class="num">—</td><td class="num" style="font-weight:700">${fmtTL(d.netPrim)}</td></tr>
