@@ -445,9 +445,9 @@ function orderKomisyon(o,komOverride){
   }
   // BAYİ: % ciro
   const rate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0);
-  // Bayiye satış (alıcı=bayi): bu bir alımdır, iskonto kredisi BİRİKMEZ (mahsup cari hesapta işlenir).
-  if(o.aliciBayi)return {kom,rate,tutar:0,type:'bayi',aliciBayi:true};
-  return {kom,rate,tutar:orderListTotal(o)*(rate/100),type:'bayi'};
+  // BAYİ: iskonto yalnızca bayinin KENDİ ALIMINDA fatura anında uygulanır (fiyata gömülü).
+  // Müşteri satışında bayiye işleyen tutar yoktur; birikme/alacak/mahsup kavramı kaldırıldı.
+  return {kom,rate,tutar:0,type:'bayi'};
 }
 function applyPriceList(){
   PRICE_LIST.forEach(pl=>{
@@ -522,37 +522,22 @@ function ensurePriceLists(){DB.priceLists=DB.priceLists||[];if(!DB.priceLists.le
 function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0}return o.total||0}
 // Liste brüt: kademe (Fabrika/Yakın/Uzak) satış liste fiyatından — bayi iskontosu bunun üzerinden hesaplanır (danışman markup'ı hariç).
 function orderListTotal(o){if(o.lines&&o.lines.length){const pl=orderPL(o);let t=0;o.lines.forEach(l=>{const lp=tariffPrice(pl,l.code,o.fiyatKademe)||lineUnit(l,o.fiyatKademe);t+=(+l.qty||0)*lp;});return t||o.total||0}return o.total||0}
-function orderIsk(o){try{if(o.aliciBayi)return null;const b=ordBayi(o);if(b){const r=orderKomisyon(o,b);if(r&&r.type==='bayi'&&r.rate>0){const g=orderListTotal(o);return {rate:r.rate,net:g-r.tutar};}}}catch(e){}return null;}
-// Bayi cari hesabı: müşteri satışında iskonto KAZANILIR (+), bayiye satışta (alıcı=bayi) faturadan MAHSUP edilir (−). Kronolojik yürüyen bakiye.
-function bayiLedger(bayiId){
-  let orders=DB.orders.filter(function(o){var b=ordBayi(o);return b&&b.id===bayiId;});
-  orders.sort(function(a,b){return (a.date||'').localeCompare(b.date||'')||(a.createdAt||'').localeCompare(b.createdAt||'');});
-  var events=[],bal=0,totKaz=0,totMah=0;
-  orders.forEach(function(o){
-    if(o.aliciBayi){
-      var tutar=orderTotal(o);
-      var avail=bal>0?bal:0;
-      var mahsup=(o.iskontoMahsup!==''&&o.iskontoMahsup!=null)?Math.min(+o.iskontoMahsup||0,tutar,avail):Math.min(avail,tutar);
-      if(mahsup<0)mahsup=0;
-      bal-=mahsup;totMah+=mahsup;
-      events.push({type:'mahsup',o:o,tarih:o.date,tutar:tutar,mahsup:mahsup,net:tutar-mahsup,bal:bal});
-    }else{
-      var r=orderKomisyon(o,ordBayi(o));var kaz=r.tutar||0;
-      bal+=kaz;totKaz+=kaz;
-      events.push({type:'kazanim',o:o,tarih:o.date,kazanim:kaz,listeBrut:orderListTotal(o),rate:r.rate,bal:bal});
-    }
+// Bayi iskontosu FATURA ANINDA uygulanır: bayi alım yaparken fabrika fiyatından iskontolu öder.
+// Birikme / alacak / mahsup YOKTUR. Yararlanılan iskonto raporlanır (çeyrek bazında).
+function bayiAlimData(bayiId,yil){
+  const os=DB.orders.filter(o=>o.aliciBayi&&o.status!=='iptal'&&(ordBayi(o)||{}).id===bayiId&&(!yil||(o.date||'').slice(0,4)===String(yil)))
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const rows=[];let totB=0,totI=0,totF=0;const ceyrek=[0,0,0,0];
+  os.forEach(o=>{
+    const pl=orderPL(o);let brut=0;
+    (o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);brut+=f*(+l.qty||0);});
+    const fat=orderTotal(o);const isk=Math.max(0,brut-fat);
+    const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
+    rows.push({o,tarih:o.date,no:o.no,urun:(o.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', '),brut,isk,fatura:fat});
+    totB+=brut;totI+=isk;totF+=fat;
   });
-  return {events:events,totKazanim:totKaz,totMahsup:totMah,kalan:bal};
+  return {rows,totBrut:totB,totIsk:totI,totFatura:totF,ceyrek,adet:os.length};
 }
-// Bir bayiye-satış faturası girilirken o ana kadar mahsup edilebilecek kullanılabilir iskonto (düzenlenen sipariş hariç).
-function bayiAvailable(bayiId,exclId){
-  if(!bayiId)return 0;
-  var L=bayiLedger(bayiId),kalan=L.kalan;
-  if(exclId){var ev=L.events.find(function(e){return e.o&&e.o.id===exclId&&e.type==='mahsup';});if(ev)kalan+=ev.mahsup;}
-  return kalan;
-}
-// Bir bayiye-satış siparişinin fiilen mahsup edilen iskontosu (cari hesap kronolojisine göre).
-function orderMahsup(o){if(!o||!o.aliciBayi)return 0;var b=ordBayi(o);if(!b)return 0;var ev=bayiLedger(b.id).events.find(function(e){return e.o&&e.o.id===o.id&&e.type==='mahsup';});return ev?ev.mahsup:0;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 function phoneClean(p){return String(p||'').replace(/[^0-9]/g,'').replace(/^0/,'90')}
 // ============ AUTH ============
@@ -685,7 +670,7 @@ function renderPanel(c,tb){
     const dayO=weekOrders.filter(o=>kanbanDate(o)===ds).sort((a,b)=>(a.status==='beklemede'?-1:1));
     const dayTotal=dayO.reduce((s,o)=>s+orderTotal(o),0);
     const isToday=ds===todayISO();
-    const ordList=dayO.length?dayO.map(o=>`<div class="day-ord st-dot-${o.status}" onclick="openOrder('${o.id}')" title="${esc(o.customer)} · ${statusLabel(o.status)}"><span class="do-name">${esc(o.customer)}</span><span class="do-meta">${o.firma?o.firma+' · ':''}${(o.lines||[]).length} kalem${canSeePrice()&&orderTotal(o)?' · '+fmtTL(orderTotal(o)):''}</span>${(function(){const isk=canSeePrice()?orderIsk(o):null;return isk?'<span class="do-disc">İskontolu: '+fmtTL(isk.net)+' · −%'+fmtN(isk.rate)+'</span>':'';})()}</div>`).join(''):`<div class="day-empty">—</div>`;
+    const ordList=dayO.length?dayO.map(o=>`<div class="day-ord st-dot-${o.status}" onclick="openOrder('${o.id}')" title="${esc(o.customer)} · ${statusLabel(o.status)}"><span class="do-name">${esc(o.customer)}</span><span class="do-meta">${o.firma?o.firma+' · ':''}${(o.lines||[]).length} kalem${canSeePrice()&&orderTotal(o)?' · '+fmtTL(orderTotal(o)):''}</span></div>`).join(''):`<div class="day-empty">—</div>`;
     h+=`<div class="day-box${isToday?' today':''}">
       <div class="day-hd"><span class="day-name">${GUN_TR[i]}</span><span class="day-date">${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}</span></div>
       <div class="day-stat"><span class="day-cnt">${dayO.length}</span><span class="day-cnt-lbl">sipariş</span>${canSeePrice()&&dayTotal?`<div class="day-tot">${fmtTL(dayTotal)}</div>`:''}</div>
@@ -900,31 +885,20 @@ function orderKomisyonRow(o,ro){
   let bayiBreakdown='';
   if(bayiKom&&canSeePrice()){
     if(aliciBayi){
-      // BAYİYE SATIŞ — alım + iskonto mahsubu
-      const avail=Math.max(0,bayiAvailable(o.bayiId,o.id));
+      // BAYİYE SATIŞ — iskonto fatura anında uygulanır (birikme/mahsup yok)
       const tutar=orderTotal(o);
       const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayiKom.rate||0);
-      // Fabrika liste tutarı (iskontosuz) — bu siparişte uygulanan iskontoyu göstermek için
       const plB=orderPL(o);let brutFab=0;
       (o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(plB,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);brutFab+=f*(+l.qty||0);});
       const buSiparisIsk=Math.max(0,brutFab-tutar);
-      const manual=(o.iskontoMahsup!==''&&o.iskontoMahsup!=null);
-      const mahsup=manual?Math.min(+o.iskontoMahsup||0,tutar,avail):Math.min(avail,tutar);
-      const net=tutar-mahsup;
       const brow=(k,v,stil)=>`<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:5px;${stil||''}"><span style="color:var(--slate-600)">${k}</span><b style="white-space:nowrap">${v}</b></div>`;
       bayiBreakdown=`<div style="margin-top:10px;border:1px solid var(--amber-200);border-radius:7px;padding:11px 14px;background:#FFFBEB">
-        <div style="font-size:11px;color:var(--slate-500);margin-bottom:8px;font-weight:700;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>Bayi (alıcı): ${esc(bayiKom.name)}</span><span style="color:var(--green-700)">Kullanılabilir iskonto alacağı: ${fmtTL(avail)}</span></div>
+        <div style="font-size:11px;color:var(--slate-500);margin-bottom:8px;font-weight:700">Bayi (alıcı): ${esc(bayiKom.name)}</div>
         ${brow('Fabrika Liste Tutarı <span style="font-size:10px;color:var(--slate-400)">— iskontosuz fabrika fiyatından</span>',fmtTL(brutFab))}
         ${brow('− İskonto (%'+fmtN(bRate)+') <span style="font-size:10px;color:var(--slate-400)">— bu siparişte bayiye uygulanan indirim</span>','<span style="color:var(--amber-700)">− '+fmtTL(buSiparisIsk)+'</span>')}
-        ${brow('İskontolu Tutar <span style="font-size:10px;color:var(--slate-400)">— fatura tutarı</span>',fmtTL(tutar),'border-top:1px dashed var(--amber-200);padding-top:6px')}
-        ${brow('− Mahsup <span style="font-size:10px;color:var(--slate-400)">— önceki satışlardan biriken iskonto alacağı</span>','<span style="color:var(--amber-700)">− '+fmtTL(mahsup)+'</span>')}
-        <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">Bayinin Ödeyeceği (Net)</span><b style="color:var(--blue-900);font-size:15px">${fmtTL(net)}</b></div>
-        <div style="margin-top:8px;border-top:1px dashed var(--amber-200);padding-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;color:var(--slate-700)"><input type="checkbox" ${manual?'':'checked'} ${ro?'disabled':''} onchange="onMahsupAuto(this.checked)" style="width:16px;height:16px;accent-color:var(--amber-600)"> Tüm bakiyeden otomatik mahsup</label>
-          ${manual?`<span style="font-size:11.5px;color:var(--slate-600)">Mahsup ₺: <input type="number" min="0" value="${esc(o.iskontoMahsup)}" ${ro?'disabled':''} onchange="editOrder.iskontoMahsup=this.value;renderOrderModal()" style="width:110px"></span>`:''}
-        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">Bayinin Ödeyeceği (Fatura)</span><b style="color:var(--blue-900);font-size:15px">${fmtTL(tutar)}</b></div>
       </div>
-      <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg> Bayiye satış: birim fiyat <b>fabrika fiyatı × (1 − bayi iskontosu)</b> olarak otomatik gelir; biriken <b>iskonto alacağı</b> ayrıca bu faturadan düşülür. <b>Net</b>, bayinin bize ödeyeceği tutardır. Bu siparişte yeni iskonto birikmez.</div>`;
+      <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg> Bayi iskontosu <b>fatura anında</b> uygulanır: birim fiyat = fabrika fiyatı × (1 − bayi iskontosu). Birikme veya mahsup yoktur; yararlanılan iskontolar İskonto &amp; Komisyon panelinde çeyrek bazında raporlanır.</div>`;
       // Bayinin bağlı danışmanı → bayi üzerinden komisyon önizlemesi
       const viaDan=bayiKom.danismanId?komById(bayiKom.danismanId):null;
       if(viaDan){
@@ -936,19 +910,10 @@ function orderKomisyonRow(o,ro){
         </div>
         <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg> Bayi üzerinden komisyon: <b>(Bayi Alış − Danışman Alış) × Miktar</b>. Bayi Alış = Fabrika × (1 − bayi isk.), Danışman Alış = Torbalı × (1 − %${fmtN(rv.rate)}). Kayıtta danışman hakedişine eklenir.</div>`;
       }
-    } else {
-      // MÜŞTERİYE SATIŞ — bayi iskonto ALACAĞI (Bayinin Ödeyeceği satırı yok; bayi bize ödeme yapmaz)
-      const r=orderKomisyon(o,bayiKom);
-      const brut=orderListTotal(o);const isk=r.tutar;
-      bayiBreakdown=`<div style="margin-top:10px;border:1px solid var(--amber-200);border-radius:7px;padding:11px 14px;background:#FFFBEB">
-        <div style="font-size:11px;color:var(--slate-500);margin-bottom:6px;font-weight:700">Bayi: ${esc(bayiKom.name)}</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="color:var(--slate-600)">Liste Brüt</span><b>${fmtTL(brut)}</b></div>
-        <div style="display:flex;justify-content:space-between;font-size:13.5px;border-top:1px solid var(--amber-200);padding-top:6px"><span style="font-weight:700">İskonto Alacağı (%${fmtN(r.rate)})</span><b style="color:var(--amber-700);font-size:14px">${fmtTL(isk)}</b></div>
-      </div>
-      <div style="font-size:10.5px;color:var(--slate-500);margin-top:5px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg> Bu tutar bayinin <b>iskonto alacağı</b> olarak birikir; bayi bize <b>ödeme yapmaz</b>. Bayiye yem sattığımızda faturadan düşülür. İskonto kademe liste fiyatı üzerinden hesaplanır.</div>`;
     }
+    // Müşteriye satışta bayi için ayrıca tutar işlenmez (atama rozeti yeterli).
   }
-  const toggle=`<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:700;text-transform:none;letter-spacing:0;color:${aliciBayi?'var(--amber-700)':'var(--slate-500)'}"><input type="checkbox" ${aliciBayi?'checked':''} ${ro?'disabled':''} onchange="onToggleAliciBayi(this.checked)" style="width:17px;height:17px;accent-color:var(--amber-600)"> Alıcı: Bayi (bayiye satış)</label>`;
+    const toggle=`<label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:700;text-transform:none;letter-spacing:0;color:${aliciBayi?'var(--amber-700)':'var(--slate-500)'}"><input type="checkbox" ${aliciBayi?'checked':''} ${ro?'disabled':''} onchange="onToggleAliciBayi(this.checked)" style="width:17px;height:17px;accent-color:var(--amber-600)"> Alıcı: Bayi (bayiye satış)</label>`;
   const kart=(tag,tagBg,tagCol,ad,detay)=>`<div class="atama-box" style="background:${tagBg}18;border:1px solid ${tagBg}55"><span class="atama-tag" style="background:${tagBg};color:${tagCol}">${tag}</span><span><b>${esc(ad)}</b>${detay?' <span style="color:var(--slate-500)">· '+detay+'</span>':''}</span></div>`;
   let atama='';
   if(aliciBayi){
@@ -991,11 +956,7 @@ function onToggleAliciBayi(checked){
   }
   renderOrderModal();
 }
-function onMahsupAuto(checked){
-  if(checked)editOrder.iskontoMahsup='';
-  else{var avail=Math.max(0,bayiAvailable(editOrder.bayiId,editOrder.id));var tutar=orderTotal(editOrder);editOrder.iskontoMahsup=String(Math.min(avail,tutar));}
-  renderOrderModal();
-}
+
 function pickKomField(type,name){
   if(type==='clear'){editOrder.komisyoncuId='';editOrder.komisyonRate=null;renderOrderModal();return}
   name=(name||'').trim();
@@ -1094,6 +1055,7 @@ function saveOrder(){
     const _b=komById(o.bayiId);o.customer=_b?('Bayi: '+_b.name):'';o.customerId='';
     o.danismanId=(_b&&_b.danismanId)||'';  // bayinin bağlı danışmanı — bayi üzerinden komisyon kazanır (sipariş anında kilitlenir)
     o.fiyatKademe='bayi';                  // teslim noktası: Bayi Satış
+    o.iskontoMahsup='';                    // mahsup kavramı kaldırıldı
   } else {
     o.iskontoMahsup='';
     if(!o.customerId){toast('Müşteri seçiniz');return}
@@ -1542,12 +1504,13 @@ function renderKomisyon(c,tb){
   const danRows=Object.values(agg).sort((a,b)=>b.tutar-a.tutar);
   const totPrim=danRows.reduce((s,r)=>s+r.tutar,0);
   const totPaid=danRows.reduce((s,r)=>s+(paid[r.kom.id]||0),0);
-  // Bayi cari hesabı: tüm dönem (kazanılan − düşülen = kalan). Dönem filtresinden bağımsız (yürüyen bakiye).
-  const bayiIds=[];DB.orders.forEach(o=>{const b=ordBayi(o);if(b&&bayiIds.indexOf(b.id)<0)bayiIds.push(b.id);});
-  const bayiRows=bayiIds.map(id=>{const k=komById(id);if(!k)return null;const L=bayiLedger(id);return {kom:k,kazanim:L.totKazanim,mahsup:L.totMahsup,kalan:L.kalan,adet:L.events.length};}).filter(Boolean).sort((a,b)=>b.kalan-a.kalan);
-  const totKaz=bayiRows.reduce((s,r)=>s+r.kazanim,0);
-  const totMah=bayiRows.reduce((s,r)=>s+r.mahsup,0);
-  const totKalan=bayiRows.reduce((s,r)=>s+r.kalan,0);
+  // Bayi iskonto raporu: bayinin ALIMLARINDA fatura anında yararlandığı iskonto (çeyrek bazında, seçili yıl).
+  const _yillar=[...new Set(DB.orders.filter(o=>o.aliciBayi&&o.date).map(o=>o.date.slice(0,4)))].sort();
+  if(!window.bayiRepYil||( _yillar.length&&_yillar.indexOf(window.bayiRepYil)<0))window.bayiRepYil=_yillar[_yillar.length-1]||String(new Date().getFullYear());
+  const bayiIds=[];DB.orders.forEach(o=>{if(!o.aliciBayi)return;const b=ordBayi(o);if(b&&bayiIds.indexOf(b.id)<0)bayiIds.push(b.id);});
+  const bayiRows=bayiIds.map(id=>{const k=komById(id);if(!k)return null;const A=bayiAlimData(id,window.bayiRepYil);if(!A.adet)return null;return {kom:k,A};}).filter(Boolean).sort((a,b)=>b.A.totIsk-a.A.totIsk);
+  const totIskY=bayiRows.reduce((s,r)=>s+r.A.totIsk,0);
+  const totAlimY=bayiRows.reduce((s,r)=>s+r.A.totFatura,0);
   const tdIsk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
   tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   let h=`<div class="filters">
@@ -1562,27 +1525,20 @@ function renderKomisyon(c,tb){
     <div class="kpi"><div class="kl">Danışman Primi (Hak Edilen)</div><div class="kv" style="font-size:18px">${fmtTL(totPrim)}</div><div class="ks">${danRows.length} danışman</div></div>
     <div class="kpi g"><div class="kl">Ödenen Prim</div><div class="kv" style="font-size:18px">${fmtTL(totPaid)}</div></div>
     <div class="kpi r"><div class="kl">Kalan Bakiye</div><div class="kv" style="font-size:18px">${fmtTL(totPrim-totPaid)}</div></div>
-    <div class="kpi a"><div class="kl">Bayi İskonto — Kalan Alacak</div><div class="kv" style="font-size:18px">${fmtTL(totKalan)}</div><div class="ks">${bayiRows.length} bayi · kazanılan ${fmtTL(totKaz)} · düşülen ${fmtTL(totMah)}</div></div>
+    <div class="kpi a"><div class="kl">Bayilere Sağlanan İskonto — ${window.bayiRepYil}</div><div class="kv" style="font-size:18px">${fmtTL(totIskY)}</div><div class="ks">${bayiRows.length} bayi · alım ${fmtTL(totAlimY)} · fatura anında uygulanır</div></div>
   </div>
   <div class="card"><div class="card-hd"><h3>Teknik Danışman Prim Hakedişleri <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— fatura karşılığı ödenir</span></h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Danışman</th><th class="num">İskonto</th><th class="num">Sipariş</th><th class="num">Ciro</th><th class="num">Hak Edilen Prim</th><th class="num">Ödenen</th><th class="num">Bakiye</th><th></th></tr></thead><tbody>${danRows.length?danRows.map(r=>{const pd=paid[r.kom.id]||0;const bal=r.tutar-pd;return `<tr><td><b>${esc(r.kom.name)}</b></td><td class="num">%${fmtN(tdIsk)}</td><td class="num">${r.adet}</td><td class="num">${fmtTL(r.ciro)}</td><td class="num"><b style="color:var(--blue-900)">${fmtTL(r.tutar)}</b></td><td class="num" style="color:var(--green-700)">${fmtTL(pd)}</td><td class="num" style="font-weight:700;${bal>0?'color:var(--red-700)':'color:var(--green-700)'}">${fmtTL(bal)}</td><td style="text-align:right"><div class="kom-actions"><button class="btn btn-doc btn-sm" onclick="openKomDetay('${r.kom.id}')" title="Prim dökümü — Excel & PDF"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> Döküm</button><button class="btn btn-grn btn-sm" onclick="openKomOdeme('${r.kom.id}')">₺ Ödeme</button></div></td></tr>`}).join(''):`<tr><td colspan="8" class="tbl-empty">Bu dönemde danışman primi yok.</td></tr>`}</tbody></table></div></div>
-  <div class="card" style="margin-top:16px"><div class="card-hd"><h3>Bayi İskonto Hesabı <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— müşteri satışında birikir, bayiye satışta mahsup edilir · cari (tüm dönem)</span></h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Bayi</th><th class="num">İskonto Oranı</th><th class="num">Hareket</th><th class="num">Kazanılan</th><th class="num">Düşülen (Mahsup)</th><th class="num">Kalan Alacak</th><th></th></tr></thead><tbody>${bayiRows.length?bayiRows.map(r=>`<tr><td><b>${esc(r.kom.name)}</b></td><td class="num">%${fmtN(r.kom.rate)}</td><td class="num">${r.adet}</td><td class="num" style="color:var(--green-700)">${fmtTL(r.kazanim)}</td><td class="num" style="color:var(--amber-700)">${fmtTL(r.mahsup)}</td><td class="num"><b style="color:var(--blue-900)">${fmtTL(r.kalan)}</b></td><td style="text-align:right"><div class="kom-actions"><button class="btn btn-doc btn-sm" onclick="openKomDetay('${r.kom.id}')" title="İskonto cari dökümü"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> Döküm</button></div></td></tr>`).join(''):`<tr><td colspan="7" class="tbl-empty">Henüz bayi iskonto hareketi yok.</td></tr>`}</tbody></table></div></div>`;
+  <div class="card" style="margin-top:16px"><div class="card-hd"><h3>Bayi İskonto Raporu <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— bayinin alımlarında fatura anında uygulanan iskonto · çeyrek bazında</span></h3><select onchange="window.bayiRepYil=this.value;render()" style="font-size:12px;padding:5px 9px;border:1px solid var(--slate-300);border-radius:7px">${_yillar.map(y=>`<option value="${y}" ${window.bayiRepYil===y?'selected':''}>${y}</option>`).join('')||`<option>${window.bayiRepYil}</option>`}</select></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Bayi</th><th class="num">İskonto Oranı</th><th class="num">Alım</th><th class="num">Alım Tutarı (Fatura)</th><th class="num">Ç1 (Oca–Mar)</th><th class="num">Ç2 (Nis–Haz)</th><th class="num">Ç3 (Tem–Eyl)</th><th class="num">Ç4 (Eki–Ara)</th><th class="num" style="background:#EFF6FF">Yıl Toplam İskonto</th><th></th></tr></thead><tbody>${bayiRows.length?bayiRows.map(r=>`<tr><td><b>${esc(r.kom.name)}</b></td><td class="num">%${fmtN(r.kom.rate)}</td><td class="num">${r.A.adet}</td><td class="num">${fmtTL(r.A.totFatura)}</td>${r.A.ceyrek.map(cq=>`<td class="num" style="color:var(--amber-700)">${cq?fmtTL(cq):'—'}</td>`).join('')}<td class="num" style="background:#F8FAFF"><b style="color:var(--blue-900)">${fmtTL(r.A.totIsk)}</b></td><td style="text-align:right"><div class="kom-actions"><button class="btn btn-doc btn-sm" onclick="openKomDetay('${r.kom.id}')" title="Alım ve iskonto dökümü"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg> Döküm</button></div></td></tr>`).join(''):`<tr><td colspan="10" class="tbl-empty">${window.bayiRepYil} yılında bayi alımı yok — bayiye satışlar 'Alıcı: Bayi' ile girildikçe burada birikir.</td></tr>`}</tbody>${bayiRows.length?`<tfoot><tr style="background:#E8F1FB;font-weight:700"><td>TOPLAM</td><td></td><td class="num">${bayiRows.reduce((s,r)=>s+r.A.adet,0)}</td><td class="num">${fmtTL(totAlimY)}</td>${[0,1,2,3].map(q=>`<td class="num">${fmtTL(bayiRows.reduce((s,r)=>s+r.A.ceyrek[q],0))}</td>`).join('')}<td class="num">${fmtTL(totIskY)}</td><td></td></tr></tfoot>`:''}</table></div></div>`;
   c.innerHTML=h;
 }
 function setKomRange(t){const n=new Date();if(t==='ay'){komRepFrom=new Date(n.getFullYear(),n.getMonth(),1).toISOString().split('T')[0];komRepTo=todayISO()}else{komRepFrom=new Date(n.getFullYear(),0,1).toISOString().split('T')[0];komRepTo=todayISO()}render()}
 function komDetayData(komId,from,to){
   const kom=komById(komId);
-  // BAYİ CARİ HESABI — kazanım (müşteri satışı) + mahsup (bayiye satış), yürüyen bakiye (tüm dönem)
+  // BAYİ İSKONTO DÖKÜMÜ — alımlar + fatura anında uygulanan iskonto (seçili yıl, çeyrek özetli)
   if(kom&&kom.type==='bayi'){
-    const L=bayiLedger(komId);
-    const events=L.events.map(function(e){
-      const o=e.o, urun=(o.lines||[]).map(l=>l.code).join(', ');
-      if(e.type==='kazanim'){
-        const c=custById(o.customerId);
-        return {type:'kazanim',tarih:e.tarih,no:o.no,aciklama:o.customer||(c?c.name:'—'),urun,bazTutar:e.listeBrut,rate:e.rate,kazanim:e.kazanim,mahsup:0,bal:e.bal};
-      }
-      return {type:'mahsup',tarih:e.tarih,no:o.no,aciklama:'Bayiye satış · Fatura #'+(o.no||''),urun,bazTutar:e.tutar,net:e.net,kazanim:0,mahsup:e.mahsup,bal:e.bal};
-    });
-    return {kom,bayiCari:true,events,totKazanim:L.totKazanim,totMahsup:L.totMahsup,kalan:L.kalan,from,to};
+    const yil=window.bayiRepYil||String(new Date().getFullYear());
+    const A=bayiAlimData(komId,yil);
+    return {kom,bayiAlim:true,yil,A,from,to};
   }
   // TEKNİK DANIŞMAN
   let orders=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId;});
@@ -1611,11 +1567,14 @@ function komDetayCSV(komId){
   const sep=';';const nf=n=>(n===''||n==null)?'':String(Math.round((+n)*100)/100).replace('.',',');
   const q=x=>`"${String(x).replace(/"/g,'""')}"`;
   const dl=(lines,sfx)=>{const csv='﻿'+lines.join('\r\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=sfx+'_'+d.kom.name.replace(/[^a-zA-Z0-9ığüşöçİĞÜŞÖÇ ]/g,'')+'_'+todayISO()+'.csv';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},800);toast('Excel (CSV) indirildi');};
-  if(d.bayiCari){
-    let lines=[['Tarih','Tür','Açıklama','Ürün','Baz Tutar','Kazanılan','Mahsup','Bakiye'].map(q).join(sep)];
-    d.events.forEach(e=>lines.push([fmtDate(e.tarih),e.type==='kazanim'?'İskonto kazanımı (%'+fmtN(e.rate)+')':'Bayiye satış (mahsup)',e.aciklama,e.urun,nf(e.bazTutar),nf(e.kazanim),nf(e.mahsup),nf(e.bal)].map(q).join(sep)));
-    lines.push(['','','','TOPLAM','',nf(d.totKazanim),nf(d.totMahsup),nf(d.kalan)].map(q).join(sep));
-    dl(lines,'BayiIskonto');return;
+  if(d.bayiAlim){
+    let lines=[['Tarih','Fatura No','Ürünler','Fabrika Liste','İskonto','Ödenen (Fatura)'].map(q).join(sep)];
+    d.A.rows.forEach(r=>lines.push([fmtDate(r.tarih),'#'+(r.no||''),r.urun,nf(r.brut),nf(r.isk),nf(r.fatura)].map(q).join(sep)));
+    lines.push(['','','TOPLAM',nf(d.A.totBrut),nf(d.A.totIsk),nf(d.A.totFatura)].map(q).join(sep));
+    lines.push('');lines.push(['ÇEYREK','İskonto'].map(q).join(sep));
+    ['Ç1 (Oca-Mar)','Ç2 (Nis-Haz)','Ç3 (Tem-Eyl)','Ç4 (Eki-Ara)'].forEach((cl,i)=>lines.push([cl,nf(d.A.ceyrek[i])].map(q).join(sep)));
+    lines.push(['YIL TOPLAM ('+d.yil+')',nf(d.A.totIsk)].map(q).join(sep));
+    dl(lines,'BayiIskonto'+d.yil);return;
   }
   let lines=[['Tarih','Müşteri','Bayi','Ürün','Miktar','Liste','Alış','Satış','Tutar','Kargo','Prim'].map(q).join(sep)];
   d.rows.forEach(r=>lines.push([fmtDate(r.tarih),r.musteri,(r.bayi||'')+(r.viaBayi?' (bayi üzerinden)':''),r.urun,nf(r.miktar),nf(r.liste),nf(r.alis),nf(r.satis),nf(r.tutar),nf(r.kargo),nf(r.prim)].map(q).join(sep)));
@@ -1631,12 +1590,12 @@ function komDetayCSV(komId){
 function openKomDetay(komId){
   const d=komDetayData(komId,komRepFrom,komRepTo);const isDan=d.kom.type==='danisman';
   const donem=(komRepFrom||komRepTo)?`${komRepFrom?fmtDate(komRepFrom):'baş'} — ${komRepTo?fmtDate(komRepTo):'bugün'}`:'Tüm dönem';
-  let thead=isDan?`<tr><th>Tarih</th><th>Müşteri</th><th>Bayi</th><th>Ürün</th><th class="num">Miktar</th><th class="num">Liste ₺</th><th class="num">Alış ₺</th><th class="num">Satış ₺</th><th class="num">Tutar ₺</th><th class="num">Kargo ₺</th><th class="num">Prim ₺</th></tr>`:`<tr><th>Tarih</th><th>Tür</th><th>Açıklama</th><th>Ürün</th><th class="num">Baz ₺</th><th class="num">Kazanılan ₺</th><th class="num">Mahsup ₺</th><th class="num">Bakiye ₺</th></tr>`;
+  let thead=isDan?`<tr><th>Tarih</th><th>Müşteri</th><th>Bayi</th><th>Ürün</th><th class="num">Miktar</th><th class="num">Liste ₺</th><th class="num">Alış ₺</th><th class="num">Satış ₺</th><th class="num">Tutar ₺</th><th class="num">Kargo ₺</th><th class="num">Prim ₺</th></tr>`:`<tr><th>Tarih</th><th>Fatura</th><th>Ürünler</th><th class="num">Fabrika Liste ₺</th><th class="num">İskonto ₺</th><th class="num">Ödenen (Fatura) ₺</th></tr>`;
   let tbody=isDan?d.rows.map(r=>`<tr><td>${fmtDate(r.tarih)}</td><td>${esc(r.musteri)}</td><td>${esc(r.bayi||'—')}${r.viaBayi?' <span style="font-size:9px;color:#7C3AED;font-weight:700">BAYİ ÜZERİNDEN</span>':''}</td><td><b>${esc(r.urun)}</b></td><td class="num">${fmtN(r.miktar)}</td><td class="num">${fmtN(r.liste)}</td><td class="num" style="color:#475569">${fmtN(r.alis)}</td><td class="num">${fmtN(r.satis)}</td><td class="num">${fmtTL(r.tutar)}</td><td class="num">${r.kargo?fmtTL(r.kargo):'—'}</td><td class="num" style="font-weight:700;color:${r.prim>=0?'#15803D':'#B91C1C'}">${fmtTL(r.prim)}</td></tr>`).join('')
-    :d.events.map(e=>`<tr><td>${fmtDate(e.tarih)}</td><td>${e.type==='kazanim'?'<span style="color:#15803D;font-weight:600">İskonto kazanımı</span>':'<span style="color:#B45309;font-weight:600">Bayiye satış</span>'}</td><td>${esc(e.aciklama)}${e.type==='kazanim'&&e.rate?' <span style="font-size:9px;color:#94A3B8">%'+fmtN(e.rate)+'</span>':''}</td><td>${esc(e.urun)}</td><td class="num">${fmtTL(e.bazTutar)}</td><td class="num" style="color:#15803D">${e.kazanim?'+'+fmtTL(e.kazanim):'—'}</td><td class="num" style="color:#B45309">${e.mahsup?'−'+fmtTL(e.mahsup):'—'}</td><td class="num" style="font-weight:700;color:#0C2340">${fmtTL(e.bal)}</td></tr>`).join('');
-  const rowCount=isDan?d.rows.length:d.events.length;
-  if(!rowCount)tbody=`<tr><td colspan="${isDan?11:8}" style="text-align:center;padding:30px;color:#94A3B8">Kayıt yok</td></tr>`;
-  let tfoot=isDan?`<tr style="background:#E8F1FB;font-weight:700"><td colspan="8" style="text-align:right">TOPLAM (Kargo: ${fmtTL(d.totKargo)} düşülmüş)</td><td class="num">${fmtTL(d.totTutar)}</td><td class="num">${fmtTL(d.totKargo)}</td><td class="num" style="color:#0C2340;font-size:14px">${fmtTL(d.netPrim)}</td></tr>`:`<tr style="background:#E8F1FB;font-weight:700"><td colspan="5" style="text-align:right">TOPLAM</td><td class="num" style="color:#15803D">${fmtTL(d.totKazanim)}</td><td class="num" style="color:#B45309">${fmtTL(d.totMahsup)}</td><td class="num" style="color:#0C2340;font-size:14px">${fmtTL(d.kalan)}</td></tr>`;
+    :d.A.rows.map(r=>`<tr><td>${fmtDate(r.tarih)}</td><td>#${esc(r.no||'')}</td><td>${esc(r.urun)}</td><td class="num">${fmtTL(r.brut)}</td><td class="num" style="color:#B45309;font-weight:600">− ${fmtTL(r.isk)}</td><td class="num" style="font-weight:700;color:#0C2340">${fmtTL(r.fatura)}</td></tr>`).join('');
+  const rowCount=isDan?d.rows.length:d.A.rows.length;
+  if(!rowCount)tbody=`<tr><td colspan="${isDan?11:6}" style="text-align:center;padding:30px;color:#94A3B8">Kayıt yok</td></tr>`;
+  let tfoot=isDan?`<tr style="background:#E8F1FB;font-weight:700"><td colspan="8" style="text-align:right">TOPLAM (Kargo: ${fmtTL(d.totKargo)} düşülmüş)</td><td class="num">${fmtTL(d.totTutar)}</td><td class="num">${fmtTL(d.totKargo)}</td><td class="num" style="color:#0C2340;font-size:14px">${fmtTL(d.netPrim)}</td></tr>`:`<tr style="background:#E8F1FB;font-weight:700"><td colspan="3" style="text-align:right">TOPLAM</td><td class="num">${fmtTL(d.A.totBrut)}</td><td class="num" style="color:#B45309">− ${fmtTL(d.A.totIsk)}</td><td class="num" style="color:#0C2340;font-size:14px">${fmtTL(d.A.totFatura)}</td></tr>`;
   const html=`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>${esc(d.kom.name)} · Prim Dökümü</title><style>
   *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;color:#0F172A;background:#F1F5F9;padding:20px;font-size:12px}
   .pg{max-width:1100px;margin:0 auto;background:#fff;padding:32px 36px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
@@ -1654,7 +1613,7 @@ function openKomDetay(komId){
   </style></head><body>
   <div class="pbar"><button class="bx" onclick="window.opener&&window.opener.komisyonCSVProxy&&window.opener.komisyonCSVProxy('${komId}')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Excel (CSV)</button><button class="bp" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button></div>
   <div class="pg">
-    <div class="ph"><div><div class="badge">${isDan?'TEKNİK DANIŞMAN PRİM DÖKÜMÜ':'BAYİ İSKONTO CARİ HESABI'}</div><h1>${esc(d.kom.name)}</h1><div class="s">ROTA YEM · Sipariş Takip Sistemi</div></div><div class="meta"><b>${donem}</b><br>${isDan?'İskonto: %'+fmtN((DB.meta&&DB.meta.tdIskonto)||6):'İskonto: %'+fmtN(d.kom.rate)}<br>${isDan?d.rows.length+' kalem':d.events.length+' hareket'}</div></div>
+    <div class="ph"><div><div class="badge">${isDan?'TEKNİK DANIŞMAN PRİM DÖKÜMÜ':'BAYİ İSKONTO RAPORU — '+esc(d.yil||'')}</div><h1>${esc(d.kom.name)}</h1><div class="s">ROTA YEM · Sipariş Takip Sistemi</div></div><div class="meta"><b>${isDan?donem:('Yıl: '+esc(d.yil||''))}</b><br>${isDan?'İskonto: %'+fmtN((DB.meta&&DB.meta.tdIskonto)||6):'İskonto: %'+fmtN(d.kom.rate)}<br>${isDan?d.rows.length+' kalem':d.A.rows.length+' alım'}</div></div>
     <table><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table>
     ${isDan?'<p style="font-size:10.5px;color:#64748B;margin-top:10px">Müşteriye direkt: Prim = (Satış − Alış) × Miktar − Kargo; Alış = Torbalı Liste × (1 − %6). BAYİ ÜZERİNDEN (bayiye satış): Komisyon = (Bayi Alış − Danışman Alış) × Miktar; Bayi Alış = Fabrika × (1 − bayi iskontosu), Danışman Alış = Torbalı × (1 − %6). Bayi sütunu ilgili bayiyi gösterir.</p>':''}
     ${isDan?`<h2 style="font-size:14px;color:#0C2340;margin:24px 0 8px;border-bottom:2px solid #E2E8F0;padding-bottom:6px">Hesap Hareketleri</h2>
@@ -1664,12 +1623,12 @@ function openKomDetay(komId){
     </tbody>
     <tfoot><tr style="background:${d.kalanBakiye>0?'#FEF3C7':'#DCFCE7'};font-weight:700"><td colspan="2" style="text-align:right">KALAN BAKİYE (Hakediş − Ödenen)</td><td class="num" style="color:#15803D">+${fmtTL(d.netPrim)}</td><td class="num" style="color:#B91C1C">−${fmtTL(d.totOdenen)}</td><td class="num" style="font-size:15px;color:${d.kalanBakiye>0?'#B45309':'#15803D'}">${fmtTL(d.kalanBakiye)}</td></tr></tfoot></table>
     ${d.odemeler.length===0?'<p style="font-size:10.5px;color:#94A3B8;margin-top:6px">Bu dönemde ödeme kaydı bulunmuyor — tüm hakediş bakiyede.</p>':''}`
-    :`<div style="margin-top:22px;display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:150px;padding:13px 16px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px"><div style="font-size:11px;color:#166534;font-weight:600">Kazanılan İskonto</div><b style="font-size:17px;color:#15803D">${fmtTL(d.totKazanim)}</b></div>
-      <div style="flex:1;min-width:150px;padding:13px 16px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px"><div style="font-size:11px;color:#92560b;font-weight:600">Düşülen (Mahsup)</div><b style="font-size:17px;color:#B45309">${fmtTL(d.totMahsup)}</b></div>
-      <div style="flex:1;min-width:150px;padding:13px 16px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px"><div style="font-size:11px;color:#1e40af;font-weight:600">Kalan Alacak</div><b style="font-size:19px;color:#0C2340">${fmtTL(d.kalan)}</b></div>
+    :`<h2 style="font-size:14px;color:#0C2340;margin:24px 0 8px;border-bottom:2px solid #E2E8F0;padding-bottom:6px">Çeyrek Bazında Yararlanılan İskonto — ${esc(d.yil||'')}</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      ${['Ç1 · Oca–Mar','Ç2 · Nis–Haz','Ç3 · Tem–Eyl','Ç4 · Eki–Ara'].map((cl,i)=>`<div style="flex:1;min-width:130px;padding:13px 16px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px"><div style="font-size:11px;color:#92560b;font-weight:600">${cl}</div><b style="font-size:16px;color:#B45309">${fmtTL(d.A.ceyrek[i])}</b></div>`).join('')}
+      <div style="flex:1;min-width:150px;padding:13px 16px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px"><div style="font-size:11px;color:#1e40af;font-weight:600">YIL TOPLAMI</div><b style="font-size:19px;color:#0C2340">${fmtTL(d.A.totIsk)}</b></div>
     </div>
-    <p style="font-size:10.5px;color:#94A3B8;margin-top:10px">İskonto, müşteriye satışta kademe liste fiyatı üzerinden <b>kazanılır</b>; bayiye satışta faturadan <b>mahsup</b> edilir. Bayiye nakit ödeme yapılmaz. Kalan alacak, bir sonraki bayiye satışta düşülmek üzere bekler.</p>`}
+    <p style="font-size:10.5px;color:#94A3B8;margin-top:10px">Bayi iskontosu <b>fatura anında</b> uygulanır: birim fiyat = fabrika liste fiyatı × (1 − bayi iskontosu). Birikme, alacak veya mahsup yoktur; bu rapor bayinin alımlarında yararlandığı toplam indirimi gösterir.</p>`}
     <div class="pf">Pentanova · Kurumsal Çözümler · ${new Date().toLocaleString('tr-TR')}</div>
   </div></body></html>`;
   const w=window.open('','_blank');if(!w){toast('Pop-up engellendi');return}

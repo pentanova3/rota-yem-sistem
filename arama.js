@@ -92,22 +92,21 @@ function orderKomisyon(o,kom){
     });
     return {tutar:prim-(+o.nakliye||0)};
   }
-  const rate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0);
-  if(o.aliciBayi)return {tutar:0};
-  return {tutar:orderListTotal(o)*(rate/100),rate};
+  // BAYİ: iskonto fatura anında uygulanır (fiyata gömülü) — sipariş üzerinden ayrıca tutar işlenmez.
+  return {tutar:0,rate:(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0)};
 }
-function bayiLedger(bayiId){
-  const os=D().orders.filter(o=>{const b=ordBayi(o);return b&&b.id===bayiId;})
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.createdAt||'').localeCompare(b.createdAt||''));
-  let bal=0,kaz=0,mah=0;
+// Bayi iskontosu fatura anında uygulanır (birikme/mahsup yok) — yıl içi yararlanılan iskonto raporu.
+function bayiAlimOzet(bayiId,yil){
+  const os=D().orders.filter(o=>o.aliciBayi&&o.status!=='iptal'&&(ordBayi(o)||{}).id===bayiId&&(o.date||'').slice(0,4)===String(yil));
+  let brut=0,fat=0;const ceyrek=[0,0,0,0];
   os.forEach(o=>{
-    if(o.aliciBayi){
-      const tutar=orderTotal(o),avail=bal>0?bal:0;
-      let m=(o.iskontoMahsup!==''&&o.iskontoMahsup!=null)?Math.min(+o.iskontoMahsup||0,tutar,avail):Math.min(avail,tutar);
-      if(m<0)m=0;bal-=m;mah+=m;
-    }else{const r=orderKomisyon(o,ordBayi(o));bal+=r.tutar||0;kaz+=r.tutar||0;}
+    const pl=orderPL(o);let b=0;
+    (o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});
+    const ft=orderTotal(o);const isk=Math.max(0,b-ft);
+    const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
+    brut+=b;fat+=ft;
   });
-  return {kazanim:kaz,mahsup:mah,kalan:bal,adet:os.length};
+  return {adet:os.length,brut,fatura:fat,iskonto:Math.max(0,brut-fat),ceyrek};
 }
 function danismanHakedis(danId){
   let hak=0,adet=0;
@@ -211,11 +210,14 @@ function ansKomisyon(q){
         row('Hak Edilen (toplam)',fmtTL(h.hak))+row('Ödenen',fmtTL(h.odenen))+
         row('Kalan Bakiye',`<span class="ka-big" style="color:${h.bakiye>0?'#B91C1C':'#15803D'}">${fmtTL(h.bakiye)}</span>`)+row('Sipariş',h.adet+' adet')+
         `<div class="ka-note">Prim fatura karşılığı ödenir · detay: <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
-    const L=bayiLedger(k.id);
-    return card('Bayi İskonto Carisi — '+esc(k.name),
-      row('Kazanılan İskonto',fmtTL(L.kazanim))+row('Düşülen (Mahsup)',fmtTL(L.mahsup))+
-      row('Kalan Alacak',`<span class="ka-big" style="color:#1D4ED8">${fmtTL(L.kalan)}</span>`)+row('Hareket',L.adet+' sipariş')+
-      `<div class="ka-note">İskonto nakit ödenmez; bayiye satış faturasından düşülür.</div>`);}
+    const yil=new Date().getFullYear();
+    const A=bayiAlimOzet(k.id,yil);
+    return card('Bayi İskonto Raporu — '+esc(k.name)+' ('+yil+')',
+      row('Alım',A.adet+' sipariş · '+fmtTL(A.fatura))+
+      row('Yararlanılan İskonto (%'+fmtN(k.rate||0)+')',`<span class="ka-big" style="color:#B45309">${fmtTL(A.iskonto)}</span>`)+
+      `<div class="ka-sub">Çeyrek kırılımı</div>`+
+      ['Ç1 (Oca–Mar)','Ç2 (Nis–Haz)','Ç3 (Tem–Eyl)','Ç4 (Eki–Ara)'].map((cl,i)=>row(cl,fmtTL(A.ceyrek[i]))).join('')+
+      `<div class="ka-note">Bayi iskontosu fatura anında uygulanır; birikme veya mahsup yoktur. Detay: <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
   // isim yoksa: tüm danışman bakiyeleri
   const ds=D().koms.filter(k=>k.type==='danisman').map(k=>({k,h:danismanHakedis(k.id)})).filter(x=>x.h.adet>0);
   if(!ds.length)return null;
