@@ -162,7 +162,7 @@ function ansSiparis(q){
     row('Sipariş Tarihi',fmtDate(o.date))+row('Teslim Tarihi',fmtDate(o.teslimTarihi))+
     row('Ürünler',esc((o.lines||[]).map(l=>l.code+' × '+fmtN(l.qty)).join(', ')||'—'))+
     (o.plaka?row('Araç / Şoför',esc(o.plaka+(o.sofor?' · '+o.sofor:''))):'')+
-    `<a class="ka-link" href="siparis-takip/">Sipariş Takip modülünde aç</a>`);
+    `<a class="ka-link" href="siparis-takip/#siparis=${esc(o.no)}">Siparişi aç</a>`);
 }
 function ansTonaj(q){
   const n=norm(q);
@@ -176,7 +176,7 @@ function ansTonaj(q){
   return card('Satış Tonajı — '+esc(P.lbl),
     row('Toplam',`<span class="ka-big">${fmtTon(ton)} ton</span>`)+row('Çuval',fmtN(cuval)+' adet')+row('Sipariş',os.length+' adet')+
     (top.length?`<div class="ka-sub">Ürün kırılımı</div>`+top.map(([c,t])=>row(c,fmtTon(t)+' t')).join(''):'')+
-    `<div class="ka-note">1 çuval = 25 kg · iptal siparişler hariç · detay: <a href="siparis-takip/">Raporlar → Tonaj &amp; Hedef</a></div>`);
+    `<div class="ka-note">1 çuval = 25 kg · iptal siparişler hariç · detay: <a href="siparis-takip/#raporlar">Raporlar → Tonaj &amp; Hedef</a></div>`);
 }
 function ansIzin(q){
   const n=norm(q);if(!n.includes('izin')&&!n.includes('izn'))return null;  // izin / izni / izne (ünlü düşmesi)
@@ -202,7 +202,7 @@ function ansKomisyon(q){
       return card('Danışman Hakedişi — '+esc(k.name),
         row('Hak Edilen (toplam)',fmtTL(h.hak))+row('Ödenen',fmtTL(h.odenen))+
         row('Kalan Bakiye',`<span class="ka-big" style="color:${h.bakiye>0?'#B91C1C':'#15803D'}">${fmtTL(h.bakiye)}</span>`)+row('Sipariş',h.adet+' adet')+
-        `<div class="ka-note">Prim fatura karşılığı ödenir · detay: <a href="siparis-takip/">İskonto &amp; Komisyon</a></div>`);}
+        `<div class="ka-note">Prim fatura karşılığı ödenir · detay: <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
     const L=bayiLedger(k.id);
     return card('Bayi İskonto Carisi — '+esc(k.name),
       row('Kazanılan İskonto',fmtTL(L.kazanim))+row('Düşülen (Mahsup)',fmtTL(L.mahsup))+
@@ -275,7 +275,7 @@ function ansMusteri(q){
     (bayi?row('Bayisi',esc(bayi.name)):'')+(dan?row('Danışmanı',esc(dan.name)):'')+
     row('Sipariş Sayısı',os.length+(c.orderCount?' (+'+c.orderCount+' arşiv)':''))+
     (son?row('Son Sipariş',fmtDate(son.date)+' · #'+son.no):'')+
-    `<a class="ka-link" href="siparis-takip/">Sipariş Takip modülünde aç</a>`);
+    `<a class="ka-link" href="siparis-takip/#musteriler">Müşteriler sayfasında aç</a>`);
 }
 function ansPersonel(q){
   const ps=D().personeller;if(!ps.length)return null;
@@ -297,8 +297,8 @@ function ansHedef(q){
   const rows=AYLAR_TR.map((ad,i)=>{const k=yil+'-'+String(i+1).padStart(2,'0');const hv=+H[k]||0,g=byM[String(i+1).padStart(2,'0')]||0;
     if(!hv&&!g)return '';
     return `<tr><td>${ad}</td><td class="n">${hv?fmtTon(hv):'—'}</td><td class="n">${g?fmtTon(g):'—'}</td><td class="n" style="font-weight:700">${hv?('%'+Math.round(g/hv*100)):'—'}</td></tr>`;}).join('');
-  if(!rows)return card('Tonaj Hedefleri — '+yil,`<p class="ka-p">Henüz aylık ton hedefi girilmemiş. Hedefler <a class="ka-link" href="siparis-takip/">Sipariş Takip → Raporlar → Tonaj &amp; Hedef</a> ekranından girilir.</p>`);
-  return card('Tonaj Hedefleri — '+yil,table([{t:'Ay'},{t:'Hedef (t)',n:1},{t:'Gerçekleşen (t)',n:1},{t:'Oran',n:1}],rows)+`<a class="ka-link" href="siparis-takip/">Tonaj &amp; Hedef raporunu aç</a>`);
+  if(!rows)return card('Tonaj Hedefleri — '+yil,`<p class="ka-p">Henüz aylık ton hedefi girilmemiş. Hedefler <a class="ka-link" href="siparis-takip/#raporlar">Sipariş Takip → Raporlar → Tonaj &amp; Hedef</a> ekranından girilir.</p>`);
+  return card('Tonaj Hedefleri — '+yil,table([{t:'Ay'},{t:'Hedef (t)',n:1},{t:'Gerçekleşen (t)',n:1},{t:'Oran',n:1}],rows)+`<a class="ka-link" href="siparis-takip/#raporlar">Tonaj &amp; Hedef raporunu aç</a>`);
 }
 function ansGenel(q){
   // serbest arama: tüm varlıklar
@@ -311,10 +311,10 @@ function ansGenel(q){
   const mProd=D().products.filter(p=>nq.includes(norm(p.code).replace(/[\s-]/g,''))||qt.some(t=>norm(p.code).replace(/[\s-]/g,'').includes(t))).slice(0,5);
   const li=(tip,ad,ek,href)=>`<tr><td><span class="ka-chip">${tip}</span></td><td><b>${esc(ad)}</b></td><td>${esc(ek||'')}</td><td><a class="ka-link" href="${href}">aç</a></td></tr>`;
   let rows='';
-  mCust.forEach(c=>rows+=li('Müşteri',c.name,(c.city||'')+(c.phone?' · '+c.phone:''),'siparis-takip/'));
+  mCust.forEach(c=>rows+=li('Müşteri',c.name,(c.city||'')+(c.phone?' · '+c.phone:''),'siparis-takip/#musteriler'));
   mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,k.city||'','saha/'));
   mPer.forEach(p=>rows+=li('Personel',p.ad,p.gorev||'','hr/'));
-  mProd.forEach(p=>rows+=li('Ürün',p.code,p.pkg||'','siparis-takip/'));
+  mProd.forEach(p=>rows+=li('Ürün',p.code,p.pkg||'','siparis-takip/#urunler'));
   if(!rows)return null;
   return card('Arama Sonuçları',table([{t:''},{t:'Ad'},{t:'Bilgi'},{t:''}],rows));
 }

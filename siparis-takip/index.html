@@ -587,7 +587,17 @@ function renderNav(){
   }).join('');
 }
 function go(v){VIEW=v;document.getElementById('sidebar').classList.remove('open');render()}
+// Deep-link: /siparis-takip/#komisyon gibi bir hash ile açılınca ilgili sekmeye gider (girişten sonra da çalışır).
+// #siparis=573 → sipariş listesini açıp o siparişin detayını gösterir.
+function applyDeepLink(){
+  const h=decodeURIComponent((location.hash||'').replace('#',''));if(!h)return;
+  const m=/^siparis=(\d+)$/.exec(h);
+  if(m){VIEW='siparisler';const o=DB.orders.find(x=>String(x.no)===m[1]);if(o)setTimeout(()=>openOrder(o.id),200);}
+  else if(['panel','siparisler','musteriler','komisyoncular','komisyon','urunler','stok','hammadde','raporlar','ayarlar'].indexOf(h)>=0)VIEW=h;
+  history.replaceState(null,'',location.pathname+location.search);
+}
 function initApp(){
+  applyDeepLink();
   document.getElementById('uName').textContent=USER.name;
   document.getElementById('uRole').textContent=ROLES[USER.role]||USER.role;
   document.getElementById('uAv').textContent=(USER.name||'?').charAt(0).toUpperCase();
