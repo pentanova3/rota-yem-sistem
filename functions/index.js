@@ -180,3 +180,23 @@ exports.gunlukTeslimat = onSchedule({schedule: "45 7 * * *", timeZone: "Europe/I
   await tg(token, "sendMessage", {chat_id: chat, text: msg});
   console.log("teslimat: gönderildi —", list.length, "sipariş");
 });
+
+// ============================================================
+// GÜNLÜK OTOMATİK YEDEK — her gece 03:00 (Türkiye saati)
+// Tüm uygulama verileri tarihli kopyaya alınır; 30 gün saklanır.
+// ============================================================
+exports.gunlukYedek = onSchedule({schedule: "0 3 * * *", timeZone: "Europe/Istanbul", region: "us-central1"}, async () => {
+  const tarih = new Date().toLocaleDateString("sv-SE", {timeZone: "Europe/Istanbul"}); // YYYY-MM-DD
+  const kaynaklar = ["siparis", "saha", "ik", "muhasebe", "portal", "muhasebeLog"];
+  for (const id of kaynaklar) {
+    try {
+      const s = await db.doc("apps/" + id).get();
+      if (s.exists) await db.doc("yedekler/" + tarih + "_" + id).set({...s.data(), _yedekTs: new Date().toISOString()});
+    } catch (e) { console.error("yedek", id, e); }
+  }
+  // 30 günden eski yedekleri temizle
+  const sinir = new Date(Date.now() - 30 * 864e5).toLocaleDateString("sv-SE", {timeZone: "Europe/Istanbul"});
+  const hepsi = await db.collection("yedekler").get();
+  for (const d of hepsi.docs) { if (d.id.slice(0, 10) < sinir) await d.ref.delete(); }
+  console.log("yedek tamam:", tarih);
+});
