@@ -263,15 +263,16 @@ function ansBayiDanisman(q){
   // şehir eşleşmesi
   const cityHits=list.filter(k=>k.city&&qt.some(t=>t.length>=3&&norm(k.city).includes(t)));
   if(cityHits.length){
-    const rows=cityHits.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${esc(k.city||'—')}</td><td>${esc(k.phone||'—')}</td><td class="n">${k.type==='bayi'?('%'+fmtN(k.rate||0)):'—'}</td></tr>`).join('');
+    const rows=cityHits.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${telLink(k.phone)}</td><td>${mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city})}</td><td class="n">${k.type==='bayi'?('%'+fmtN(k.rate||0)):'—'}</td></tr>`).join('');
     return card((tip==='bayi'?'Bayiler':'Danışmanlar')+' — '+esc(cityHits[0].city),
-      table([{t:'Ad'},{t:'Şehir'},{t:'Telefon'},{t:tip==='bayi'?'İskonto':'',n:1}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç</a>`);
+      table([{t:'Ad'},{t:'Telefon'},{t:'Adres'},{t:tip==='bayi'?'İskonto':'',n:1}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç</a>`);
   }
   // ad eşleşmesi
   const mt=bestMatch(list,k=>k.name,qt);
   if(mt){const k=mt.item;const dan=k.danismanId?komById(k.danismanId):null;
     return card((tip==='bayi'?'Bayi':'Teknik Danışman')+' — '+esc(k.name),
-      row('Şehir',esc(k.city||'—'))+row('Telefon',esc(k.phone||'—'))+
+      row('Şehir',esc(k.city||'—'))+row('Telefon',telLink(k.phone))+
+      row('Adres',mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city}))+
       (tip==='bayi'?row('İskonto Oranı','%'+fmtN(k.rate||0)):'')+
       (dan?row('Bağlı Danışman',esc(dan.name)):'')+
       `<a class="ka-link" href="saha/">Saha modülünde aç</a>`);}
@@ -530,7 +531,7 @@ function ansGenel(q){
   let rows='';
   mCust.forEach(c=>rows+=li('Müşteri',c.name,[telLink(c.phone),mapsLink(c)].filter(x=>x!=='—').join(' · ')||'',
     'siparis-takip/#musteriler'));
-  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,esc(k.city||''),'saha/'));
+  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,[telLink(k.phone),mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city})].filter(x=>x!=='—').join(' · ')||esc(k.city||''),'saha/'));
   mPer.forEach(p=>rows+=li('Personel',p.ad,esc(p.gorev||''),'hr/'));
   mProd.forEach(p=>rows+=li('Ürün',p.code,esc(p.pkg||''),'siparis-takip/#urunler'));
   if(!rows)return null;
