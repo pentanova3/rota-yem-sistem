@@ -26,6 +26,13 @@ const MODS=[
  {key:'toplanti',href:'haftalik-toplanti/',ad:'Haftalık Toplantı', seviyeler:[['yok','Girmez'],['kullan','Girer'],['yonetici','Yönetici']]},
 ];
 
+// Modül İÇİ bölümler — kapatılanlar kullanıcı.bolum{'mod.bolum':false} olarak saklanır (varsayılan: hepsi açık)
+const BOLUMLER=[
+ {mod:'siparis',ad:'Sipariş Takip',list:[['panel','Panel'],['siparisler','Siparişler'],['musteriler','Müşteriler'],['komisyoncular','Bayi & Danışman'],['komisyon','İskonto & Komisyon'],['urunler','Ürünler & Fiyat'],['stok','Stok'],['raporlar','Raporlar'],['ayarlar','Ayarlar']]},
+ {mod:'muhasebe',ad:'Muhasebe & Finans',list:[['hafta','Haftalık Akış'],['kasa','Kasa Defteri'],['alacak','Alacaklar'],['borc','Borçlar'],['pos','POS'],['dbs','DBS'],['ayar','Ayarlar']]},
+ {mod:'ik',ad:'İnsan Kaynakları',list:[['hr','İK Uygulaması (kart)'],['isg','İSG (kart)'],['kvkk','KVKK (kart)'],['personel','Personeller'],['sablon','Sözleşme & Şablonlar'],['ilan','Personel İlanı'],['basvuru','Başvuru Evrakları'],['kabul','İşe Kabul'],['cikis','Çıkış Evrakları'],['izin','İzin Takibi'],['avans','Avans Yönetimi'],['tazminat','Kıdem & İhbar'],['puantaj','Puantaj'],['talimat','Talimatlar'],['diger','Diğer Evraklar']]},
+ {mod:'saha',ad:'Saha (Bayi & Danışman)',list:[['harita','Bayi Haritası'],['musteri','Müşteri Haritası'],['firsat','Bayi Fırsatı'],['liste','Bayi & Danışman Listesi'],['sozlesme','Sözleşmeler']]},
+];
 let PDATA=null, PUSER=null;
 
 async function loadPortal(force){
@@ -131,8 +138,8 @@ function openPanel(){
     ${MODS.map(m=>`<td><select onchange="PA.perm(${i},'${m.key}',this.value)">${m.seviyeler.map(([v,l])=>`<option value="${v}" ${permOf(u,m.key)===v?'selected':''}>${l}</option>`).join('')}</select></td>`).join('')}
     <td style="text-align:center"><input type="checkbox" ${u.fiyatGor?'checked':''} onchange="PA.set(${i},'fiyatGor',this.checked)" title="Sipariş modülünde fiyatları görebilir"></td>
     <td style="text-align:center"><input type="checkbox" ${u.portalYonetici?'checked':''} onchange="PA.set(${i},'portalYonetici',this.checked)" title="Bu paneli açabilir, kullanıcı yönetir"></td>
-    <td><button class="pa-del" onclick="PA.del(${i})">Sil</button></td>
-  </tr>`).join('');
+    <td style="white-space:nowrap"><button class="pa-btn pa-sm pa-out" onclick="PA.bolumAc(${i})">${(PDATA._acik&&PDATA._acik[i])?'Bölümler ▴':'Bölümler ▾'}</button> <button class="pa-del" onclick="PA.del(${i})">Sil</button></td>
+  </tr>${(PDATA._acik&&PDATA._acik[i])?`<tr class="pa-brow"><td colspan="12">${bolumGridHTML(u,i)}</td></tr>`:''}`).join('');
   const adayOpts=(PDATA.adaylar||[]).map(a=>`<option value="${esc(a.chatId)}">${esc(a.ad||a.chatId)} (${esc(a.chatId)})</option>`).join('');
   document.body.insertAdjacentHTML('beforeend',`<div class="pa-bg" id="pa-modal">
     <div class="pa-box pa-wide">
@@ -161,7 +168,33 @@ function openPanel(){
       <button class="pa-x" onclick="document.querySelector('.pa-bg').remove()">✕</button>
     </div></div>`);
 }
+function bolumKapali(u,mod,b){return !!(u.bolum&&u.bolum[mod+'.'+b]===false);}
+function bolumGridHTML(u,i){
+  const gruplar=BOLUMLER.filter(g=>permOf(u,g.mod)!=='yok');
+  if(!gruplar.length)return '<div style="font-size:12px;color:#8aa0b8;padding:10px">Önce üstten en az bir modüle giriş yetkisi verin — bölüm izinleri ondan sonra açılır.</div>';
+  return `<div class="pa-bwrap">
+    <div class="pa-bhead">
+      <b>${esc(u.name||u.username)}</b> için bölüm izinleri — işaretli bölümleri görür, işareti kaldırdıkların o kullanıcıda tamamen gizlenir.
+      <button class="pa-btn pa-sm" style="margin-left:auto" onclick="PA.bolumTum(${i},true)">Her Şeyi Aç</button>
+      <button class="pa-btn pa-sm pa-out" onclick="PA.bolumTum(${i},false)">Her Şeyi Kapat</button>
+    </div>
+    <div class="pa-bgrid">
+    ${gruplar.map(g=>`<div class="pa-bm">
+      <div class="pa-bm-h">${esc(g.ad)}
+        <span style="margin-left:auto;display:flex;gap:5px">
+          <button class="pa-mini" onclick="PA.bolumModul(${i},'${g.mod}',true)" title="Bu kartın tüm bölümlerini aç">tümü</button>
+          <button class="pa-mini pa-mini-k" onclick="PA.bolumModul(${i},'${g.mod}',false)" title="Bu kartın tüm bölümlerini kapat">hiçbiri</button>
+        </span></div>
+      <div class="pa-bl">${g.list.map(([k,l])=>`<label class="pa-chip ${bolumKapali(u,g.mod,k)?'off':''}"><input type="checkbox" ${bolumKapali(u,g.mod,k)?'':'checked'} onchange="PA.bolumSet(${i},'${g.mod}.${k}',this.checked)">${esc(l)}</label>`).join('')}</div>
+    </div>`).join('')}
+    </div></div>`;
+}
 window.PA={
+  bolumAc(i){PDATA._acik=PDATA._acik||{};PDATA._acik[i]=!PDATA._acik[i];openPanel();},
+  bolumSet(i,key,acikMi){const u=PDATA.users[i];u.bolum=u.bolum||{};if(acikMi)delete u.bolum[key];else u.bolum[key]=false;openPanel();},
+  bolumModul(i,mod,acikMi){const u=PDATA.users[i];u.bolum=u.bolum||{};const g=BOLUMLER.find(x=>x.mod===mod);
+    g.list.forEach(([k])=>{if(acikMi)delete u.bolum[mod+'.'+k];else u.bolum[mod+'.'+k]=false;});openPanel();},
+  bolumTum(i,acikMi){const u=PDATA.users[i];if(acikMi){u.bolum={};}else{u.bolum={};BOLUMLER.filter(g=>permOf(u,g.mod)!=='yok').forEach(g=>g.list.forEach(([k])=>u.bolum[g.mod+'.'+k]=false));}openPanel();},
   set(i,f,v){PDATA.users[i][f]=v;},
   perm(i,k,v){(PDATA.users[i].perms=PDATA.users[i].perms||{})[k]=v;},
   del(i){if(!confirm(PDATA.users[i].username+' silinsin mi?'))return;PDATA.users.splice(i,1);openPanel();},
@@ -178,7 +211,7 @@ window.PA={
     if(!auth.currentUser){alert('Oturum doğrulanamadı — çıkıp tekrar giriş yapın.');return;}
     try{
       const t=await auth.currentUser.getIdToken();
-      const users=PDATA.users.map(u=>({id:u.id,username:u.username,name:u.name||'',perms:u.perms||{},fiyatGor:!!u.fiyatGor,portalYonetici:!!u.portalYonetici}));
+      const users=PDATA.users.map(u=>({id:u.id,username:u.username,name:u.name||'',perms:u.perms||{},fiyatGor:!!u.fiyatGor,portalYonetici:!!u.portalYonetici,bolum:u.bolum||{}}));
       const r=await fetch(YONETIM_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
         body:JSON.stringify({islem:'sync',users,sifreler:PDATA._sifreler||{},muhasebeOnay:PDATA.muhasebeOnay})});
       const j=await r.json();

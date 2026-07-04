@@ -585,6 +585,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   if(!au){location.href='/?giris=1&next='+encodeURIComponent('/muhasebe/');return;}
   const u=d.users.find(x=>x.username.toLowerCase()===String(au.email||'').split('@')[0]);
   if(!u){PortalAuth.clearSession();location.href='/?giris=1&next='+encodeURIComponent('/muhasebe/');return;}
+  window.__PA_USER=u;   // bölüm kısıtları (finans sekmeleri)
   if(((u.perms||{}).muhasebe)!=='yonetici'){
     document.documentElement.innerHTML='<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f1f5f9;margin:0"><div style="text-align:center;max-width:340px;padding:30px;background:#fff;border:1px solid #e2e8f0;border-radius:14px"><div style="font-size:17px;font-weight:800;color:#0c2340;margin-bottom:8px">Erişim Yetkiniz Yok</div><div style="font-size:13px;color:#64748b;line-height:1.6">Muhasebe &amp; Finans modülüne yalnızca yönetici yetkisi olan kullanıcılar girebilir.</div><a href="/" style="display:inline-block;margin-top:16px;background:#0c2340;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 22px;border-radius:9px">Portala Dön</a></div></body>';
     return;

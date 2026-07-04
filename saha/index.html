@@ -659,5 +659,27 @@ function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isKe
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
+<script>
+// Bölüm izinleri: kapalı sekmeler gizlenir; kapalı sekmeye geçiş engellenir.
+(function(){
+  var SEKME=['harita','musteri','firsat','liste','sozlesme'];
+  var _setTabEski=setTab;
+  setTab=function(t){if(window.__paKapali&&window.__paKapali('saha',t))return;_setTabEski(t);};
+  function uygula(){
+    if(!window.__PA_USER)return;
+    var acikIlk=null,aktifKapali=false;
+    SEKME.forEach(function(k){
+      var b=document.getElementById('tab-'+k);if(!b)return;
+      var kapali=window.__paKapali('saha',k);
+      b.style.display=kapali?'none':'';
+      if(!kapali&&!acikIlk)acikIlk=k;
+      if(kapali&&b.classList.contains('active'))aktifKapali=true;
+    });
+    if(aktifKapali&&acikIlk)_setTabEski(acikIlk);
+  }
+  window.addEventListener('pa-ready',uygula);
+  uygula();
+})();
+</script>
 </body>
 </html>

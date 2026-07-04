@@ -1122,5 +1122,26 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
+<script>
+// Bölüm izinleri (İK içi): kapalı bölümler menüden gizlenir; erişim engellenir.
+(function(){
+  var _goEski=go,_buildEski=buildNav;
+  go=function(k){if(window.__paKapali&&window.__paKapali('ik',k))return;_goEski(k);};
+  buildNav=function(){
+    _buildEski();
+    if(!window.__PA_USER)return;
+    var acikIlk=null;
+    document.querySelectorAll('#sbnav .sb-item').forEach(function(b){
+      var m=/go\('(\w+)'\)/.exec(b.getAttribute('onclick')||'');if(!m)return;
+      var kapali=window.__paKapali('ik',m[1]);
+      b.style.display=kapali?'none':'';
+      if(!kapali&&!acikIlk)acikIlk=m[1];
+    });
+    if(window.__paKapali('ik',sec)&&acikIlk)_goEski(acikIlk);
+  };
+  window.addEventListener('pa-ready',function(){try{buildNav();}catch(e){}});
+  try{buildNav();}catch(e){}
+})();
+</script>
 </body>
 </html>

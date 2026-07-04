@@ -230,6 +230,7 @@ exports.yonetim = onRequest({region: "us-central1", cors: true}, async (req, res
     const temizUsers = (b.users || []).map((u) => ({
       id: u.id, username: u.username, name: u.name || "",
       perms: u.perms || {}, fiyatGor: !!u.fiyatGor, portalYonetici: !!u.portalYonetici,
+      bolum: (u.bolum && typeof u.bolum === "object") ? u.bolum : {},   // bölüm kısıtları (yalnız kapatılanlar)
     }));
     P.users = temizUsers;
     if (b.muhasebeOnay) P.muhasebeOnay = b.muhasebeOnay;

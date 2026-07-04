@@ -105,15 +105,18 @@ async function autoEngine(){
 
 // ---------- sekmeler ----------
 const MTABS=[['hafta','Haftalık Akış'],['kasa','Kasa Defteri'],['alacak','Alacaklar'],['borc','Borçlar'],['pos','POS'],['dbs','DBS'],['ayar','Ayarlar']];
+function muhBolumKapali(k){return !!(window.__paKapali&&window.__paKapali('muhasebe',k));}
+function acikTablar(){return MTABS.filter(([k])=>!muhBolumKapali(k));}
 function tabsHTML(){
   const rozet={};
   const gecik=(DB.odemeler||[]).filter(o=>!o.odendi&&o.tarih<bugun()).length;if(gecik)rozet.borc=gecik;
-  return '<div class="mtabs no-print">'+MTABS.map(([k,l])=>'<button class="mtab'+(MTAB===k?' on':'')+'" onclick="MTAB=\''+k+'\';render()">'+l+(rozet[k]?' <span class="mtab-b">'+rozet[k]+'</span>':'')+'</button>').join('')+'</div>';
+  return '<div class="mtabs no-print">'+acikTablar().map(([k,l])=>'<button class="mtab'+(MTAB===k?' on':'')+'" onclick="MTAB=\''+k+'\';render()">'+l+(rozet[k]?' <span class="mtab-b">'+rozet[k]+'</span>':'')+'</button>').join('')+'</div>';
 }
 const _renderHafta=render;
 render=function(){
   const c=document.getElementById('content');if(!c)return;
   if(DB&&!DB.hareketler)finansMigrate();   // loadDB sonrası ilk render'da alanları garanti et
+  if(muhBolumKapali(MTAB)){const a=acikTablar();MTAB=a.length?a[0][0]:MTAB;}   // kapalı sekmeye düşme
   if(MTAB==='hafta'){_renderHafta();}
   else{
     c.innerHTML=({kasa:renderKasa,alacak:renderAlacak,borc:renderBorc,pos:renderPos,dbs:renderDbs,ayar:renderAyar})[MTAB]();
@@ -436,3 +439,4 @@ const _showAppEski=showApp;
 showApp=function(){_showAppEski();finansInit();};
 // Sayfa bu script yüklenmeden önce açıldıysa (ör. kayıtlı oturum) motoru yine başlat
 if(document.getElementById('app')&&!document.getElementById('app').classList.contains('hidden'))finansInit();
+window.addEventListener('pa-ready',function(){try{render();}catch(e){}});

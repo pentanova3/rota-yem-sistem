@@ -59,8 +59,15 @@ async function require(modKey){
   setSession(u.username); // UI ipucu
   const lvl=(u.perms&&u.perms[modKey])||'yok';
   if(lvl==='yok'){yetkisizEkran();return new Promise(()=>{});}
+  window.__PA_USER=u;                                   // bölüm kısıtları için sayfaya profil
+  try{window.dispatchEvent(new CustomEvent('pa-ready'));}catch(e){}
   return {mode:'portal',user:u,level:lvl};
 }
+// Bölüm kapalı mı? (kapatılanlar listesi; profil yoksa kısıt yok)
+window.__paKapali=function(mod,bolum){
+  const u=window.__PA_USER;
+  return !!(u&&u.bolum&&u.bolum[mod+'.'+bolum]===false);
+};
 
 window.PortalAuth={getData,session,setSession,clearSession,user,level,require,token,authReady,
   authUser:()=>auth.currentUser};

@@ -93,5 +93,20 @@ body{font-family:var(--font);background:#ffffff;color:var(--slate-800);line-heig
 </div>
 <footer class="pn-foot"><span class="pn-mark" role="img" aria-label="Pentanova"></span><span class="pn-sub">Kurumsal Çözümler</span></footer>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
+<script>
+// Bölüm izinleri: İK / İSG / KVKK kartları kullanıcı iznine göre gizlenir.
+(function(){
+  function uygula(){
+    if(!window.__PA_USER)return;
+    document.querySelectorAll('.card').forEach(function(c){
+      var kick=((c.querySelector('.kicker')||{}).textContent||'').trim();
+      var key=kick==='İK'?'hr':(kick==='İSG'?'isg':(kick==='KVKK'?'kvkk':null));
+      if(key&&window.__paKapali('ik',key))c.style.display='none';
+    });
+  }
+  window.addEventListener('pa-ready',uygula);
+  uygula();
+})();
+</script>
 </body>
 </html>

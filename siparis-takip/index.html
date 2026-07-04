@@ -609,12 +609,14 @@ const NAV=[
 ];
 function renderNav(){
   const pending=DB.orders.filter(o=>o.status==='beklemede').length;
-  document.getElementById('sbNav').innerHTML=NAV.filter(n=>(n.v!=='ayarlar'&&n.v!=='hammadde')||isAdmin()).map(n=>{
+  document.getElementById('sbNav').innerHTML=NAV.filter(n=>((n.v!=='ayarlar'&&n.v!=='hammadde')||isAdmin())&&!bolumKapaliSip(n.v)).map(n=>{
     const badge=(n.v==='siparisler'&&pending)?`<span class="nav-badge">${pending}</span>`:'';
     return `<div class="nav-item ${n.v===VIEW?'active':''}" onclick="go('${n.v}')"><span class="nav-ic">${svgIcon(n.ic)}</span><span>${n.l}</span>${badge}</div>`;
   }).join('');
 }
-function go(v){VIEW=v;document.getElementById('sidebar').classList.remove('open');render()}
+function bolumKapaliSip(v){return !!(USER&&USER.bolum&&USER.bolum['siparis.'+v]===false);}
+function ilkAcikView(){const n=NAV.find(x=>!bolumKapaliSip(x.v));return n?n.v:'panel';}
+function go(v){if(bolumKapaliSip(v)){toast('Bu bölüme erişim yetkiniz yok');return;}VIEW=v;document.getElementById('sidebar').classList.remove('open');render()}
 // Deep-link: /siparis-takip/#komisyon gibi bir hash ile açılınca ilgili sekmeye gider (girişten sonra da çalışır).
 // #siparis=573 → sipariş listesini açıp o siparişin detayını gösterir.
 function applyDeepLink(){
@@ -632,6 +634,7 @@ function initApp(){
   renderNav();render();
 }
 function render(){
+  if(bolumKapaliSip(VIEW))VIEW=ilkAcikView();   // kapalı bölüme düşülmüşse ilk açık bölüme geç
   renderNav();
   document.getElementById('viewTitle').textContent=NAV.find(n=>n.v===VIEW)?.l||'Panel';
   const c=document.getElementById('content');const tb=document.getElementById('tbActions');tb.innerHTML='';
@@ -2383,7 +2386,7 @@ async function tryPortalLogin(){
       document.getElementById('loginWrap').innerHTML='<div class="login-card" style="text-align:center"><h1 style="font-size:17px;color:#0C2340;margin-bottom:8px">Erişim Yetkiniz Yok</h1><p style="font-size:13px;color:#64748B;line-height:1.6">Sipariş Takip modülüne erişim yetkiniz bulunmuyor.<br>Yetki için yöneticinizle görüşün.</p><a href="/" style="display:inline-block;margin-top:14px;background:#0C2340;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 22px;border-radius:9px">Portala Dön</a></div>';
       return;
     }
-    USER={username:pu.username,name:pu.name||pu.username,role:lvl,fiyatGor:pu.fiyatGor===true};
+    USER={username:pu.username,name:pu.name||pu.username,role:lvl,fiyatGor:pu.fiyatGor===true,bolum:pu.bolum||{}};
     document.getElementById('loginWrap').classList.add('hidden');
     document.getElementById('app').classList.add('on');
     initApp();
