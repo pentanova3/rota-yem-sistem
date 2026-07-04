@@ -1,7 +1,7 @@
 // Rota SMI Tarım — Service Worker (kurulabilirlik için, ağ öncelikli)
 // Uygulama verisi Firebase'den canlı geldiği için içerik önbelleğe alınmaz;
 // böylece her zaman güncel sürüm gösterilir.
-const VERSION = 'rota-sw-v1';
+const VERSION = 'rota-sw-v2';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

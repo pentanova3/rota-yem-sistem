@@ -184,4 +184,39 @@ async function init(){
   const p=new URLSearchParams(location.search);
   if(p.get('giris')==='1'&&!PUSER)openLogin(p.get('next')||'');
 }
-init();
+
+// ---------- PWA: Uygulamayı Yükle (Android/masaüstü tek tık · iOS yönerge) ----------
+let _bip=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_bip=e;pwaBtn();});
+function isIOS(){return /iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.MSStream;}
+function isStandalone(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
+function pwaBtn(){
+  if(isStandalone()||document.getElementById('pa-pwa'))return;
+  if(!_bip&&!isIOS())return;
+  const bar=document.getElementById('pa-bar');if(!bar)return;
+  const b=document.createElement('button');b.id='pa-pwa';b.className='pa-btn pa-pwa';
+  b.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Uygulamayı Yükle';
+  b.onclick=async()=>{
+    if(_bip){_bip.prompt();const r=await _bip.userChoice;if(r&&r.outcome==='accepted')b.remove();_bip=null;}
+    else iosYonerge();
+  };
+  bar.insertAdjacentElement('beforebegin',b);
+}
+function iosYonerge(){
+  closeModals();
+  document.body.insertAdjacentHTML('beforeend',`<div class="pa-bg" id="pa-modal">
+    <div class="pa-box">
+      <div class="pa-t">Ana Ekrana Ekle</div>
+      <div class="pa-s">Rota SMI uygulamasını iPhone / iPad ana ekranınıza eklemek için:</div>
+      <ol style="font-size:13px;color:#41546e;line-height:2;margin:0 0 6px 18px">
+        <li>Safari'de alttaki <b>Paylaş</b> simgesine dokunun <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#174b82" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></li>
+        <li><b>"Ana Ekrana Ekle"</b> seçeneğine dokunun</li>
+        <li>Sağ üstten <b>Ekle</b>'ye dokunun</li>
+      </ol>
+      <div class="pa-s" style="margin:8px 0 0">Uygulama, parlement mavisi Rota SMI simgesiyle ana ekranınıza yerleşir.</div>
+      <button class="pa-x" onclick="document.querySelector('.pa-bg').remove()">✕</button>
+    </div></div>`);
+}
+
+
+init().then(()=>pwaBtn());
