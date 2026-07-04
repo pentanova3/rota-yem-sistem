@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "rota-yem"
-  }
+  },
+  "targets": {
+    "rota-yem": {
+      "hosting": {
+        "portal": [
+          "rota-yem"
+        ],
+        "musteri": [
+          "rotasmi-bilgi"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

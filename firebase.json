@@ -1,19 +1,54 @@
 {
-  "hosting": {
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "functions/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "portal",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "functions/**",
+        "musteri-site/**",
+        "onay/**",
+        "bilgi/**"
+      ],
+      "redirects": [
+        {
+          "source": "/onay",
+          "destination": "https://rotasmi-bilgi.web.app/onay/",
+          "type": 301
+        },
+        {
+          "source": "/onay/**",
+          "destination": "https://rotasmi-bilgi.web.app/onay/",
+          "type": 301
+        },
+        {
+          "source": "/bilgi",
+          "destination": "https://rotasmi-bilgi.web.app/bilgi/",
+          "type": 301
+        },
+        {
+          "source": "/bilgi/**",
+          "destination": "https://rotasmi-bilgi.web.app/bilgi/",
+          "type": 301
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "musteri",
+      "public": "musteri-site",
+      "ignore": [
+        "**/.*"
+      ]
+    }
+  ],
   "functions": {
     "source": "functions",
     "predeploy": [

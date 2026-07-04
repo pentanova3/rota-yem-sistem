@@ -1113,7 +1113,7 @@ function saveOrder(){
 function delOrder(id){if(!confirm('Bu sipariş silinsin mi?'))return;DB.orders=DB.orders.filter(o=>o.id!==id);logAct('Sipariş silindi');saveDB();closeModal();toast('Silindi');render()}
 function closeModal(){document.getElementById('modalRoot').innerHTML='';editOrder=null;editCust=null}
 // ============ WHATSAPP ============
-function bilgiLink(o){return 'https://rota-yem.web.app/bilgi/?t='+encodeURIComponent(o.onayToken||'');}
+function bilgiLink(o){return 'https://rotasmi-bilgi.web.app/bilgi/?t='+encodeURIComponent(o.onayToken||'');}
 function buildShipMsg(o){
   const lines=(o.lines||[]).map(l=>`• ${l.code}: ${fmtN(l.qty)} çuval`).join('\n');
   const htar=o.hareketTarihi||o.sevkTarih||todayISO();
@@ -1229,7 +1229,7 @@ function waOnayModal(){
   waOnay(o.id);
 }
 function ensureOnayToken(o){if(!o.onayToken){o.onayToken=uid('ot')+Math.random().toString(36).slice(2,7);return true;}return false;}
-function orderOnayLink(o){return 'https://rota-yem.web.app/onay/?t='+encodeURIComponent(o.onayToken);}
+function orderOnayLink(o){return 'https://rotasmi-bilgi.web.app/onay/?t='+encodeURIComponent(o.onayToken);}
 function waOnay(id){
   var o=DB.orders.find(function(x){return x.id===id});if(!o)return;
   if(!canEdit()){toast('Yetkiniz yok');return}

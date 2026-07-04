@@ -269,3 +269,71 @@ exports.yonetim = onRequest({region: "us-central1", cors: true}, async (req, res
     res.status(401).json({hata: "kimlik doğrulanamadı"});
   }
 });
+
+// ============================================================
+// MÜŞTERİ UCU — onay/bilgi sayfaları için güvenli erişim
+// GET  ?t=TOKEN  → yalnızca o siparişin izinli alanları (fiyat yok)
+// POST {t,islem:'onaylandi'|'itiraz',sebep,notOkundu} → onay kaydı + Telegram
+// Müşteri tarayıcısına veritabanı İNMEZ; bot anahtarı sunucuda kalır.
+// ============================================================
+const MUSTERI_ALANLAR = ["no", "date", "customer", "teslimTarihi", "odeme", "fiyatKademe", "status", "onayNot",
+  "plaka", "sofor", "soforTel", "hareketTarihi", "hareketSaati", "kargo", "palet", "strec", "nakliyeMusteri",
+  "not", "sevkTarih", "teslimEdildiTarih", "musteriOnay", "musteriOnayTs"];
+function trTarihUzun(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  if (!m) return "—";
+  const AY = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+  const GN = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  const dt = new Date(+m[1], +m[2] - 1, +m[3]);
+  return (+m[3]) + " " + AY[+m[2] - 1] + " " + m[1] + " " + GN[dt.getDay()];
+}
+exports.musteri = onRequest({region: "us-central1", cors: true}, async (req, res) => {
+  try {
+    const t = String((req.method === "GET" ? req.query.t : (req.body || {}).t) || "").trim();
+    if (!t || t.length < 8) { res.status(400).json({hata: "gecersiz baglanti"}); return; }
+    const DB = await loadDB();
+    const o = DB && (DB.orders || []).find((x) => x.onayToken === t);
+    if (!o) { res.status(404).json({hata: "bulunamadi"}); return; }
+
+    if (req.method === "GET") {
+      const out = {};
+      MUSTERI_ALANLAR.forEach((k) => { if (o[k] !== undefined) out[k] = o[k]; });
+      out.lines = (o.lines || []).map((l) => ({code: l.code, qty: l.qty, price: l.price}));  // yalnız KENDİ siparişinin fiyatı
+      let onayKaydi = null;
+      try {
+        const s = await db.doc("apps/onaylar").get();
+        const r = s.exists ? (s.data()[o.id] || null) : null;
+        if (r) onayKaydi = {onay: r.onay, ts: r.ts};
+      } catch (e) { /* yok */ }
+      res.json({siparis: out, onay: onayKaydi});
+      return;
+    }
+
+    if (req.method === "POST") {
+      const b = req.body || {};
+      const kind = b.islem === "itiraz" ? "itiraz" : "onaylandi";
+      const payload = {onay: kind, ts: new Date().toISOString(), ad: o.customer || "", no: o.no || ""};
+      if (kind === "itiraz") payload.sebep = String(b.sebep || "").slice(0, 600);
+      if (kind === "onaylandi" && b.notOkundu) payload.notOkundu = true;
+      await db.doc("apps/onaylar").set({[o.id]: payload}, {merge: true});
+
+      const token = DB.meta && DB.meta.tgToken, chat = DB.meta && DB.meta.tgChat;
+      if (token && chat) {
+        const cust = (DB.customers || []).find((c) => c.id === o.customerId) || {};
+        const ortak = "Sipariş: #" + (o.no || "") + "\nMüşteri: " + (o.customer || "—") +
+          "\nTelefon: " + (cust.phone || "—") + "\nSipariş alan: " + (o.alan || "—") +
+          "\nTeslim: " + (o.teslimTarihi ? trTarihUzun(o.teslimTarihi) : "—");
+        const text = kind === "itiraz"
+          ? "MÜŞTERİ HATA BİLDİRDİ\n\n" + ortak + "\n\nMüşteri Notu:\n" + (payload.sebep || "(belirtilmedi)") + "\n\nLütfen müşteri ile iletişime geçip bilgileri düzeltin."
+          : "MÜŞTERİ ONAYLADI\n\n" + ortak + (payload.notOkundu ? "\n\nMüşteri gönderim notunu okudu." : "") + "\n\n(Üretim için ayrıca fabrika onayı gerekir.)";
+        await tg(token, "sendMessage", {chat_id: chat, text});
+      }
+      res.json({ok: true});
+      return;
+    }
+    res.status(405).json({hata: "yontem"});
+  } catch (e) {
+    console.error("musteri", e);
+    res.status(500).json({hata: "sunucu"});
+  }
+});
