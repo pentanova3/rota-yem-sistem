@@ -200,3 +200,72 @@ exports.gunlukYedek = onSchedule({schedule: "0 3 * * *", timeZone: "Europe/Istan
   for (const d of hepsi.docs) { if (d.id.slice(0, 10) < sinir) await d.ref.delete(); }
   console.log("yedek tamam:", tarih);
 });
+
+// ============================================================
+// YÖNETİM UCU — kullanıcı & yetki senkronu (yalnız Portal Yöneticisi)
+// Çark panelindeki Kaydet buraya gelir: apps/portal şifresiz yazılır,
+// Firebase Auth hesapları ve yetki rozetleri (custom claims) eşitlenir.
+// ============================================================
+const EPOSTA_SON = "@rota-yem.firebaseapp.com";
+const sifreDolgu = (p) => (p && p.length >= 6 ? p : String(p) + ".rota");
+async function portalOku() {
+  const s = await db.doc("apps/portal").get();
+  const d = s.exists ? s.data().data : null;
+  return d && d.rota_portal_v1 ? JSON.parse(d.rota_portal_v1) : null;
+}
+exports.yonetim = onRequest({region: "us-central1", cors: true}, async (req, res) => {
+  try {
+    const idToken = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const dec = await admin.auth().verifyIdToken(idToken);
+    const P = await portalOku();
+    if (!P) { res.status(500).json({hata: "portal verisi yok"}); return; }
+    const me = (P.users || []).find((u) => (u.username.toLowerCase() + EPOSTA_SON) === (dec.email || ""));
+    if (!(dec.portalYonetici === true || (me && me.portalYonetici === true))) {
+      res.status(403).json({hata: "yetkisiz"}); return;
+    }
+    const b = req.body || {};
+    if (b.islem !== "sync") { res.status(400).json({hata: "bilinmeyen işlem"}); return; }
+
+    // 1) apps/portal — ŞİFRESİZ kullanıcı listesi yazılır
+    const temizUsers = (b.users || []).map((u) => ({
+      id: u.id, username: u.username, name: u.name || "",
+      perms: u.perms || {}, fiyatGor: !!u.fiyatGor, portalYonetici: !!u.portalYonetici,
+    }));
+    P.users = temizUsers;
+    if (b.muhasebeOnay) P.muhasebeOnay = b.muhasebeOnay;
+    await db.doc("apps/portal").set({data: {rota_portal_v1: JSON.stringify(P)}, updatedAt: new Date().toISOString()}, {merge: true});
+
+    // 2) Auth hesapları + yetki rozetleri
+    const notlar = [];
+    for (const u of temizUsers) {
+      const em = u.username.toLowerCase() + EPOSTA_SON;
+      let rec = null;
+      try { rec = await admin.auth().getUserByEmail(em); } catch (e) { /* yok */ }
+      const yeniSifre = b.sifreler && b.sifreler[u.username];
+      if (!rec) {
+        if (!yeniSifre) { notlar.push(u.username + ": yeni kullanıcı — şifre girilmediği için hesap açılamadı"); continue; }
+        rec = await admin.auth().createUser({email: em, password: sifreDolgu(yeniSifre)});
+      } else if (yeniSifre) {
+        await admin.auth().updateUser(rec.uid, {password: sifreDolgu(yeniSifre), disabled: false});
+      } else if (rec.disabled) {
+        await admin.auth().updateUser(rec.uid, {disabled: false});
+      }
+      const claims = {username: u.username, portalYonetici: !!u.portalYonetici, fiyatGor: !!u.fiyatGor};
+      ["siparis", "muhasebe", "ik", "saha", "bakim", "toplanti"].forEach((k) => { claims[k] = (u.perms && u.perms[k]) || "yok"; });
+      await admin.auth().setCustomUserClaims(rec.uid, claims);
+    }
+    // 3) Listeden çıkarılanları devre dışı bırak
+    const gecerli = new Set(temizUsers.map((u) => u.username.toLowerCase() + EPOSTA_SON));
+    const hepsi = await admin.auth().listUsers(1000);
+    for (const r of hepsi.users) {
+      if (r.email && r.email.endsWith(EPOSTA_SON) && !gecerli.has(r.email) && !r.disabled) {
+        await admin.auth().updateUser(r.uid, {disabled: true});
+        notlar.push(r.email.replace(EPOSTA_SON, "") + ": listeden çıkarıldığı için girişi kapatıldı");
+      }
+    }
+    res.json({ok: true, notlar});
+  } catch (e) {
+    console.error("yonetim", e);
+    res.status(401).json({hata: "kimlik doğrulanamadı"});
+  }
+});

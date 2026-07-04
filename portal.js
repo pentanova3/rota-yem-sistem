@@ -6,9 +6,13 @@
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
-const app=initializeApp(firebaseConfig), db=getFirestore(app);
+const app=initializeApp(firebaseConfig), db=getFirestore(app), auth=getAuth(app);
+const EPOSTA_SON='@rota-yem.firebaseapp.com';
+const sifreDolgu=p=>(p&&p.length>=6)?p:String(p)+'.rota';   // Firebase 6 karakter ister; kullanıcı kısa şifresini aynen yazar
+const YONETIM_URL='https://yonetim-gdzmodep5q-uc.a.run.app';
 const SES='rota_portal_session';
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -44,7 +48,7 @@ function applyAuthUI(){
       ${PUSER.portalYonetici?`<button class="pa-ic" id="pa-gear" title="Erişim Yönetimi"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>`:''}
       <button class="pa-btn pa-out" id="pa-logout">Çıkış</button>`;
     const g=document.getElementById('pa-gear');if(g)g.onclick=openPanel;
-    document.getElementById('pa-logout').onclick=()=>{localStorage.removeItem(SES);location.reload();};
+    document.getElementById('pa-logout').onclick=async()=>{try{await signOut(auth);}catch(e){}localStorage.removeItem(SES);location.reload();};
   }else{
     bar.innerHTML=`<button class="pa-btn" id="pa-login">Giriş Yap</button>`;
     document.getElementById('pa-login').onclick=()=>openLogin('');
@@ -98,9 +102,14 @@ function openLogin(nextHref){
 }
 async function doLogin(nextHref){
   const u=document.getElementById('pa-u').value.trim(), p=document.getElementById('pa-p').value;
+  const err=document.getElementById('pa-err');
+  if(!u||!p){err.textContent='Kullanıcı adı ve şifre giriniz.';return;}
+  err.textContent='Doğrulanıyor…';
+  try{await signInWithEmailAndPassword(auth,u.toLowerCase()+EPOSTA_SON,sifreDolgu(p));}
+  catch(e){err.textContent=(e&&e.code==='auth/too-many-requests')?'Çok fazla deneme — bir süre bekleyin.':'Kullanıcı adı veya şifre hatalı.';return;}
   const d=await loadPortal(true);
-  const usr=d&&d.users&&d.users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.password===p);
-  if(!usr){document.getElementById('pa-err').textContent='Kullanıcı adı veya şifre hatalı.';return;}
+  const usr=d&&d.users&&d.users.find(x=>x.username.toLowerCase()===u.toLowerCase());
+  if(!usr){err.textContent='Kullanıcı profili bulunamadı.';return;}
   localStorage.setItem(SES,JSON.stringify({u:usr.username,ts:Date.now()}));
   PUSER=usr;closeModals();applyAuthUI();
   if(nextHref){
@@ -118,7 +127,7 @@ function openPanel(){
   const userRows=PDATA.users.map((u,i)=>`<tr>
     <td><input value="${esc(u.name||'')}" onchange="PA.set(${i},'name',this.value)" style="width:130px"></td>
     <td><input value="${esc(u.username)}" onchange="PA.set(${i},'username',this.value)" style="width:90px"></td>
-    <td><input value="${esc(u.password)}" onchange="PA.set(${i},'password',this.value)" style="width:80px"></td>
+    <td><input type="password" placeholder="değiştir…" onchange="PA.sifre('${'$'}{esc(u.username)}',this.value)" style="width:90px" title="Şifreler güvenli sistemde tutulur; sadece değiştirmek için yazın"></td>
     ${MODS.map(m=>`<td><select onchange="PA.perm(${i},'${m.key}',this.value)">${m.seviyeler.map(([v,l])=>`<option value="${v}" ${permOf(u,m.key)===v?'selected':''}>${l}</option>`).join('')}</select></td>`).join('')}
     <td style="text-align:center"><input type="checkbox" ${u.fiyatGor?'checked':''} onchange="PA.set(${i},'fiyatGor',this.checked)" title="Sipariş modülünde fiyatları görebilir"></td>
     <td style="text-align:center"><input type="checkbox" ${u.portalYonetici?'checked':''} onchange="PA.set(${i},'portalYonetici',this.checked)" title="Bu paneli açabilir, kullanıcı yönetir"></td>
@@ -160,13 +169,24 @@ window.PA={
   addAlici(){const v=document.getElementById('pa-aday').value;if(!v)return;const a=(PDATA.adaylar||[]).find(x=>String(x.chatId)===String(v));const M=PDATA.muhasebeOnay;M.alicilar=M.alicilar||[];if(M.alicilar.length>=2){alert('En fazla 2 alıcı.');return;}if(!M.alicilar.some(x=>String(x.chatId)===String(v)))M.alicilar.push({chatId:v,ad:a?a.ad:v});openPanel();},
   clearAlici(){PDATA.muhasebeOnay.alicilar=[];openPanel();},
   gerekli(v){PDATA.muhasebeOnay.gerekli=+v||1;},
+  sifre(username,val){(PDATA._sifreler=PDATA._sifreler||{})[username]=val;},
   async save(){
-    for(const u of PDATA.users){if(!u.username||!u.password){alert('Kullanıcı adı ve şifre boş olamaz.');return;}}
+    for(const u of PDATA.users){if(!u.username){alert('Kullanıcı adı boş olamaz.');return;}}
     const us=PDATA.users.map(u=>u.username.toLowerCase());
     if(new Set(us).size!==us.length){alert('Aynı kullanıcı adı iki kez kullanılamaz.');return;}
     if(!PDATA.users.some(u=>u.portalYonetici)){alert('En az bir Portal Yöneticisi kalmalı.');return;}
-    try{await savePortal();alert('Kaydedildi.');closeModals();applyAuthUI();}
-    catch(e){alert('Kaydedilemedi: '+e.message);}
+    if(!auth.currentUser){alert('Oturum doğrulanamadı — çıkıp tekrar giriş yapın.');return;}
+    try{
+      const t=await auth.currentUser.getIdToken();
+      const users=PDATA.users.map(u=>({id:u.id,username:u.username,name:u.name||'',perms:u.perms||{},fiyatGor:!!u.fiyatGor,portalYonetici:!!u.portalYonetici}));
+      const r=await fetch(YONETIM_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+        body:JSON.stringify({islem:'sync',users,sifreler:PDATA._sifreler||{},muhasebeOnay:PDATA.muhasebeOnay})});
+      const j=await r.json();
+      if(!r.ok||!j.ok){alert('Kaydedilemedi: '+(j.hata||r.status));return;}
+      delete PDATA._sifreler;
+      alert('Kaydedildi.'+(j.notlar&&j.notlar.length?'\n\nNotlar:\n- '+j.notlar.join('\n- '):''));
+      await loadPortal(true);closeModals();applyAuthUI();
+    }catch(e){alert('Kaydedilemedi: '+e.message);}
   },
 };
 
