@@ -133,8 +133,8 @@ table.t tbody tr:hover .rowact{opacity:1}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.50.0/build/docxtemplater.js"></script>
-<script src="/portal-auth.js"></script>
-<script>if(window.PortalAuth)PortalAuth.require('saha');</script>
+<script>window.__PA_MOD='saha';</script>
+<script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
 <div class="topbar">
@@ -607,9 +607,12 @@ loadSaha();render();
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getStorage, ref as sref2, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp);
+const __pAuth=getAuth();
+await new Promise(r=>{const un=onAuthStateChanged(__pAuth,u=>{un();r(u);});}); // oturum yüklenmeden Firestore'a istek atma (kurallar için)
 const _storage=getStorage(fbApp);
 window.__sahaUpload=async function(komId,key,file){
   const ext=(String(file.name).split('.').pop()||'dat').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5);

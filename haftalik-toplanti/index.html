@@ -229,8 +229,8 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 @media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{position:fixed;left:-280px;width:272px;transition:left .25s ease;z-index:200}.sidebar.open{left:0}.mob-btn{display:block}.m-content{padding:16px}.ck-row,.ck-row.wide-answer{grid-template-columns:24px 1fr}.ck-row .ck-sel,.ck-row .ck-note,.ck-row .ck-input{grid-column:2}.p-hdr,.p-row{grid-template-columns:24px 1fr 1fr 80px}.p-reason-row{padding-left:34px}}
 @media print{.sidebar,.mob-btn,.s-footer,.m-header{display:none!important}.app{grid-template-columns:1fr!important}.sec{display:block!important;page-break-inside:avoid;margin-bottom:20px}.m-content{padding:12px}}
 </style>
-<script src="/portal-auth.js"></script>
-<script>if(window.PortalAuth)PortalAuth.require('toplanti');</script>
+<script>window.__PA_MOD='toplanti';</script>
+<script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1301,12 +1301,15 @@ async function downloadReport(){
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const DOC_ID="toplanti";
 function isSyncKey(k){return !!k&&(k.indexOf('rota_meeting_')===0||k==='rota_arc'||k.indexOf('rota_plasiyer_')===0||k.indexOf('rota_monthly_')===0||k.indexOf('rota_orders_')===0);}
 // Arşiv listesini (rota_arc) tarihe göre birleştirir; aynı tarih için en son kaydedileni tutar
 function mergeArc(a,b){const byDate={};[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(e=>{if(!e||!e.date)return;const ex=byDate[e.date];if(!ex||(e.savedAt||'')>(ex.savedAt||''))byDate[e.date]=e;});return Object.values(byDate).sort((x,y)=>y.date.localeCompare(x.date));}
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps",DOC_ID);
+const __pAuth=getAuth();
+await new Promise(r=>{const un=onAuthStateChanged(__pAuth,u=>{un();r(u);});}); // oturum yüklenmeden Firestore'a istek atma (kurallar için)
 function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isSyncKey(k))o[k]=localStorage.getItem(k);}return o;}
 let suppress=false,lastUpdated=0,timer=null;
 const _set=localStorage.setItem.bind(localStorage),_rem=localStorage.removeItem.bind(localStorage);

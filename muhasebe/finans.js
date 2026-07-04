@@ -59,7 +59,8 @@ async function sipYukle(force){
   if(_SIP&&!force)return _SIP;
   try{
     const KEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
-    const r=await fetch('https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/apps/siparis?key='+KEY);
+    const tk=(window.PortalAuth&&PortalAuth.token)?await PortalAuth.token():null;
+    const r=await fetch('https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/apps/siparis?key='+KEY,{headers:tk?{'Authorization':'Bearer '+tk}:{}});
     const j=await r.json();
     const db=JSON.parse(j.fields.data.mapValue.fields.rota_so_v1.stringValue);
     _SIP={orders:db.orders||[],customers:db.customers||[]};
@@ -433,3 +434,5 @@ async function finansInit(){
 }
 const _showAppEski=showApp;
 showApp=function(){_showAppEski();finansInit();};
+// Sayfa bu script yüklenmeden önce açıldıysa (ör. kayıtlı oturum) motoru yine başlat
+if(document.getElementById('app')&&!document.getElementById('app').classList.contains('hidden'))finansInit();

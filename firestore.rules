@@ -1,0 +1,31 @@
+rules_version = '2';
+// ============================================================
+// ROTA SMI · Firestore Güvenlik Kuralları
+// - Girişsiz (anonim) HİÇBİR okuma/yazma yapılamaz.
+// - Muhasebe verileri yalnızca 'muhasebe: yonetici' rozetli hesaplara açıktır.
+// - portal / muhasebeGiris / yedekler yalnızca sunucu (Admin SDK) tarafından yazılır.
+// - Müşteri onay/bilgi akışı Cloud Function üzerinden çalışır (Admin SDK, kurallardan muaf).
+// ============================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function girisli() { return request.auth != null; }
+    function muhasebeYonetici() { return girisli() && request.auth.token.muhasebe == 'yonetici'; }
+
+    // Muhasebe & Finans — yalnız rozetli hesaplar
+    match /apps/muhasebe { allow read, write: if muhasebeYonetici(); }
+    match /apps/muhasebeLog { allow read, write: if muhasebeYonetici(); }
+
+    // Genel uygulama verileri (siparis, saha, ik, onaylar, fabrikaonay...)
+    // muhasebe* ve portal yukarıdaki/aşağıdaki özel kurallara tabidir.
+    match /apps/{belge} {
+      allow read: if girisli() && !(belge in ['muhasebe', 'muhasebeLog']);
+      allow write: if girisli() && !(belge in ['muhasebe', 'muhasebeLog', 'muhasebeGiris', 'portal', 'yedek_siparis_20260704']);
+    }
+
+    // Yedekler — yalnızca sunucu
+    match /yedekler/{belge} { allow read, write: if false; }
+
+    // Tanımsız her yol kapalı
+    match /{belge=**} { allow read, write: if false; }
+  }
+}

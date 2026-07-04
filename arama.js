@@ -6,9 +6,11 @@
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
-const app=initializeApp(firebaseConfig), db=getFirestore(app);
+const app=initializeApp(firebaseConfig), db=getFirestore(app), auth=getAuth(app);
+const authReady=new Promise(r=>{const un=onAuthStateChanged(auth,u=>{un();r(u||null);});});
 
 // ---------- yardımcılar ----------
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -546,6 +548,7 @@ function ansBos(){
 async function search(q){
   q=String(q||'').trim();
   if(!q)return '';
+  if(!(await authReady))return card('Giriş Gerekli','<p class="ka-p">Kurumsal arama yalnızca giriş yapmış kullanıcılara açıktır. Sağ üstten <b>Giriş Yap</b> ile oturum açın.</p>');
   if(yasakMi(q))return ansYasak();
   await loadData();
   // niyet zinciri: özelden genele

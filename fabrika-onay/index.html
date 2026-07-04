@@ -52,6 +52,8 @@ td .code{font-weight:700}
 @keyframes sp{to{transform:rotate(360deg)}}
 .ftr{text-align:center;font-size:12px;color:var(--slate);margin-top:30px;letter-spacing:.3px;font-weight:500}
 </style>
+<script>window.__PA_MOD='siparis';</script>
+<script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -66,8 +68,11 @@ td .code{font-weight:700}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(firebaseConfig), db=getFirestore(app);
+const __pAuth=getAuth();
+await new Promise(r=>{const un=onAuthStateChanged(__pAuth,u=>{un();r(u);});}); // oturum yüklenmeden Firestore'a istek atma (kurallar için)
 const FABREF=doc(db,'apps','fabrikaonay');
 
 const KADEME={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi Satış',uzak:'Uzak Bayi Satış'};

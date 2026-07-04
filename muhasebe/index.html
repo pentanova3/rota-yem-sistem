@@ -207,7 +207,7 @@ table.cf .pos{color:var(--green-700)}table.cf .neg{color:var(--red-700)}
 }
 
 </style>
-<script src="/portal-auth.js"></script>
+<script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
 
@@ -534,8 +534,11 @@ else document.getElementById('gpass').focus();
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps","muhasebe");
+const __pAuth=getAuth();
+await new Promise(r=>{const un=onAuthStateChanged(__pAuth,u=>{un();r(u);});}); // oturum yüklenmeden Firestore'a istek atma (kurallar için)
 function isKey(k){return !!k&&k.indexOf('rota_nakit')===0}
 function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isKey(k))o[k]=localStorage.getItem(k);}return o;}
 function localMeta(){try{const r=localStorage.getItem('rota_nakit_v1');return r?((JSON.parse(r).meta||{}).updated||''):'';}catch(e){return '';}}
@@ -574,12 +577,13 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 // Portal kuruluysa: yalnızca muhasebe=Yönetici yetkisi olanlar girebilir.
 // Onay alıcıları tanımlıysa her yeni oturumda Telegram'dan giriş onayı istenir.
 (async function(){
+  for(let i=0;i<100&&!window.PortalAuth;i++)await new Promise(r=>setTimeout(r,100));   // bekçi modülü yüklensin
   if(!window.PortalAuth)return;
   let d=null;try{d=await PortalAuth.getData();}catch(e){return;}
   if(!d||!Array.isArray(d.users)||!d.users.length)return;          // legacy: eski ortak şifre
-  const s=PortalAuth.session();
-  if(!s){location.href='/?giris=1&next='+encodeURIComponent('/muhasebe/');return;}
-  const u=d.users.find(x=>x.username===s.u);
+  const au=await PortalAuth.authReady;                              // GERÇEK oturum (Firebase Auth)
+  if(!au){location.href='/?giris=1&next='+encodeURIComponent('/muhasebe/');return;}
+  const u=d.users.find(x=>x.username.toLowerCase()===String(au.email||'').split('@')[0]);
   if(!u){PortalAuth.clearSession();location.href='/?giris=1&next='+encodeURIComponent('/muhasebe/');return;}
   if(((u.perms||{}).muhasebe)!=='yonetici'){
     document.documentElement.innerHTML='<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f1f5f9;margin:0"><div style="text-align:center;max-width:340px;padding:30px;background:#fff;border:1px solid #e2e8f0;border-radius:14px"><div style="font-size:17px;font-weight:800;color:#0c2340;margin-bottom:8px">Erişim Yetkiniz Yok</div><div style="font-size:13px;color:#64748b;line-height:1.6">Muhasebe &amp; Finans modülüne yalnızca yönetici yetkisi olan kullanıcılar girebilir.</div><a href="/" style="display:inline-block;margin-top:16px;background:#0c2340;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 22px;border-radius:9px">Portala Dön</a></div></body>';
@@ -590,8 +594,8 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   // ---- Giriş geçmişi (denetim kaydı): kim, ne zaman girdi, ne kadar kaldı (apps/muhasebeLog) ----
   const LKEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
   const LOGURL='https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/apps/muhasebeLog?key='+LKEY;
-  async function logGet(){try{const r=await fetch(LOGURL);if(!r.ok)return [];const j=await r.json();const s=j.fields&&j.fields.data&&j.fields.data.mapValue&&j.fields.data.mapValue.fields&&j.fields.data.mapValue.fields.rota_muhlog_v1;return (s&&s.stringValue)?JSON.parse(s.stringValue):[];}catch(e){return [];}}
-  async function logSet(list,ka){const body=JSON.stringify({fields:{data:{mapValue:{fields:{rota_muhlog_v1:{stringValue:JSON.stringify(list)}}}}}});try{await fetch(LOGURL,{method:'PATCH',headers:{'Content-Type':'application/json'},body:body,keepalive:!!ka});}catch(e){}}
+  async function logGet(){try{const tk=await PortalAuth.token();const r=await fetch(LOGURL,{headers:tk?{'Authorization':'Bearer '+tk}:{}});if(!r.ok)return [];const j=await r.json();const s=j.fields&&j.fields.data&&j.fields.data.mapValue&&j.fields.data.mapValue.fields&&j.fields.data.mapValue.fields.rota_muhlog_v1;return (s&&s.stringValue)?JSON.parse(s.stringValue):[];}catch(e){return [];}}
+  async function logSet(list,ka){const body=JSON.stringify({fields:{data:{mapValue:{fields:{rota_muhlog_v1:{stringValue:JSON.stringify(list)}}}}}});try{const tk=await PortalAuth.token();await fetch(LOGURL,{method:'PATCH',headers:Object.assign({'Content-Type':'application/json'},tk?{'Authorization':'Bearer '+tk}:{}),body:body,keepalive:!!ka});}catch(e){}}
   async function logStart(){
     const entry={id:'L'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),u:(u.name||u.username),un:u.username,giris:new Date().toISOString(),son:new Date().toISOString()};
     sessionStorage.setItem('rota_muh_logid',entry.id);
@@ -657,7 +661,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   const st=document.getElementById('mgDurum');
   // tgToken apps/siparis meta'dan
   const KEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
-  async function fsGet(path){const r=await fetch('https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/'+path+'?key='+KEY);return r.ok?r.json():null;}
+  async function fsGet(path){const tk=await PortalAuth.token();const r=await fetch('https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/'+path+'?key='+KEY,{headers:tk?{'Authorization':'Bearer '+tk}:{}});return r.ok?r.json():null;}
   let token='';
   try{const j=await fsGet('apps/siparis');token=JSON.parse(j.fields.data.mapValue.fields.rota_so_v1.stringValue).meta.tgToken||'';}catch(e){}
   if(!token){st.textContent='Onay sistemi yapılandırılamadı (bot erişilemedi). Yöneticiye bildirin.';st.style.color='#B91C1C';return;}

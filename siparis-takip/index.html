@@ -261,7 +261,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="/portal-auth.js"></script>
+<script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
 
@@ -2368,13 +2368,15 @@ tryAutoLogin();
 // Tek giriş (SSO): portal oturumu varsa modül girişi istenmez.
 // Portal verisi yoksa (ilk kurulum/çevrimdışı) eski giriş ekranı geçerli kalır.
 async function tryPortalLogin(){
-  if(USER||!window.PortalAuth)return;
+  if(USER)return;
+  for(var i=0;i<100&&!window.PortalAuth;i++)await new Promise(function(r){setTimeout(r,100);});  // bekçi modülü yüklensin
+  if(!window.PortalAuth)return;
   try{
     const d=await PortalAuth.getData();
     if(!d||!Array.isArray(d.users)||!d.users.length)return;      // legacy: modül girişi
-    const s=PortalAuth.session();
-    if(!s){location.href='/?giris=1&next='+encodeURIComponent('/siparis-takip/');return;}
-    const pu=d.users.find(x=>x.username===s.u);
+    const au=await PortalAuth.authReady;                          // GERÇEK oturum
+    if(!au){location.href='/?giris=1&next='+encodeURIComponent('/siparis-takip/');return;}
+    const pu=d.users.find(x=>x.username.toLowerCase()===String(au.email||'').split('@')[0]);
     if(!pu){PortalAuth.clearSession();location.href='/?giris=1&next='+encodeURIComponent('/siparis-takip/');return;}
     const lvl=(pu.perms&&pu.perms.siparis)||'yok';
     if(lvl==='yok'){
@@ -2436,10 +2438,13 @@ window.__applyFabrika=function(map){
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const DOC_ID="siparis";
 function isSyncKey(k){return !!k&&k.indexOf('rota_so_')===0}
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps",DOC_ID);
+const __pAuth=getAuth();
+await new Promise(r=>{const un=onAuthStateChanged(__pAuth,u=>{un();r(u);});}); // oturum yüklenmeden Firestore'a istek atma (kurallar için)
 function collectLocal(){const o={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(isSyncKey(k))o[k]=localStorage.getItem(k);}return o;}
 let suppress=false,lastUpdated=0,timer=null,hydrated=false;
 const _set=localStorage.setItem.bind(localStorage),_rem=localStorage.removeItem.bind(localStorage);
