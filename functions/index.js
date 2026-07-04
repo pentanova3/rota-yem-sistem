@@ -1,6 +1,7 @@
 // Rota SMI — Telegram sipariş onay webhook'u (Cloud Functions v2)
 // Telegram'daki "Siparişi Onayla" butonunu işler: teyit → kim onayladı kaydı.
 const {onRequest} = require("firebase-functions/v2/https");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
@@ -128,4 +129,54 @@ exports.telegramWebhook = onRequest({region: "us-central1"}, async (req, res) =>
     console.error("webhook error", e);
     res.status(200).send("err"); // Telegram'ın yeniden denememesi için 200
   }
+});
+
+// ============================================================
+// GÜNLÜK TESLİMAT PLANI — her sabah 07:45 (Türkiye saati)
+// O gün teslim tarihi olan siparişleri gruba yazar:
+// kime, hangi üründen, ne kadar + teslim noktası ve durum.
+// ============================================================
+exports.gunlukTeslimat = onSchedule({schedule: "45 7 * * *", timeZone: "Europe/Istanbul", region: "us-central1"}, async () => {
+  const DB = await loadDB();
+  if (!DB) { console.log("teslimat: veri yok"); return; }
+  const token = DB.meta && DB.meta.tgToken, chat = DB.meta && DB.meta.tgChat;
+  if (!token || !chat) { console.log("teslimat: telegram ayarı yok"); return; }
+
+  // Türkiye saatiyle bugün
+  const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Europe/Istanbul"}));
+  const iso = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+  const GUN = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"][now.getDay()];
+  const trTarih = String(now.getDate()).padStart(2, "0") + "." + String(now.getMonth() + 1).padStart(2, "0") + "." + now.getFullYear();
+  const fmtQ = (n) => (+n || 0).toLocaleString("tr-TR");
+
+  const KADEME = {fabrika: "Fabrika Teslim", yakin: "Yakın Bayi Satış", uzak: "Uzak Bayi Satış", bayi: "Bayi Satış"};
+  const ST = {beklemede: "Beklemede", onay: "Onaylandı", hazir: "Hazır", sevk: "Sevk Edildi"};
+  const list = (DB.orders || []).filter((o) => o.teslimTarihi === iso && o.status !== "iptal" && o.status !== "teslim");
+
+  let msg;
+  if (!list.length) {
+    msg = "GÜNLÜK TESLİMAT PLANI — " + trTarih + " " + GUN + "\n\nBugün teslim edilmesi gereken sipariş bulunmuyor.";
+  } else {
+    let topCuval = 0;
+    const bloklar = list.map((o, i) => {
+      const cust = (DB.customers || []).find((c) => c.id === o.customerId);
+      const urunler = (o.lines || []).map((l) => {
+        topCuval += (+l.qty || 0);
+        return "   • " + l.code + ": " + fmtQ(l.qty) + " çuval";
+      }).join("\n");
+      const satirlar = [
+        (i + 1) + ") " + (o.customer || "—") + "  (#" + (o.no || "") + ")",
+        urunler || "   • —",
+        "   Teslim: " + (KADEME[o.fiyatKademe] || "—") + " · Durum: " + (ST[o.status] || o.status || "—"),
+      ];
+      if (cust && cust.phone) satirlar.push("   Tel: " + cust.phone);
+      if (o.not && String(o.not).trim()) satirlar.push("   Not: " + o.not);
+      return satirlar.join("\n");
+    }).join("\n\n");
+    const ton = (topCuval * 25 / 1000).toLocaleString("tr-TR", {minimumFractionDigits: 1, maximumFractionDigits: 1});
+    msg = "GÜNLÜK TESLİMAT PLANI — " + trTarih + " " + GUN + "\n\n" + bloklar +
+      "\n\n————————————\nTOPLAM: " + list.length + " sipariş · " + fmtQ(topCuval) + " çuval (" + ton + " ton)";
+  }
+  await tg(token, "sendMessage", {chat_id: chat, text: msg});
+  console.log("teslimat: gönderildi —", list.length, "sipariş");
 });
