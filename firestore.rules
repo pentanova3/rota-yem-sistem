@@ -10,20 +10,69 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function girisli() { return request.auth != null; }
     function muhasebeYonetici() { return girisli() && request.auth.token.muhasebe == 'yonetici'; }
+    // Faz 0.3: İç personel = en az bir modül yetkisi 'yok' değil VEYA portal yöneticisi.
+    // Dış (bayi/müşteri) hesaplar tüm modül claim'i 'yok' → iç veriyi OKUYAMAZ.
+    // .get(k,'yok') ile eksik/provision edilmemiş claim güvenle 'yok' sayılır (sızıntı olmaz).
+    function icKullanici() {
+      return girisli() && (
+        request.auth.token.get('portalYonetici', false) == true ||
+        request.auth.token.get('siparis', 'yok') != 'yok' ||
+        request.auth.token.get('yem', 'yok') != 'yok' ||
+        request.auth.token.get('muhasebe', 'yok') != 'yok' ||
+        request.auth.token.get('ik', 'yok') != 'yok' ||
+        request.auth.token.get('saha', 'yok') != 'yok' ||
+        request.auth.token.get('bakim', 'yok') != 'yok' ||
+        request.auth.token.get('toplanti', 'yok') != 'yok'
+      );
+    }
+    // Faz 0.5 (hedefli): İK verisi (personel/izin/ücret — KVKK hassas) yalnız İK yetkilisi VEYA portal yöneticisi.
+    function ikYetkili() { return girisli() && (request.auth.token.get('portalYonetici', false) == true || request.auth.token.get('ik', 'yok') != 'yok'); }
+    // Sert denetim (12.07.2026): apps/saha bayi/danışman SÖZLEŞME PII'si (TC kimlik, IBAN, vergi no) içerir — İK gibi dar tut.
+    function sahaYetkili() { return girisli() && (request.auth.token.get('portalYonetici', false) == true || request.auth.token.get('saha', 'yok') != 'yok'); }
 
     // Muhasebe & Finans — yalnız rozetli hesaplar
     match /apps/muhasebe { allow read, write: if muhasebeYonetici(); }
     match /apps/muhasebeLog { allow read, write: if muhasebeYonetici(); }
 
+    // Çapraz sipariş kuyruğu (Faz 0.7): OKUMA iç personel; YAZMA yalnız siparis/yem yetkilisi (düşük-yetkili iç kullanıcı
+    // sahte üretim-onayı Telegram spam'i enjekte edemesin). Sunucu (caprazBildir) Admin SDK ile yazar.
+    match /apps/cross {
+      allow read: if icKullanici();
+      allow write: if girisli() && (request.auth.token.get('portalYonetici', false) == true || request.auth.token.get('siparis', 'yok') != 'yok' || request.auth.token.get('yem', 'yok') != 'yok');
+    }
+
+    // Faz 0.5: İK modülü OKUMASI yalnız İK yetkilisine (diğer iç personel personel/izin verisini göremez).
+    // Yazım genel kuralda zaten dışlı (yalnız 'yaz' Cloud Function/Admin SDK yazar).
+    match /apps/ik { allow read: if ikYetkili(); }
+    // Sert denetim: apps/saha OKUMASI yalnız saha yetkilisine (sözleşme PII'yi bakim/toplanti gibi ilgisiz claim'ler görmesin).
+    match /apps/saha { allow read: if sahaYetkili(); }
+
     // Genel uygulama verileri (siparis, saha, ik, onaylar, fabrikaonay...)
     // muhasebe* ve portal yukarıdaki/aşağıdaki özel kurallara tabidir.
     match /apps/{belge} {
-      allow read: if girisli() && !(belge in ['muhasebe', 'muhasebeLog']);
-      allow write: if girisli() && !(belge in ['muhasebe', 'muhasebeLog', 'muhasebeGiris', 'portal', 'yedek_siparis_20260704']);
+      allow read: if icKullanici() && !(belge in ['muhasebe', 'muhasebeLog', 'ik', 'saha']);   // muhasebe/ik/saha kendi dar kuralına tabi (PII)
+      // AÇILIŞ-BLOKERİ #1 (allowlist, 11.07.2026): Yazım artık DENY-LIST değil — VARSAYILAN KAPALI.
+      // Tüm veri-blob yazımı 'yaz' Cloud Function'ından (Admin SDK, kuralları baypas eder) geçer;
+      // muhasebe/muhasebeLog kendi muhasebeYonetici match'iyle, cross kendi icKullanici match'iyle yazılır.
+      // Böylece açılışta eklenecek YENİ belgeler (apps/bayi, apps/musteri...) otomatik olarak client
+      // yazımına KAPALI gelir — deny-list'e eklemeyi unutmak diye bir risk kalmaz. Doğrulandı: tek doğrudan
+      // client yazımı portal.js (yonetim fonksiyonuna gider) + muhasebe (kendi match'i) → bu değişiklik
+      // hiçbir canlı kayıt yolunu bozmaz.
+      allow write: if false;
     }
 
     // Yedekler — yalnızca sunucu
     match /yedekler/{belge} { allow read, write: if false; }
+
+    // Denetim izi (Faz 2.2): tamper-dirençli. Yalnız sunucu (Admin SDK / denetimVer) YAZAR; istemci ASLA yazamaz/silemez.
+    // Okuma yalnız portal yöneticisine açık (kim-ne-zaman-ne-yaptı görüntüleme).
+    match /denetim/{kayit} {
+      allow read: if girisli() && request.auth.token.get('portalYonetici', false) == true;
+      allow write: if false;
+    }
+
+    // Hız sınırı sayaçları (Faz 2.3): tümüyle sunucu-içi (Admin SDK). İstemci erişimi tümüyle kapalı.
+    match /rate/{kayit} { allow read, write: if false; }
 
     // Tanımsız her yol kapalı
     match /{belge=**} { allow read, write: if false; }

@@ -109,7 +109,7 @@ function render(o){
       +(o.not&&String(o.not).trim()?row('Not',o.not):'');
   } else if(o.status==='teslim'){
     leadT='Siparişiniz teslim edilmiştir'; leadX='Teslimat bilgileri aşağıdadır.';
-    const ttar=o.teslimEdildiTarih||o.teslimTarihi;
+    const ttar=o.teslimEdildiTarih;   // yalnız fiilen teslim edilen tarih (söz verilen tarih müşteriye gitmez)
     info=`<div class="sec-t">Teslimat</div>`
       +row('Teslim Tarihi',ttar?fmtDate(ttar):'')
       +row('Teslim Alan',o.customer);
@@ -122,8 +122,7 @@ function render(o){
     <div class="card-bd">
       <div class="lead"><div class="lt">${esc(leadT)}</div><div class="lx">${esc(leadX)}</div></div>
       ${urunler}
-      <div class="row" style="margin-top:14px"><span class="k">Teslim Tarihi</span><span class="v">${tdLong(o.teslimTarihi)}</span></div>
-      <div class="row"><span class="k">Teslim Noktası</span><span class="v">${esc(KADEME[o.fiyatKademe]||'—')}</span></div>
+      <div class="row" style="margin-top:14px"><span class="k">Teslim Noktası</span><span class="v">${esc(KADEME[o.fiyatKademe]||'—')}</span></div>
       ${info}
       <div class="note">Bilgilerde bir hata görürseniz lütfen bizimle iletişime geçin.<br>Rota SMI Tarım ve Hayvancılık</div>
     </div>

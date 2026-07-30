@@ -61,8 +61,8 @@ td{padding:9px 6px;border-bottom:1px solid #f1f5f9;font-weight:600}
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(firebaseConfig), db=getFirestore(app);
 const KADEME={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi Satış',uzak:'Uzak Bayi Satış',bayi:'Bayi Satış'};

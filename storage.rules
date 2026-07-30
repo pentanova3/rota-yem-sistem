@@ -1,10 +1,41 @@
 rules_version = '2';
-// Depolama (sözleşmeler, vergi levhaları): yalnızca giriş yapmış personel.
+// Depolama (sözleşmeler, vergi levhaları, PII): yalnızca İÇ PERSONEL — ve hassas prefiksler kendi claim'ine kilitli.
+// ÖNEMLİ (Firebase kuralları OR-mantığı): burada `if false` bir DENY DEĞİLDİR; birden çok match uyarsa EN AZ BİR allow
+// true dönünce erişim açılır. Bu yüzden hassas yolları (yedek/, belgeler/) genel catch-all match'inden AÇIKÇA DIŞLIYORUZ.
+//
+// String eşleşmesi güvenliği: recursive wildcard {x=**} bir PATH tipidir; .matches() PATH üstünde GEÇERSİZ (tip uyarısı +
+// öngörülemez sonuç). Bunun yerine TEK-SEGMENT wildcard {prefix} kullanıyoruz — bu STRING olarak bağlanır → `prefix != 'yedek'`
+// düz, güvenli bir string karşılaştırmasıdır. yedek/ için özel match YOK: catch-all onu prefix != 'yedek' ile dışlar,
+// başka hiçbir kural yazmadığı için VARSAYILAN-KAPALI ile reddedilir (yalnız Admin SDK / gunlukYedek erişir).
+// Müşteri tarafı (musteri-site) Storage'a doğrudan dokunmaz; paylaşılan getDownloadURL token'lı linkler bundan bağımsız çalışır.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.resource.size < 25 * 1024 * 1024;
+    function girisli() { return request.auth != null; }
+    function icKullanici() {
+      return girisli() && (
+        request.auth.token.get('portalYonetici', false) == true ||
+        request.auth.token.get('siparis', 'yok') != 'yok' ||
+        request.auth.token.get('yem', 'yok') != 'yok' ||
+        request.auth.token.get('muhasebe', 'yok') != 'yok' ||
+        request.auth.token.get('ik', 'yok') != 'yok' ||
+        request.auth.token.get('saha', 'yok') != 'yok' ||
+        request.auth.token.get('bakim', 'yok') != 'yok' ||
+        request.auth.token.get('toplanti', 'yok') != 'yok'
+      );
+    }
+    // belgeler/ = bayi/danışman sözleşme + TC/IBAN/vergi PII (Saha yükler). Yalnız SAHA yetkilisi / portal yöneticisi.
+    function sahaYetkili() { return girisli() && (request.auth.token.get('portalYonetici', false) == true || request.auth.token.get('saha', 'yok') != 'yok'); }
+    match /belgeler/{p=**} {
+      allow read: if sahaYetkili();
+      allow write: if sahaYetkili() && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // Genel iç dosyalar — {prefix} ilk yol segmenti (STRING). yedek/ ve belgeler/ HARİÇ:
+    //  · yedek/  → hiçbir kural yazmaz → VARSAYILAN-KAPALI (yalnız Admin SDK yedek okur/yazar)
+    //  · belgeler/ → yukarıdaki saha match'iyle yönetilir (bu geniş match onu granlamaz)
+    match /{prefix}/{rest=**} {
+      allow read: if icKullanici() && prefix != 'yedek' && prefix != 'belgeler';
+      allow write: if icKullanici() && request.resource.size < 25 * 1024 * 1024 && prefix != 'yedek' && prefix != 'belgeler';
     }
   }
 }

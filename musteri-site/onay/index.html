@@ -90,7 +90,14 @@ function fmtTL(n){return '₺'+fmtN(n)}
 function fmtDate(iso){if(!iso)return '—';const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso));return m?(m[3]+'.'+m[2]+'.'+m[1]):esc(iso)}
 function qs(k){return new URLSearchParams(location.search).get(k)||''}
 function lineTotal(l){return (+l.qty||0)*(+l.price||0)}
-function orderTotal(o){return (o.lines||[]).reduce((s,l)=>s+lineTotal(l),0)}
+function urunToplam(o){return (o.lines||[]).reduce((s,l)=>s+lineTotal(l),0)}
+// FATURA TUTARI sunucudan gelen DONMUŞ değerdir (o.total). Satırları kendimiz toplarsak DBS indirimi
+// ve firmayla anlaşılan manuel fatura tutarı GÖRÜNMEZ → müşteri, kesilen faturadan FARKLI bir tutarı
+// onaylamış olur. o.total yoksa (eski kayıt) satır toplamına düşeriz.
+// DİKKAT: eski/gömülü kayıtlarda 'total' alanı LİRA DEĞİL KİLOGRAM tutuyor (555 arşiv siparişi:
+// total = çuval × 25). Bu yüzden o.total'a YALNIZ satır fiyatları da doluysa güveniriz; fiyatsız
+// siparişte hiç tutar göstermeyiz (yanlış tutarı onaylatmaktansa hiç göstermemek doğrudur).
+function orderTotal(o){const u=urunToplam(o),t=+o.total;return (u>0&&isFinite(t)&&t>0)?t:u}
 function stateView(ic,bg,col,title,msg){
   APP.innerHTML=`<div class="card"><div class="state"><div class="ic" style="background:${bg};color:${col}">${ic}</div><h2>${esc(title)}</h2><p>${msg}</p></div></div>`;
 }
@@ -114,7 +121,21 @@ async function load(){
 }
 
 function renderOrder(o){
-  const total=orderTotal(o), showPrice=total>0;
+  const urun=urunToplam(o), total=orderTotal(o), showPrice=urun>0;
+  // Ara toplam ile fatura arasındaki fark = DBS indirimi ve/veya firmayla anlaşılan ek indirim.
+  // Farkı dbsOran'dan HESAPLAMAK yerine iki tutarın FARKINDAN türetiyoruz: manuel pazarlık tutarı
+  // girildiğinde de doğru çıkar. İMECE vade farkı ayrı satırda gösterilir (2. fatura).
+  const indirim=Math.round((urun-total)*100)/100;
+  // DBS payını orandan hesapla, KALAN farkı ayrı 'ilave indirim' olarak göster — tek satırda
+  // birleştirilirse yüzde ile tutar tutmaz ve müşteri itirazında belge tutarsız görünür.
+  // DBS satırı GERÇEK oran hesabını gösterir; indirimle KIRPILIRSA yüzde ile tutar tutmaz
+  // (%3 yazıp 2.000 ₺ göstermek gibi) ve müşteri haklı olarak itiraz eder. Kalan fark ayrı satır:
+  // pozitifse ilave indirim, negatifse (manuel tutar hesaplanandan yüksek) fiyat farkı.
+  const dbsTutar=(+o.dbsOran>0)?Math.round(urun*(+o.dbsOran)/100*100)/100:0;
+  const kalan=Math.round((indirim-dbsTutar)*100)/100;
+  const digerInd=Math.max(0,kalan), fiyatFarki=Math.max(0,-kalan);
+  const vadeFarki=Math.round((+o.imeceFark||0)*100)/100;
+  const genel=Math.round((total+vadeFarki)*100)/100;
   const rows=(o.lines||[]).map(l=>`<tr>
       <td><span class="code">${esc(l.code)}</span></td>
       <td class="n">${fmtN(l.qty)}</td>
@@ -130,13 +151,21 @@ function renderOrder(o){
       <table>
         <thead><tr><th>Ürün</th><th class="n">Miktar (çuval)</th>${showPrice?'<th class="n">Birim</th><th class="n">Tutar</th>':''}</tr></thead>
         <tbody>${rows||'<tr><td colspan="4">—</td></tr>'}</tbody>
-        ${showPrice?`<tfoot><tr><td>Genel Toplam</td><td class="n"></td><td class="n"></td><td class="n">${fmtTL(total)}</td></tr></tfoot>`:''}
+        ${showPrice?`<tfoot>
+          ${Math.abs(indirim)>0.004||vadeFarki>0.004?`<tr><td>Ara Toplam</td><td class="n"></td><td class="n"></td><td class="n">${fmtTL(urun)}</td></tr>`:''}
+          ${dbsTutar>0.004?`<tr><td>− DBS İndirimi (%${fmtN(+o.dbsOran)})</td><td class="n"></td><td class="n"></td><td class="n">− ${fmtTL(dbsTutar)}</td></tr>`:''}
+          ${digerInd>0.004?`<tr><td>− İlave İndirim</td><td class="n"></td><td class="n"></td><td class="n">− ${fmtTL(digerInd)}</td></tr>`:''}
+          ${fiyatFarki>0.004?`<tr><td>+ Fiyat Farkı</td><td class="n"></td><td class="n"></td><td class="n">+ ${fmtTL(fiyatFarki)}</td></tr>`:''}
+          <tr><td>${vadeFarki>0.004?'1. Fatura — Normal Ederi':'Genel Toplam'}</td><td class="n"></td><td class="n"></td><td class="n">${fmtTL(total)}</td></tr>
+          ${vadeFarki>0.004?`<tr><td>2. Fatura — Vade Farkı${+o.imeceAy>0?' ('+fmtN(+o.imeceAy)+' ay)':''}</td><td class="n"></td><td class="n"></td><td class="n">+ ${fmtTL(vadeFarki)}</td></tr>
+          <tr><td><b>Toplam Ödeme</b></td><td class="n"></td><td class="n"></td><td class="n"><b>${fmtTL(genel)}</b></td></tr>`:''}
+        </tfoot>`:''}
       </table>
 
       <div class="deliv">
-        <div class="dl-d">Teslim Tarihi</div>
-        <div class="dl-v">${fmtDate(o.teslimTarihi)}</div>
-        <div class="dl-x">${esc(KADEME[o.fiyatKademe]||'Teslim')}${o.kargo?(' · '+esc(o.kargo)):''}</div>
+        <div class="dl-d">Teslim Noktası</div>
+        <div class="dl-v" style="font-size:18px">${esc(KADEME[o.fiyatKademe]||'Teslim')}</div>
+        <div class="dl-x">${o.kargo?esc(o.kargo):''}</div>
       </div>
 
       <div class="sec-t" style="margin-top:18px">Sipariş Bilgileri</div>
@@ -146,7 +175,7 @@ function renderOrder(o){
 
       ${o.onayNot?`<div class="onaynot"><div class="on-t">ÖNEMLİ NOT</div><div class="on-v">${esc(o.onayNot)}</div></div>`:''}
       <div class="confirm">
-        <label class="chk"><input type="checkbox" id="ack"><span>Yukarıdaki ürün, miktar ve teslim bilgilerini kontrol ettim; sipariş doğrudur.</span></label>
+        <label class="chk"><input type="checkbox" id="ack"><span>Yukarıdaki ürün, miktar ve ${showPrice?'tutar ':''}bilgilerini kontrol ettim; sipariş doğrudur.</span></label>
         ${o.onayNot?`<label class="chk" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px"><input type="checkbox" id="ackNot"><span><b>Yukarıdaki notu okudum</b> ve kabul ediyorum.</span></label>`:''}
       </div>
       <div class="btns">

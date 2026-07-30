@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Fabrika Onayı · Rota SMI</title>
+<title>Üretim Onayı · Rota SMI</title>
 <link rel="icon" href="/icons/icon-192-v2.png">
 <style>
 :root{--navy:#0c1320;--blue:#1d4ed8;--slate:#475569;--slate3:#cbd5e1;--line:#e2e8f0;--green:#16a34a;--amber:#b45309;--red:#b91c1c}
@@ -59,16 +59,16 @@ td .code{font-weight:700}
 <div class="wrap">
   <div class="brand">
     <img src="/rota-smi.png" alt="Rota SMI" onerror="this.style.display='none'">
-    <div class="sub">Fabrika Üretim Onayı</div>
+    <div class="sub">Üretim Onayı</div>
   </div>
   <div id="app"><div class="spin"></div></div>
   <div class="ftr">© Rota SMI Tarım · Üretim onay sayfası</div>
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(firebaseConfig), db=getFirestore(app);
 const __pAuth=getAuth();
@@ -87,7 +87,7 @@ function qs(k){return new URLSearchParams(location.search).get(k)||''}
 function stateView(ic,bg,col,title,msg){APP.innerHTML=`<div class="card"><div class="state"><div class="ic" style="background:${bg};color:${col}">${ic}</div><h2>${esc(title)}</h2><p>${msg}</p></div></div>`;}
 
 let ORDER=null, META={};
-function tgSend(text){const tk=(META&&META.tgToken)||'',ch=(META&&META.tgChat)||'';if(!tk||!ch)return;try{fetch('https://api.telegram.org/bot'+tk+'/sendMessage?chat_id='+encodeURIComponent(ch)+'&text='+encodeURIComponent(text),{mode:'no-cors'});}catch(e){}}
+function tgSend(text){(async function(){try{var idt=window.PortalAuth?await PortalAuth.token():null;if(!idt)return;await fetch('https://us-central1-rota-yem.cloudfunctions.net/tgGonder',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},body:JSON.stringify({text:text})});}catch(e){}})();}
 
 async function load(){
   const t=qs('t');

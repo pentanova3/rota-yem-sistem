@@ -6,16 +6,19 @@
 //   <script>window.__PA_MOD='ik';</script>
 //   <script type="module" src="/portal-auth.js"></script>
 // ============================================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, EmailAuthProvider, reauthenticateWithCredential } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
 
 const cfg={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(cfg), db=getFirestore(app), auth=getAuth(app);
 const SES='rota_portal_session';
 
-// Oturum durumu bir kez çözülür (kalıcı oturum indexedDB'den yüklenir)
-const authReady=new Promise(res=>{const un=onAuthStateChanged(auth,u=>{un();res(u||null);});});
+// Oturum durumu bir kez çözülür (varsayılan kalıcı IndexedDB oturumu — sayfalar arası paylaşılır).
+// authStateReady() ilk-emisyon zamanlama tuzağına karşı güvenilirdir (oturum yüklenene kadar bekler).
+const authReady=(typeof auth.authStateReady==="function"
+  ? auth.authStateReady().then(()=>auth.currentUser||null).catch(()=>auth.currentUser||null)
+  : new Promise(res=>{const un=onAuthStateChanged(auth,u=>{un();res(u||null);});}));
 
 let _data=null;
 async function getData(force){
@@ -34,6 +37,17 @@ function clearSession(){localStorage.removeItem(SES);}
 function kullaniciAdi(u){return u&&u.email?u.email.split('@')[0]:null;}
 
 async function token(){await authReady;const u=auth.currentUser;return u?await u.getIdToken():null;}
+const sifreDolgu=p=>(p&&p.length>=6)?p:String(p)+'.rota';   // portal.js:14 ile AYNI olmalı (Firebase 6+ karakter ister)
+// Adım-yukarı (step-up) doğrulama: kullanıcı KENDİ portal şifresini yeniden girer, Firebase SUNUCUDA doğrular.
+// Hassas modüller (muhasebe) için sabit/paylaşımlı istemci şifresi yerine. Kaynak koda gömülü sır yok.
+async function reauth(password){
+  await authReady;
+  const u=auth.currentUser;
+  if(!u||!u.email){const e=new Error('oturum yok');e.code='no-session';throw e;}
+  const cred=EmailAuthProvider.credential(u.email, sifreDolgu(password||''));
+  await reauthenticateWithCredential(u, cred);   // yanlış şifre → auth/wrong-password|invalid-credential fırlatır
+  return true;
+}
 async function user(){
   const au=await authReady;if(!au)return null;
   const d=await getData();if(!d||!Array.isArray(d.users))return null;
@@ -57,6 +71,10 @@ async function require(modKey){
   const u=d.users.find(x=>x.username.toLowerCase()===ad);
   if(!u){clearSession();girisEkraninaGonder();return new Promise(()=>{});}
   setSession(u.username); // UI ipucu
+  // Bloker #3: şifre yenileme zorunluysa (geçici / hiç metadata yok / 90 gün doldu) modüle sokma,
+  // portala gönder — zorunlu değişim orada yapılır (Firebase oturumu sürer, portalda modal açılır).
+  {const gecen=Date.now()-Date.parse(u.sifreDegisim);
+   if(u.sifreZorunlu===true||!u.sifreDegisim||isNaN(gecen)||gecen>90*24*3600*1000){location.href='/';return new Promise(()=>{});}}
   const lvl=(u.perms&&u.perms[modKey])||'yok';
   if(lvl==='yok'){yetkisizEkran();return new Promise(()=>{});}
   window.__PA_USER=u;                                   // bölüm kısıtları için sayfaya profil
@@ -69,7 +87,7 @@ window.__paKapali=function(mod,bolum){
   return !!(u&&u.bolum&&u.bolum[mod+'.'+bolum]===false);
 };
 
-window.PortalAuth={getData,session,setSession,clearSession,user,level,require,token,authReady,
+window.PortalAuth={getData,session,setSession,clearSession,user,level,require,token,authReady,reauth,
   authUser:()=>auth.currentUser};
 
 // Sayfa kendini işaretlediyse bekçiyi çalıştır

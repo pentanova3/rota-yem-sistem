@@ -1,12 +1,13 @@
 // ============================================================
-// ROTA SMI · Kurumsal Arama ("site içi Google")
-// Kapsam: sipariş, müşteri, bayi & danışman, ürün fiyatları,
-//         tonaj/üretim, komisyon & iskonto hakedişleri, İK izin.
-// Muhasebe & Finans verileri KAPALIDIR (aşağıdaki YASAK listesi).
+// ROTA SMI · Kurumsal Arama v2 ("site içi Google")
+// Canlı (yazdıkça) · çok-bölümlü · autocomplete · TMR + YEM birleşik.
+// Kapsam: sipariş, müşteri, bayi & danışman, ürün fiyatları, tonaj/üretim,
+//         komisyon & iskonto, plasiyer performansı, İK (izin/avans/tazminat), hedef.
+// Muhasebe & Finans verileri KAPALIDIR (YASAK listesi + apps/muhasebe hiç okunmaz).
 // ============================================================
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const app=initializeApp(firebaseConfig), db=getFirestore(app), auth=getAuth(app);
@@ -20,44 +21,49 @@ const fmtTon=t=>(+t||0).toLocaleString('tr-TR',{minimumFractionDigits:1,maximumF
 const fmtDate=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||''));return m?(m[3]+'.'+m[2]+'.'+m[1]):'—'};
 const AYLAR=['ocak','subat','mart','nisan','mayis','haziran','temmuz','agustos','eylul','ekim','kasim','aralik'];
 const AYLAR_TR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-// Türkçe normalize: küçük harf + diakritik düzleştirme
 function norm(s){return String(s||'').toLocaleLowerCase('tr-TR')
   .replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c')
   .replace(/['’´`"]/g,' ').replace(/[^a-z0-9#\s-]/g,' ').replace(/\s+/g,' ').trim();}
-const STOP=new Set(['ne','kac','kaç','kadar','hangi','var','mi','mu','mı','kim','kimin','gun','gün','su','şu','bu','o','ve','ile','icin','en','ay','yil','the','a','de','da','ki','neydi','nedir','olan','simdi','an','su an','miydi','acaba','bana','bize','goster','soyle','listele','ver','bul']);
+const bare=s=>norm(s).replace(/[\s-]/g,'');
+const STOP=new Set(['ne','kac','kaç','kadar','hangi','var','mi','mu','mı','kim','kimin','gun','gün','su','şu','bu','o','ve','ile','icin','en','ay','yil','the','a','de','da','ki','neydi','nedir','olan','simdi','an','miydi','acaba','bana','bize','goster','soyle','listele','ver','bul','kimdir','nerede','nerde','deki','daki','li','lu','den','dan','tane','toplam','sistemde','bizim','bizde']);
 function tokensOf(q){return norm(q).split(' ').filter(t=>t.length>=2&&!STOP.has(t));}
-// isim eşleştirme: sorgu tokenlarının kaçı isim tokenlarıyla (önek) örtüşüyor
 function nameScore(name,qtoks){
-  const nt=norm(name).split(' ').filter(Boolean);if(!nt.length)return 0;
-  let hit=0;
+  const nt=norm(name).split(' ').filter(Boolean);if(!nt.length)return 0;let hit=0;
   qtoks.forEach(qt=>{if(qt.length<3)return;if(nt.some(n=>n.startsWith(qt)||(qt.startsWith(n)&&n.length>=3)))hit++;});
   return hit;
 }
 function bestMatch(list,nameOf,qtoks,minScore){
-  let best=null,bs=0;
-  list.forEach(x=>{const s=nameScore(nameOf(x),qtoks);if(s>bs){bs=s;best=x;}});
+  let best=null,bs=0;list.forEach(x=>{const s=nameScore(nameOf(x),qtoks);if(s>bs){bs=s;best=x;}});
   return bs>=(minScore||1)?{item:best,score:bs}:null;
 }
+const uniqBy=(arr,keyOf)=>{const seen=new Set();return arr.filter(x=>{const k=keyOf(x);if(seen.has(k))return false;seen.add(k);return true;});};
 
 // ---------- veri katmanı (lazy + cache) ----------
-let CACHE=null;
+let CACHE=null, IDX=null;
 async function loadData(){
   if(CACHE)return CACHE;
   const read=async(id,key)=>{try{const s=await getDoc(doc(db,'apps',id));const d=s.exists()?s.data().data:null;return d&&d[key]?JSON.parse(d[key]):null;}catch(e){return null;}};
   // DİKKAT: apps/muhasebe bilinçli olarak OKUNMAZ — finans verileri aramaya kapalıdır.
-  const [so,saha,ik]=await Promise.all([read('siparis','rota_so_v1'),read('saha','rota_saha_v1'),read('ik','rota_ik_v1')]);
+  const [so,yem,saha,ik]=await Promise.all([
+    read('siparis','rota_so_v1'), read('yem','rota_yem_v1'), read('saha','rota_saha_v1'), read('ik','rota_ik_v1')]);
   CACHE={
+    // TMR
     orders:(so&&so.orders)||[],customers:(so&&so.customers)||[],products:(so&&so.products)||[],
     priceLists:(so&&so.priceLists)||[],meta:(so&&so.meta)||{},odemeler:(so&&so.komisyonOdemeler)||[],
     koms:(saha&&saha.komisyoncular)||(so&&so.komisyoncular)||[],
+    // YEM (yeni)
+    yemOrders:(yem&&yem.orders)||[],yemCustomers:(yem&&yem.customers)||[],yemProducts:(yem&&yem.products)||[],
+    yemPlasiyerler:(yem&&yem.plasiyerler)||[],yemOzel:(yem&&yem.ozelListeler)||[],yemMeta:(yem&&yem.meta)||{},
+    // İK
     personeller:(ik&&ik.personeller)||[],izinler:(ik&&ik.izinler)||[],izinBakiye:(ik&&ik.izinBakiye)||[],
     avanslar:(ik&&ik.avanslar)||[],tazminatAyar:(ik&&ik.tazminatAyar)||{},
   };
+  buildIndex();
   return CACHE;
 }
-
-// ---------- hesap portları (siparis-takip ile birebir) ----------
 const D=()=>CACHE;
+
+// ---------- TMR hesap portları (siparis-takip ile birebir) ----------
 const prodByCode=c=>D().products.find(p=>norm(p.code)===norm(c))||null;
 const komById=id=>D().koms.find(k=>k.id===id)||null;
 const activePL=()=>D().priceLists.find(p=>p.id===D().meta.activePriceListId)||D().priceLists[D().priceLists.length-1]||null;
@@ -68,9 +74,10 @@ function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p
 const tonOf=(code,qty)=>(+qty||0)*prodKg(code)/1000;
 function lineUnit(l,kad){if(l.price==='')return 0;if(l.price!=null)return +l.price||0;const p=prodByCode(l.code);return p?(+p[kad||'fabrika']||0):0;}
 function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0;}return o.total||0;}
-function orderListTotal(o){if(o.lines&&o.lines.length){const pl=orderPL(o);let t=0;o.lines.forEach(l=>{const lp=tariffPrice(pl,l.code,o.fiyatKademe)||lineUnit(l,o.fiyatKademe);t+=(+l.qty||0)*lp;});return t||o.total||0;}return o.total||0;}
 function ordBayi(o){let id=o&&o.bayiId;if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='bayi')id=o.komisyoncuId;}return id?komById(id):null;}
 function ordDanisman(o){let id=o&&o.danismanId;if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}return id?komById(id):null;}
+const tmrTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=tonOf(l.code,l.qty);});return t;};
+const tmrTotal=o=>(+o.total||0)||orderTotal(o);
 function orderKomisyon(o,kom){
   if(!o||!kom)return {tutar:0};
   const isk=(D().meta&&D().meta.tdIskonto)||6;
@@ -78,62 +85,94 @@ function orderKomisyon(o,kom){
     let prim=0;
     if(o.aliciBayi){
       const bayi=ordBayi(o);if(!bayi)return {tutar:0};
-      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);
-      const pl=orderPL(o);
-      (o.lines||[]).forEach(l=>{
-        const p=prodByCode(l.code);
-        const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);
-        const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);
-        if(fab>0&&torb>0)prim+=(fab*(1-bRate/100)-torb*(1-isk/100))*(+l.qty||0);
-      });
+      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPL(o);
+      (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);if(fab>0&&torb>0)prim+=(fab*(1-bRate/100)-torb*(1-isk/100))*(+l.qty||0);});
       return {tutar:prim,viaBayi:true};
     }
-    (o.lines||[]).forEach(l=>{
-      const p=prodByCode(l.code);const liste=p?(+p.danismanListe||0):0;
-      const satis=lineUnit(l,o.fiyatKademe);
-      if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);
-    });
+    (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const liste=p?(+p.danismanListe||0):0;const satis=lineUnit(l,o.fiyatKademe);if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);});
     return {tutar:prim-(+o.nakliye||0)};
   }
-  // BAYİ: iskonto fatura anında uygulanır (fiyata gömülü) — sipariş üzerinden ayrıca tutar işlenmez.
   return {tutar:0,rate:(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0)};
 }
-// Bayi iskontosu fatura anında uygulanır (birikme/mahsup yok) — yıl içi yararlanılan iskonto raporu.
 function bayiAlimOzet(bayiId,yil){
   const os=D().orders.filter(o=>o.aliciBayi&&o.status!=='iptal'&&(ordBayi(o)||{}).id===bayiId&&(o.date||'').slice(0,4)===String(yil));
   let brut=0,fat=0;const ceyrek=[0,0,0,0];
-  os.forEach(o=>{
-    const pl=orderPL(o);let b=0;
-    (o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});
-    const ft=orderTotal(o);const isk=Math.max(0,b-ft);
-    const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
-    brut+=b;fat+=ft;
-  });
+  os.forEach(o=>{const pl=orderPL(o);let b=0;(o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});const ft=tmrTotal(o);const isk=Math.max(0,b-ft);const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;brut+=b;fat+=ft;});
   return {adet:os.length,brut,fatura:fat,iskonto:Math.max(0,brut-fat),ceyrek};
 }
 function danismanHakedis(danId){
-  let hak=0,adet=0;
-  D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId){hak+=orderKomisyon(o,d).tutar||0;adet++;}});
+  let hak=0,adet=0;D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId){hak+=orderKomisyon(o,d).tutar||0;adet++;}});
   const odenen=D().odemeler.filter(p=>p.komisyoncuId===danId).reduce((s,p)=>s+(+p.odenenTutar||0),0);
   return {hak,odenen,bakiye:hak-odenen,adet};
 }
-// izin (hr modülü 4857/53 portu)
+
+// ---------- YEM hesap portları (yem/index.html ile birebir, AYRI isim) ----------
+const yemProdByCode=c=>D().yemProducts.find(p=>norm(p.code)===norm(c))||null;
+function yemKg(code){const p=yemProdByCode(code);if(p&&+p.kg>0)return +p.kg;const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):50;return kg>0?kg:50;}
+const yemCuval=o=>(o.cuval!=null?+o.cuval:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0),0));
+const yemTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=(+l.qty||0)*yemKg(l.code);});return t/1000;};
+const yemNet=o=>(o.urunNet!=null?+o.urunNet:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0));
+const yemBrut=o=>(o.brut!=null?+o.brut:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0)*((l.liste!=null&&l.liste!=='')?+l.liste:(+l.price||0)),0));
+const yemIskonto=o=>(o.iskontoTutar!=null?+o.iskontoTutar:Math.max(0,yemBrut(o)-yemNet(o)));
+const yemNakliye=o=>(o.nakliyeTutar!=null?+o.nakliyeTutar:((o.nakliyeBirim!=null&&o.nakliyeBirim!=='')?(+o.nakliyeBirim||0)*yemCuval(o):(+o.nakliye||0)));
+const yemHammaliye=o=>(o.hammaliyeTutar!=null?+o.hammaliyeTutar:((+o.hammaliyeBirim||0)*yemCuval(o)));
+const yemTotal=o=>(o.total!=null?+o.total:yemNet(o)+yemNakliye(o)+yemHammaliye(o));
+const yemPlasById=id=>D().yemPlasiyerler.find(p=>p.id===id)||null;
+function yemOrdPlasiyer(o){const pid=(o&&o.plasiyerId)||((o&&o.customerId)?((D().yemCustomers.find(c=>c.id===o.customerId)||{}).plasiyerId):'');return pid?yemPlasById(pid):null;}
+
+// ---------- iş günü / izin / avans / tazminat (İK portları) ----------
 function yilFark(iso,ref){const d=iso?new Date(iso):null;if(!d||isNaN(d))return 0;const r=ref||new Date();let y=r.getFullYear()-d.getFullYear();const m=r.getMonth()-d.getMonth();if(m<0||(m===0&&r.getDate()<d.getDate()))y--;return y;}
 function yillikHakGun(iseGiris,dogum,ref){const k=yilFark(iseGiris,ref);if(k<1)return 0;let g=k<=5?14:(k<15?20:26);if(dogum){const yas=yilFark(dogum,ref);if(yas<18||yas>=50)g=Math.max(g,20);}return g;}
 function izinOzet(p,yil){
   const kayit=D().izinler.filter(z=>z.personelId===p.id&&(z.baslangic||'').slice(0,4)===String(yil));
   const kullanilan=kayit.filter(z=>z.tur==='yillik').reduce((s,z)=>s+(+z.gun||0),0);
   const bk=D().izinBakiye.find(x=>x.personelId===p.id&&+x.yil===+yil)||{};
-  const devir=+bk.devir||0;
-  const hak=(bk.hakEdilen!==''&&bk.hakEdilen!=null)?+bk.hakEdilen:yillikHakGun(p.iseGiris,p.dogum,new Date(yil,11,31));
+  const devir=+bk.devir||0;const hak=(bk.hakEdilen!==''&&bk.hakEdilen!=null)?+bk.hakEdilen:yillikHakGun(p.iseGiris,p.dogum,new Date(yil,11,31));
   return {kullanilan,devir,hak,kalan:devir+hak-kullanilan};
+}
+function avansAylik(a){return (+a.tutar||0)/Math.max(1,+a.taksit||1);}
+function avansAylarL(a){const out=[];if(!a.baslangicAy)return out;let[y,m]=a.baslangicAy.split('-').map(Number);for(let i=0;i<(+a.taksit||1);i++){out.push(y+'-'+String(m).padStart(2,'0'));m++;if(m>12){m=1;y++;}}return out;}
+function avansKalanH(a){const ref=new Date().toISOString().slice(0,7);const kes=avansAylarL(a).filter(ym=>ym<=ref).length*avansAylik(a);return Math.max(0,(+a.tutar||0)-Math.min(+a.tutar||0,kes));}
+function aylarFarki(iso){const d=new Date(iso);if(isNaN(d))return 0;const n2=new Date();let m=(n2.getFullYear()-d.getFullYear())*12+(n2.getMonth()-d.getMonth());if(n2.getDate()<d.getDate())m--;return Math.max(0,m);}
+function ihbarHaftasi(iseGiris){const ay=aylarFarki(iseGiris);return ay<6?2:(ay<18?4:(ay<36?6:8));}
+
+// ---------- varlık indeksi (autocomplete + şehir/isim çözümü) ----------
+let CITIES=null;
+function buildIndex(){
+  const E=[];
+  const add=(type,src,name,ek,obj,go)=>{if(name)E.push({type,src,name,nn:norm(name),ek:ek||'',obj,go});};
+  D().customers.forEach(c=>add('Müşteri','tmr',c.name,c.city||'','musteri','siparis-takip/#musteriler'));
+  D().yemCustomers.forEach(c=>add('Müşteri','yem',c.name,c.city||'','yem-musteri','yem/#musteriler'));
+  D().koms.filter(k=>k.type==='bayi'&&k.active!==false).forEach(k=>add('Bayi','tmr',k.name,k.city||'','bayi','saha/'));
+  D().koms.filter(k=>k.type==='danisman'&&k.active!==false).forEach(k=>add('Danışman','tmr',k.name,k.city||'','danisman','saha/'));
+  D().products.filter(p=>p.active!==false).forEach(p=>add('Ürün','tmr',p.code,p.pkg||'','urun','siparis-takip/#urunler'));
+  D().yemProducts.filter(p=>p.active!==false).forEach(p=>add('Ürün','yem',p.code,p.pkg||'','yem-urun','yem/#urunler'));
+  D().personeller.filter(p=>(p.durum||'aktif')!=='ayrildi').forEach(p=>add('Personel','ik',p.ad,p.gorev||'','personel','hr/'));
+  D().yemPlasiyerler.filter(p=>p.active!==false).forEach(p=>add('Plasiyer','yem',p.name,'yem satış','plasiyer','yem/#raporlar'));
+  IDX=E;
+  const cm=new Map();
+  const addCity=c=>{const v=(c||'').trim();if(!v)return;const k=norm(v);if(!cm.has(k))cm.set(k,v);};
+  D().customers.forEach(c=>addCity(c.city));D().yemCustomers.forEach(c=>addCity(c.city));D().koms.forEach(k=>addCity(k.city));
+  CITIES=[...cm.entries()].map(([nn,ad])=>({nn,ad}));
+}
+// sorgudaki şehir(ler)
+function sehirEslesme(q){
+  const qn=norm(q),qt=tokensOf(q);
+  const hits=[];
+  CITIES.forEach(c=>{
+    const okTok=qt.some(t=>t.length>=3&&(c.nn.startsWith(t)||t.startsWith(c.nn)||(c.nn.includes(t)&&t.length>=4)));
+    if(okTok)hits.push(c);
+  });
+  return uniqBy(hits,c=>c.nn);
 }
 
 // ---------- YASAK: muhasebe & finans ----------
-const YASAK=['muhasebe','kasa','banka','cek','senet','nakit','finans','bilanco','tahsilat','borc','kredi','maas','ucret','bordro','iban','vergi','fatura tutari','kar marji','kasa bakiye'];
-function yasakMi(q){const n=' '+norm(q)+' ';return YASAK.some(k=>n.includes(' '+k)||n.includes(k+' ')||n.includes(k));}
+const YASAK=['muhasebe','kasa','banka','cek','senet','nakit','finans','bilanco','tahsilat','borc','kredi','maas','ucret','bordro','iban','vergi','fatura tutari','kar marji','kasa bakiye','pos','dbs','odendi mi','alacak','odeme yapti'];
+function yasakMi(q){const n=norm(q);const toks=new Set(n.split(' '));
+  // tek kelimeler tam-token (kasap≠kasa, gerçek≠çek); çok kelimeliler alt-dize
+  return YASAK.some(k=>k.includes(' ')?n.includes(k):toks.has(k));}
 
-// ---------- dönem ayrıştırma (tonaj) ----------
+// ---------- dönem ayrıştırma ----------
 function parsePeriod(q){
   const n=norm(q);const now=new Date();
   const yM=/\b(20\d{2})\b/.exec(n);const yil=yM?yM[1]:String(now.getFullYear());
@@ -146,232 +185,130 @@ function parsePeriod(q){
 }
 
 // ---------- kart şablonları ----------
-// Tıklanır telefon (tel:) ve Google Haritalar adres bağlantısı
 const telLink=p=>p?`<a href="tel:${esc(String(p).replace(/\s/g,''))}" class="ka-tel">${esc(p)}</a>`:'—';
 function mapsLink(c){
-  const adres=(c.adres||'').trim(), city=(c.city||'').trim();
+  const adres=(c.adres||c.address||'').trim(), city=(c.city||'').trim();
   const txt=adres||city;if(!txt)return '—';
   const sorgu=encodeURIComponent(adres?(adres+(city?' '+city:'')):city);
   return `<a href="https://www.google.com/maps/search/?api=1&query=${sorgu}" target="_blank" rel="noopener" class="ka-maps" title="Google Haritalar'da aç">${esc(txt)}</a>`;
 }
+const srcBadge=s=>s==='yem'?'<span class="ka-src yem">Yem</span>':(s==='tmr'?'<span class="ka-src tmr">TMR</span>':'');
 const card=(title,body,tone)=>`<div class="ka-card ${tone||''}"><div class="ka-card-t">${title}</div>${body}</div>`;
 const row=(k,v)=>`<div class="ka-row"><span>${esc(k)}</span><b>${v}</b></div>`;
 const table=(head,rows)=>`<div class="ka-tblwrap"><table class="ka-tbl"><thead><tr>${head.map(h=>`<th${h.n?' class="n"':''}>${esc(h.t)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+const STLBL={beklemede:'Beklemede',onay:'Onaylandı',hazir:'Hazır',sevk:'Sevk Edildi',teslim:'Teslim Edildi',iptal:'İptal'};
 
-// ---------- intent işleyicileri ----------
+// ============================================================
+//  ANALİZÖRLER — her biri eşleşmezse null döner (self-gating)
+// ============================================================
+
 function ansYasak(){
   return card('Erişim Engellendi',`<p class="ka-p">Muhasebe ve finans verileri (kasa, banka, tahsilat, maaş vb.) kurumsal aramaya <b>kapalıdır</b>. Bu bilgiler yalnızca yetkili kullanıcıların erişebildiği <a href="muhasebe/">Muhasebe &amp; Finans</a> modülünde yer alır.</p>`,'ka-red');
 }
+
+// ---- Sipariş numarası (TMR + Yem) ----
 function ansSiparis(q){
-  const m=/#?\b(\d{3,4})\b/.exec(q);if(!m)return null;
-  if(!/siparis|#/.test(norm(q))&&!q.includes('#'))return null;
-  const o=D().orders.find(x=>String(x.no)===m[1]);if(!o)return null;
-  const ST={beklemede:'Beklemede',onay:'Onaylandı',hazir:'Hazırlanıyor',sevk:'Sevk Edildi',teslim:'Teslim Edildi',iptal:'İptal'};
-  return card('Sipariş #'+esc(o.no),
-    row('Müşteri',esc(o.customer||'—'))+row('Durum',esc(ST[o.status]||o.status||'—'))+
+  const n=norm(q);
+  const my=/#?y\s*(\d{1,5})\b/i.exec(q.replace(/\s+/g,' '));      // #Y12 → yem
+  const mm=/#?\b(\d{1,5})\b/.exec(q);
+  if(!my&&!mm)return null;
+  if(!/siparis|#/.test(n)&&!q.includes('#'))return null;
+  const out=[];
+  if(my){const o=D().yemOrders.find(x=>String(x.no)===my[1]);if(o)out.push(yemSiparisKart(o));}
+  if(mm){
+    const oT=D().orders.find(x=>String(x.no)===mm[1]);if(oT)out.push(tmrSiparisKart(oT));
+    if(!my){const oY=D().yemOrders.find(x=>String(x.no)===mm[1]);if(oY)out.push(yemSiparisKart(oY));}
+  }
+  return out.length?out.join(''):null;
+}
+function tmrSiparisKart(o){
+  return card('Sipariş #'+esc(o.no)+' '+srcBadge('tmr'),
+    row('Müşteri',esc(o.customer||'—'))+row('Durum',esc(STLBL[o.status]||o.status||'—'))+
     row('Sipariş Tarihi',fmtDate(o.date))+row('Teslim Tarihi',fmtDate(o.teslimTarihi))+
     row('Ürünler',esc((o.lines||[]).map(l=>l.code+' × '+fmtN(l.qty)).join(', ')||'—'))+
+    row('Tonaj',fmtTon(tmrTon(o))+' t')+
     (o.plaka?row('Araç / Şoför',esc(o.plaka+(o.sofor?' · '+o.sofor:''))):'')+
-    `<a class="ka-link" href="siparis-takip/#siparis=${esc(o.no)}">Siparişi aç</a>`);
+    `<a class="ka-link" href="siparis-takip/#siparis=${esc(o.no)}">Siparişi aç →</a>`);
 }
-function ansTonaj(q){
-  const n=norm(q);
-  if(n.includes('hedef'))return null;  // hedef soruları ansHedef'e
-  if(!/(^|\s)(ton|tonaj)(\s|$)|uret|satis miktar|kac ton/.test(n))return null;
-  const P=parsePeriod(q);
-  let os=D().orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===P.yil&&(P.tip!=='ay'||o.date.slice(5,7)===P.ay));
-  let etiket='';
-  // müşteri filtresi: "AKHİSARLI İSMAİL bu yıl kaç ton aldı"
-  const qt=tokensOf(q);
-  const mc=bestMatch(D().customers,c=>c.name,qt,2);
-  if(mc){os=os.filter(o=>o.customerId===mc.item.id);etiket=' · '+mc.item.name;}
-  // ürün filtresi: "BK-300 Plus'tan kaç ton sattık"
-  const nq=norm(q).replace(/[\s-]/g,'');
-  const mp=D().products.filter(pp=>pp.active!==false&&nq.includes(norm(pp.code).replace(/[\s-]/g,''))).sort((a,b)=>b.code.length-a.code.length)[0];
-  if(mp&&!mc){os=os.map(o=>({...o,lines:(o.lines||[]).filter(l=>norm(l.code)===norm(mp.code))})).filter(o=>o.lines.length);etiket=' · '+mp.code;}
-  let ton=0,cuval=0;const byP={},byC={};
-  os.forEach(o=>(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);ton+=t;cuval+=(+l.qty||0);byP[l.code]=(byP[l.code]||0)+t;byC[o.customer||'—']=(byC[o.customer||'—']||0)+t;}));
-  if(!os.length)return card('Satış Tonajı — '+esc(P.lbl)+esc(etiket),'<p class="ka-p">Bu dönemde kayıt bulunamadı.</p>');
-  const top=Object.entries(mp&&!mc?byC:byP).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  return card('Satış Tonajı — '+esc(P.lbl)+esc(etiket),
-    row('Toplam',`<span class="ka-big">${fmtTon(ton)} ton</span>`)+row('Çuval',fmtN(cuval)+' adet')+row('Sipariş',os.length+' adet')+
-    (top.length?`<div class="ka-sub">${mp&&!mc?'Müşteri kırılımı':'Ürün kırılımı'}</div>`+top.map(([c,t])=>row(c,fmtTon(t)+' t')).join(''):'')+
-    `<div class="ka-note">1 çuval = 25 kg · iptal siparişler hariç · detay: <a href="siparis-takip/#raporlar">Raporlar → Tonaj &amp; Hedef</a></div>`);
+function yemSiparisKart(o){
+  return card('Yem Siparişi #Y'+esc(o.no)+' '+srcBadge('yem'),
+    row('Müşteri',esc(o.customer||'—'))+row('Durum',esc(STLBL[o.status]||o.status||'—'))+
+    (o.crossFrom==='tmr'?row('Kaynak','TMR çapraz siparişi'):'')+
+    row('Sipariş Tarihi',fmtDate(o.date))+row('Teslim Tarihi',fmtDate(o.teslimTarihi))+
+    row('Ürünler',esc((o.lines||[]).map(l=>l.code+' × '+fmtN(l.qty)).join(', ')||'—'))+
+    row('Tonaj',fmtTon(yemTon(o))+' t · '+fmtN(yemCuval(o))+' çuval')+
+    `<a class="ka-link" href="yem/#siparis=${esc(o.no)}">Siparişi aç →</a>`);
 }
-function ansIzin(q){
-  const n=norm(q);if(!n.includes('izin')&&!n.includes('izn'))return null;  // izin / izni / izne (ünlü düşmesi)
-  const yil=new Date().getFullYear();
-  const ps=D().personeller.filter(p=>(p.durum||'aktif')!=='ayrildi');
-  if(!ps.length)return card('Yıllık İzin',`<p class="ka-p">İK modülünde henüz personel kaydı bulunmuyor. <a class="ka-link" href="hr/">İK modülünü aç</a></p>`);
-  const mt=bestMatch(ps,p=>p.ad,tokensOf(q));
-  if(mt){const p=mt.item,s=izinOzet(p,yil);
-    return card('Yıllık İzin — '+esc(p.ad)+' ('+yil+')',
-      row('Devir',s.devir+' gün')+row('Hak Ediş',s.hak+' gün')+row('Kullanılan',s.kullanilan+' gün')+
-      row('Kalan',`<span class="ka-big" style="color:${s.kalan<0?'#B91C1C':'#15803D'}">${s.kalan} gün</span>`)+
-      `<a class="ka-link" href="hr/">İK modülünde aç</a>`);}
-  const rows=ps.map(p=>({p,s:izinOzet(p,yil)})).sort((a,b)=>b.s.kalan-a.s.kalan)
-    .map(({p,s})=>`<tr><td>${esc(p.ad)}</td><td class="n">${s.hak+s.devir}</td><td class="n">${s.kullanilan}</td><td class="n" style="font-weight:700;color:${s.kalan<0?'#B91C1C':'#15803D'}">${s.kalan}</td></tr>`).join('');
-  return card('Yıllık İzin Durumu — '+yil,table([{t:'Personel'},{t:'Toplam Hak',n:1},{t:'Kullanılan',n:1},{t:'Kalan',n:1}],rows)+`<a class="ka-link" href="hr/">İK modülünde aç</a>`);
-}
-function ansKomisyon(q){
-  const n=norm(q);
-  if(!/komisyon|hakedis|hak edis|prim|iskonto/.test(n))return null;
-  const mt=bestMatch(D().koms,k=>k.name,tokensOf(q));
-  if(mt){const k=mt.item;
-    if(k.type==='danisman'){const h=danismanHakedis(k.id);
-      return card('Danışman Hakedişi — '+esc(k.name),
-        row('Hak Edilen (toplam)',fmtTL(h.hak))+row('Ödenen',fmtTL(h.odenen))+
-        row('Kalan Bakiye',`<span class="ka-big" style="color:${h.bakiye>0?'#B91C1C':'#15803D'}">${fmtTL(h.bakiye)}</span>`)+row('Sipariş',h.adet+' adet')+
-        `<div class="ka-note">Prim fatura karşılığı ödenir · detay: <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
-    const yil=new Date().getFullYear();
-    const A=bayiAlimOzet(k.id,yil);
-    return card('Bayi İskonto Raporu — '+esc(k.name)+' ('+yil+')',
-      row('Alım',A.adet+' sipariş · '+fmtTL(A.fatura))+
-      row('Yararlanılan İskonto (%'+fmtN(k.rate||0)+')',`<span class="ka-big" style="color:#B45309">${fmtTL(A.iskonto)}</span>`)+
-      `<div class="ka-sub">Çeyrek kırılımı</div>`+
-      ['Ç1 (Oca–Mar)','Ç2 (Nis–Haz)','Ç3 (Tem–Eyl)','Ç4 (Eki–Ara)'].map((cl,i)=>row(cl,fmtTL(A.ceyrek[i]))).join('')+
-      `<div class="ka-note">Bayi iskontosu fatura anında uygulanır; birikme veya mahsup yoktur. Detay: <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
-  // isim yoksa: tüm danışman bakiyeleri
-  const ds=D().koms.filter(k=>k.type==='danisman').map(k=>({k,h:danismanHakedis(k.id)})).filter(x=>x.h.adet>0);
-  if(!ds.length)return null;
-  const rows=ds.sort((a,b)=>b.h.bakiye-a.h.bakiye).map(({k,h})=>`<tr><td>${esc(k.name)}</td><td class="n">${fmtTL(h.hak)}</td><td class="n">${fmtTL(h.odenen)}</td><td class="n" style="font-weight:700">${fmtTL(h.bakiye)}</td></tr>`).join('');
-  return card('Danışman Komisyon Bakiyeleri',table([{t:'Danışman'},{t:'Hak Edilen',n:1},{t:'Ödenen',n:1},{t:'Bakiye',n:1}],rows));
-}
-function ansUrun(q){
-  const n=norm(q).replace(/[\s-]/g,'');
-  let hits=D().products.filter(p=>p.active!==false&&n.includes(norm(p.code).replace(/[\s-]/g,'')));
-  // "plus" ayrımı: bir kod, eşleşen daha uzun bir kodun alt dizesi ise ele (BK-300 PLUS aranırken BK-300 çıkmasın)
-  hits.sort((a,b)=>b.code.length-a.code.length);
-  hits=hits.filter(p=>!hits.some(o=>o!==p&&norm(o.code).replace(/[\s-]/g,'').includes(norm(p.code).replace(/[\s-]/g,''))));
-  const fiyatNiyet=/fiyat|kac tl|kaca|ne kadar|liste/.test(norm(q));
-  if(!hits.length)return null;
-  if(!fiyatNiyet&&!hits.length)return null;
-  const pl=activePL();
-  const ps=hits.slice(0,3);
-  return ps.map(p=>{
-    const bayiNot=/bayi/.test(norm(q))?`<div class="ka-note">Bayi alış fiyatı = Fabrika × (1 − bayi iskontosu). Örn. %3 iskontolu bayi: ${fmtN((+p.fabrika||0)*0.97)} ₺</div>`:'';
-    return card('Ürün Fiyatı — '+esc(p.code)+' ('+esc(p.pkg||'25 kg')+')',
-      row('Fabrika Teslim',fmtN(p.fabrika)+' ₺')+row('Yakın Bayi Satış',fmtN(p.yakin)+' ₺')+row('Uzak Bayi Satış',fmtN(p.uzak)+' ₺')+
-      (p.danismanListe?row('Danışman Liste (Torbalı)',fmtN(p.danismanListe)+' ₺'):'')+
-      bayiNot+`<div class="ka-note">Güncel tarife: ${esc(D().meta.priceDate||(pl?fmtDate(pl.date):'—'))}</div>`);
-  }).join('');
-}
-function ansBayiDanisman(q){
-  const n=norm(q);
-  if(!/bayi|danisman/.test(n))return null;
-  const tip=/danisman/.test(n)?'danisman':'bayi';
-  const list=D().koms.filter(k=>k.type===tip&&k.active!==false);
-  const qt=tokensOf(q);
-  // şehir eşleşmesi
-  const cityHits=list.filter(k=>k.city&&qt.some(t=>t.length>=3&&norm(k.city).includes(t)));
-  if(cityHits.length){
-    const rows=cityHits.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${telLink(k.phone)}</td><td>${mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city})}</td><td class="n">${k.type==='bayi'?('%'+fmtN(k.rate||0)):'—'}</td></tr>`).join('');
-    return card((tip==='bayi'?'Bayiler':'Danışmanlar')+' — '+esc(cityHits[0].city),
-      table([{t:'Ad'},{t:'Telefon'},{t:'Adres'},{t:tip==='bayi'?'İskonto':'',n:1}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç</a>`);
-  }
-  // ad eşleşmesi
-  const mt=bestMatch(list,k=>k.name,qt);
-  if(mt){const k=mt.item;const dan=k.danismanId?komById(k.danismanId):null;
-    return card((tip==='bayi'?'Bayi':'Teknik Danışman')+' — '+esc(k.name),
-      row('Şehir',esc(k.city||'—'))+row('Telefon',telLink(k.phone))+
-      row('Adres',mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city}))+
-      (tip==='bayi'?row('İskonto Oranı','%'+fmtN(k.rate||0)):'')+
-      (dan?row('Bağlı Danışman',esc(dan.name)):'')+
-      `<a class="ka-link" href="saha/">Saha modülünde aç</a>`);}
-  // genel liste ("bayilerimiz kimler")
-  if(/kimler|listesi|hepsi|tum|kac (tane )?bayi|kac (tane )?danisman/.test(n)||qt.length<=1){
-    const rows=list.slice(0,30).map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${esc(k.city||'—')}</td><td>${esc(k.phone||'—')}</td></tr>`).join('');
-    return card((tip==='bayi'?'Bayiler':'Danışmanlar')+' ('+list.length+')',table([{t:'Ad'},{t:'Şehir'},{t:'Telefon'}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç</a>`);
-  }
-  return null;
-}
-function ansMusteri(q){
-  const qt=tokensOf(q);if(!qt.length)return null;
-  const mt=bestMatch(D().customers,c=>c.name,qt,Math.min(2,qt.filter(t=>t.length>=3).length)||1);
-  if(!mt)return null;
-  const c=mt.item;
-  const os=D().orders.filter(o=>o.customerId===c.id);
-  const son=os.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-  const bayi=c.bayiId?komById(c.bayiId):null,dan=c.danismanId?komById(c.danismanId):null;
-  return card('Müşteri — '+esc(c.name)+(c.arsiv?' <span style="font-size:10px;font-weight:700;background:#eef2f7;color:#8aa0b8;padding:2px 8px;border-radius:10px;vertical-align:middle">ARŞİVDE</span>':''),
-    row('Telefon',telLink(c.phone))+
-    row('Adres',mapsLink(c))+
-    row('Şehir / Bölge',esc(c.city||'—'))+(c.firma?row('Firma',esc(c.firma)):'')+
-    (bayi?row('Bayisi',esc(bayi.name)):'')+(dan?row('Danışmanı',esc(dan.name)):'')+
-    (!bayi&&!dan?row('Bağlantı','Fabrika (direkt)'):'')+
-    row('Sipariş Sayısı',os.length+(c.orderCount?' (+'+c.orderCount+' arşiv)':''))+
-    (son?row('Son Sipariş',fmtDate(son.date)+' · #'+son.no):'')+
-    `<a class="ka-link" href="siparis-takip/#musteriler">Müşteriler sayfasında aç</a>`);
-}
-function ansPersonel(q){
-  const ps=D().personeller;if(!ps.length)return null;
-  const mt=bestMatch(ps,p=>p.ad,tokensOf(q),2);
-  if(!mt)return null;
-  const p=mt.item;const s=izinOzet(p,new Date().getFullYear());
-  return card('Personel — '+esc(p.ad),
-    row('Görev',esc(p.gorev||'—'))+row('Departman',esc(p.departman||'—'))+
-    row('Telefon',esc(p.telefon||'—'))+row('İşe Giriş',fmtDate(p.iseGiris))+
-    row('Kalan Yıllık İzin',s.kalan+' gün')+
-    `<div class="ka-note">Ücret ve mali bilgiler aramaya kapalıdır.</div><a class="ka-link" href="hr/">İK modülünde aç</a>`);
-}
-function ansHedef(q){
-  if(!norm(q).includes('hedef'))return null;
-  const H=(D().meta&&D().meta.tonajHedef)||{};
-  const yil=String(new Date().getFullYear());
-  const os=D().orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===yil);
-  const byM={};os.forEach(o=>{const m=o.date.slice(5,7);(o.lines||[]).forEach(l=>{if(l.code)byM[m]=(byM[m]||0)+tonOf(l.code,l.qty);});});
-  const rows=AYLAR_TR.map((ad,i)=>{const k=yil+'-'+String(i+1).padStart(2,'0');const hv=+H[k]||0,g=byM[String(i+1).padStart(2,'0')]||0;
-    if(!hv&&!g)return '';
-    return `<tr><td>${ad}</td><td class="n">${hv?fmtTon(hv):'—'}</td><td class="n">${g?fmtTon(g):'—'}</td><td class="n" style="font-weight:700">${hv?('%'+Math.round(g/hv*100)):'—'}</td></tr>`;}).join('');
-  if(!rows)return card('Tonaj Hedefleri — '+yil,`<p class="ka-p">Henüz aylık ton hedefi girilmemiş. Hedefler <a class="ka-link" href="siparis-takip/#raporlar">Sipariş Takip → Raporlar → Tonaj &amp; Hedef</a> ekranından girilir.</p>`);
-  return card('Tonaj Hedefleri — '+yil,table([{t:'Ay'},{t:'Hedef (t)',n:1},{t:'Gerçekleşen (t)',n:1},{t:'Oran',n:1}],rows)+`<a class="ka-link" href="siparis-takip/#raporlar">Tonaj &amp; Hedef raporunu aç</a>`);
-}
-// ============ RAPOR & ANALİZ SORULARI ============
-function donemOrders(P){return D().orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===P.yil&&(P.tip!=='ay'||o.date.slice(5,7)===P.ay));}
-function tonajOzet(os){let ton=0,cuval=0;const byP={};os.forEach(o=>(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);ton+=t;cuval+=(+l.qty||0);byP[l.code]=(byP[l.code]||0)+t;}));return {ton,cuval,byP,adet:os.length};}
-function custOf(o){return D().customers.find(c=>c.id===o.customerId)||null;}
-function veriYokKart(P){return card('Veri Yok — '+esc(P.lbl),'<p class="ka-p">Bu dönemde sipariş kaydı bulunmuyor.</p>');}
 
-// "Bekleyen siparişler / kaç sipariş var" — durum sayımı
+// ---- Ortak veri kümesi tanımı (TMR + Yem raporları için) ----
+function datasets(){
+  return [
+    {src:'tmr',lbl:'TMR',orders:D().orders,custs:D().customers,prods:D().products,ton:tmrTon,total:tmrTotal,custCity:o=>{const c=D().customers.find(x=>x.id===o.customerId);return c?c.city:'';}},
+    {src:'yem',lbl:'Yem',orders:D().yemOrders,custs:D().yemCustomers,prods:D().yemProducts,ton:yemTon,total:yemTotal,custCity:o=>{const c=D().yemCustomers.find(x=>x.id===o.customerId);return c?c.city:'';}},
+  ].filter(ds=>ds.orders.length);
+}
+const donemFiltre=(orders,P)=>orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===P.yil&&(P.tip!=='ay'||o.date.slice(5,7)===P.ay));
+
+// ---- Sipariş durumları (TMR + Yem) ----
 function ansDurumSayim(q){
   const n=norm(q);
   if(!/siparis/.test(n))return null;
-  if(!/bekleyen|onay bekle|kac siparis|siparis sayisi|sevk edilen|teslim edilen|hazir|acik siparis|durum/.test(n))return null;
-  const ST={beklemede:'Beklemede',onay:'Onaylandı',hazir:'Hazırlanıyor',sevk:'Sevk Edildi',teslim:'Teslim Edildi',iptal:'İptal'};
-  const say={};D().orders.forEach(o=>{say[o.status||'beklemede']=(say[o.status||'beklemede']||0)+1;});
-  const rows=Object.keys(ST).filter(k=>say[k]).map(k=>row(ST[k],say[k]+' sipariş')).join('');
-  const acik=(say.beklemede||0)+(say.onay||0)+(say.hazir||0);
-  return card('Sipariş Durumları',
-    row('Toplam',D().orders.length+' sipariş')+rows+
-    row('Açık (üretim/sevk sürecinde)',`<span class="ka-big">${acik}</span>`)+
-    `<a class="ka-link" href="siparis-takip/#siparisler">Sipariş listesini aç</a>`);
+  if(!/bekleyen|onay bekle|kac siparis|siparis sayisi|sevk|teslim|hazir|acik siparis|durum|uretim/.test(n))return null;
+  return datasets().map(ds=>{
+    const say={};ds.orders.forEach(o=>{say[o.status||'beklemede']=(say[o.status||'beklemede']||0)+1;});
+    const rows=Object.keys(STLBL).filter(k=>say[k]).map(k=>row(STLBL[k],say[k]+' sipariş')).join('');
+    if(!rows)return '';
+    const acik=(say.beklemede||0)+(say.onay||0)+(say.hazir||0);
+    return card('Sipariş Durumları '+srcBadge(ds.src),
+      row('Toplam',ds.orders.length+' sipariş')+rows+row('Açık (üretim/sevk sürecinde)',`<span class="ka-big">${acik}</span>`)+
+      `<a class="ka-link" href="${ds.src==='yem'?'yem/#siparisler':'siparis-takip/#siparisler'}">Sipariş listesini aç →</a>`);
+  }).filter(Boolean).join('')||null;
 }
-// "Bu ay geçen aya göre" — dönem karşılaştırma
-function ansKiyas(q){
+
+// ---- Tonaj (TMR + Yem, müşteri/ürün filtreli) ----
+function ansTonaj(q){
   const n=norm(q);
-  if(!/gore|karsilastir|kiyasla|fark/.test(n))return null;
-  if(!/ton|satis|sat|ciro|uret/.test(n))return null;
-  const now=new Date();
-  const bu={tip:'ay',yil:String(now.getFullYear()),ay:String(now.getMonth()+1).padStart(2,'0'),lbl:AYLAR_TR[now.getMonth()]+' '+now.getFullYear()};
-  const g=new Date(now.getFullYear(),now.getMonth()-1,1);
-  const on={tip:'ay',yil:String(g.getFullYear()),ay:String(g.getMonth()+1).padStart(2,'0'),lbl:AYLAR_TR[g.getMonth()]+' '+g.getFullYear()};
-  const a=tonajOzet(donemOrders(bu)),b=tonajOzet(donemOrders(on));
-  const ciroA=donemOrders(bu).reduce((s,o)=>s+(+o.total||0),0),ciroB=donemOrders(on).reduce((s,o)=>s+(+o.total||0),0);
-  const pct=(x,y)=>y?Math.round((x-y)/y*100):null;
-  const ok=v=>v==null?'—':(v>=0?'+':'')+v+'%';
-  return card('Karşılaştırma — '+esc(bu.lbl)+' / '+esc(on.lbl),
-    row('Tonaj',fmtTon(a.ton)+' t / '+fmtTon(b.ton)+' t · <b style="color:'+((a.ton>=b.ton)?'#15803D':'#B91C1C')+'">'+ok(pct(a.ton,b.ton))+'</b>')+
-    row('Çuval',fmtN(a.cuval)+' / '+fmtN(b.cuval))+
-    row('Sipariş',a.adet+' / '+b.adet)+
-    row('Ciro',fmtTL(ciroA)+' / '+fmtTL(ciroB)+' · <b>'+ok(pct(ciroA,ciroB))+'</b>')+
-    `<div class="ka-note">İçinde bulunulan ay henüz tamamlanmadığı için fark ay sonuna kadar değişir.</div>`);
+  if(n.includes('hedef'))return null;
+  if(!/(^|\s)(ton|tonaj)(\s|$)|uret|satis miktar|kac ton|kac cuval/.test(n))return null;
+  const P=parsePeriod(q),qt=tokensOf(q);
+  return datasets().map(ds=>{
+    let os=donemFiltre(ds.orders,P);let etiket='';
+    const mc=bestMatch(ds.custs,c=>c.name,qt,2);
+    if(mc){os=os.filter(o=>o.customerId===mc.item.id);etiket=' · '+mc.item.name;}
+    const nq=bare(q);
+    const mp=ds.prods.filter(pp=>pp.active!==false&&nq.includes(bare(pp.code))).sort((a,b)=>b.code.length-a.code.length)[0];
+    if(mp&&!mc){os=os.map(o=>({...o,lines:(o.lines||[]).filter(l=>norm(l.code)===norm(mp.code))})).filter(o=>o.lines.length);etiket=' · '+mp.code;}
+    let ton=0,cuval=0;const byP={},byC={};
+    os.forEach(o=>{const t=ds.ton(o);ton+=t;byC[o.customer||'—']=(byC[o.customer||'—']||0)+t;(o.lines||[]).forEach(l=>{if(l.code){cuval+=(+l.qty||0);byP[l.code]=(byP[l.code]||0)+(+l.qty||0);}});});
+    if(!os.length)return '';
+    const top=Object.entries(mp&&!mc?byC:byP).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    return card('Satış Tonajı — '+esc(P.lbl)+esc(etiket)+' '+srcBadge(ds.src),
+      row('Toplam',`<span class="ka-big">${fmtTon(ton)} ton</span>`)+row('Çuval',fmtN(cuval)+' adet')+row('Sipariş',os.length+' adet')+
+      (top.length?`<div class="ka-sub">${mp&&!mc?'Müşteri kırılımı':'Ürün kırılımı (çuval)'}</div>`+top.map(([c,v])=>row(c,mp&&!mc?fmtTon(v)+' t':fmtN(v)+' çuval')).join(''):'')+
+      `<div class="ka-note">iptal siparişler hariç · detay: <a href="${ds.src==='yem'?'yem/#raporlar':'siparis-takip/#raporlar'}">Raporlar</a></div>`);
+  }).filter(Boolean).join('')||card('Satış Tonajı — '+esc(P.lbl),'<p class="ka-p">Bu dönemde kayıt bulunamadı.</p>');
 }
-// "En çok satan ürün / en iyi müşteri / en iyi bayi / hangi ilde" — sıralamalar
+
+// ---- Ciro (TMR + Yem) ----
+function ansCiro(q){
+  const n=norm(q);
+  if(!/ciro|satis tutari|toplam satis|kac tl.*sat|kac lira.*sat|hasilat|kazanc/.test(n))return null;
+  const P=parsePeriod(q);
+  return datasets().map(ds=>{
+    const os=donemFiltre(ds.orders,P);if(!os.length)return '';
+    const ciro=os.reduce((s,o)=>s+ds.total(o),0);let ton=0;os.forEach(o=>ton+=ds.ton(o));
+    return card('Satış Cirosu — '+esc(P.lbl)+' '+srcBadge(ds.src),
+      row('Toplam Ciro',`<span class="ka-big">${fmtTL(ciro)}</span>`)+row('Sipariş',os.length+' adet')+row('Tonaj',fmtTon(ton)+' t')+
+      row('Ortalama Sipariş',os.length?fmtTL(ciro/os.length):'—')+
+      `<div class="ka-note">Sipariş satış tutarları toplamıdır (iptal hariç). Kasa/tahsilat muhasebe modülündedir, aramaya kapalıdır.</div>`);
+  }).filter(Boolean).join('')||null;
+}
+
+// ---- En çok satan/alan (TMR + Yem) ----
 function ansEnCok(q){
   const n=norm(q);
-  if(!/en cok|en fazla|en iyi|en buyuk|lider|hangi/.test(n))return null;
-  if(/bakiyor|bakar|atanmis|bagli|musterileri|musterilerine/.test(n))return null;   // kişiye atanmış müşteri sorusu — sıralama değil
-  if(bestMatch(D().koms,k=>k.name,tokensOf(q),2))return null;                        // belirli bir bayi/danışman soruluyor
+  if(!/en cok|en fazla|en iyi|en buyuk|lider|top ?\d|hangi urun|hangi musteri|hangi il|hangi sehir/.test(n))return null;
+  if(/bakiyor|bakar|atanmis|bagli|musterileri|musterilerine/.test(n))return null;
   let tip=null;
   if(/urun|satan|satilan/.test(n))tip='urun';
   if(/musteri|alici|alan/.test(n))tip='musteri';
@@ -379,196 +316,459 @@ function ansEnCok(q){
   if(/danisman/.test(n))tip='danisman';
   if(/\bil\b|ilde|sehir|bolge|nerede/.test(n))tip='il';
   if(!tip)return null;
-  const P=parsePeriod(q);const os=donemOrders(P);
-  if(!os.length)return veriYokKart(P);
-  const agg={};
-  os.forEach(o=>{
-    let key=null;
-    if(tip==='urun'){(o.lines||[]).forEach(l=>{if(l.code)agg[l.code]=(agg[l.code]||0)+tonOf(l.code,l.qty);});return;}
-    if(tip==='musteri')key=o.customer||'—';
-    if(tip==='bayi'){const b=ordBayi(o);key=b?b.name:null;}
-    if(tip==='danisman'){const d2=ordDanisman(o);key=d2?d2.name:null;}
-    if(tip==='il'){const c=custOf(o);key=(c&&c.city)?c.city:null;}
-    if(!key)return;
-    let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=tonOf(l.code,l.qty);});
-    agg[key]=(agg[key]||0)+t;
-  });
-  const top=Object.entries(agg).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  if(!top.length)return card('Sonuç — '+esc(P.lbl),'<p class="ka-p">Bu dönemde '+({urun:'ürün',musteri:'müşteri',bayi:'bayi bağlantılı',danisman:'danışman bağlantılı',il:'il bilgisi olan'})[tip]+' satışı bulunamadı.</p>');
-  const toplam=Object.values(agg).reduce((s,v)=>s+v,0);
+  const P=parsePeriod(q);
   const baslik={urun:'En Çok Satan Ürünler',musteri:'En Çok Alan Müşteriler',bayi:'En Yüksek Hacimli Bayiler',danisman:'En Yüksek Hacimli Danışmanlar',il:'En Çok Satış Yapılan İller'}[tip];
-  const rows=top.map(([k,v],i)=>`<tr><td><b>${i+1}.</b></td><td><b>${esc(k)}</b></td><td class="n">${fmtTon(v)} t</td><td class="n">${toplam?('%'+Math.round(v/toplam*100)):''}</td></tr>`).join('');
-  return card(baslik+' — '+esc(P.lbl),
-    table([{t:''},{t:tip==='urun'?'Ürün':'Ad'},{t:'Tonaj',n:1},{t:'Pay',n:1}],rows)+
-    `<div class="ka-note">Sıralama ton bazlıdır · iptal siparişler hariç.</div>`);
+  // bayi/danışman yalnız TMR'de var
+  const dss=(tip==='bayi'||tip==='danisman')?datasets().filter(d=>d.src==='tmr'):datasets();
+  return dss.map(ds=>{
+    const os=donemFiltre(ds.orders,P);if(!os.length)return '';
+    const agg={};
+    os.forEach(o=>{
+      if(tip==='urun'){(o.lines||[]).forEach(l=>{if(l.code)agg[l.code]=(agg[l.code]||0)+(ds.src==='yem'?(+l.qty||0)*yemKg(l.code)/1000:tonOf(l.code,l.qty));});return;}
+      let key=null,t=ds.ton(o);
+      if(tip==='musteri')key=o.customer||'—';
+      if(tip==='bayi'){const b=ordBayi(o);key=b?b.name:null;}
+      if(tip==='danisman'){const d2=ordDanisman(o);key=d2?d2.name:null;}
+      if(tip==='il')key=ds.custCity(o)||null;
+      if(key)agg[key]=(agg[key]||0)+t;
+    });
+    const top=Object.entries(agg).sort((a,b)=>b[1]-a[1]).slice(0,5);if(!top.length)return '';
+    const toplam=Object.values(agg).reduce((s,v)=>s+v,0);
+    const rows=top.map(([k,v],i)=>`<tr><td><b>${i+1}.</b></td><td><b>${esc(k)}</b></td><td class="n">${fmtTon(v)} t</td><td class="n">${toplam?('%'+Math.round(v/toplam*100)):''}</td></tr>`).join('');
+    return card(baslik+' — '+esc(P.lbl)+' '+srcBadge(ds.src),
+      table([{t:''},{t:tip==='urun'?'Ürün':(tip==='il'?'İl':'Ad')},{t:'Tonaj',n:1},{t:'Pay',n:1}],rows)+
+      `<div class="ka-note">Sıralama ton bazlıdır · iptal siparişler hariç.</div>`);
+  }).filter(Boolean).join('')||null;
 }
-// "Ciro / toplam satış tutarı"
-function ansCiro(q){
+
+// ---- Bu ay / geçen ay karşılaştırma (TMR + Yem) ----
+function ansKiyas(q){
   const n=norm(q);
-  if(!/ciro|satis tutari|toplam satis|kac tl.*sat|kac lira.*sat/.test(n))return null;
-  const P=parsePeriod(q);const os=donemOrders(P);
-  if(!os.length)return veriYokKart(P);
-  const ciro=os.reduce((s,o)=>s+(+o.total||0),0);const oz=tonajOzet(os);
-  return card('Satış Cirosu — '+esc(P.lbl),
-    row('Toplam Ciro',`<span class="ka-big">${fmtTL(ciro)}</span>`)+
-    row('Sipariş',oz.adet+' adet')+row('Tonaj',fmtTon(oz.ton)+' t')+
-    row('Ortalama Sipariş',oz.adet?fmtTL(ciro/oz.adet):'—')+
-    `<div class="ka-note">Sipariş satış tutarları toplamıdır (iptal hariç). Kasa/tahsilat bilgisi muhasebe modülündedir ve aramaya kapalıdır.</div>`);
+  if(!/gore|karsilastir|kiyasla|fark|artis|dusus/.test(n))return null;
+  if(!/ton|satis|sat|ciro|uret/.test(n))return null;
+  const now=new Date();
+  const bu={tip:'ay',yil:String(now.getFullYear()),ay:String(now.getMonth()+1).padStart(2,'0'),lbl:AYLAR_TR[now.getMonth()]+' '+now.getFullYear()};
+  const g=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const on={tip:'ay',yil:String(g.getFullYear()),ay:String(g.getMonth()+1).padStart(2,'0'),lbl:AYLAR_TR[g.getMonth()]+' '+g.getFullYear()};
+  const pct=(x,y)=>y?Math.round((x-y)/y*100):null;const ok=v=>v==null?'—':(v>=0?'+':'')+v+'%';
+  return datasets().map(ds=>{
+    const oa=donemFiltre(ds.orders,bu),ob=donemFiltre(ds.orders,on);
+    if(!oa.length&&!ob.length)return '';
+    const ta=oa.reduce((s,o)=>s+ds.ton(o),0),tb=ob.reduce((s,o)=>s+ds.ton(o),0);
+    const ca=oa.reduce((s,o)=>s+ds.total(o),0),cb=ob.reduce((s,o)=>s+ds.total(o),0);
+    return card('Karşılaştırma — '+esc(bu.lbl)+' / '+esc(on.lbl)+' '+srcBadge(ds.src),
+      row('Tonaj',fmtTon(ta)+' t / '+fmtTon(tb)+' t · <b style="color:'+((ta>=tb)?'#15803d':'#B91C1C')+'">'+ok(pct(ta,tb))+'</b>')+
+      row('Sipariş',oa.length+' / '+ob.length)+
+      row('Ciro',fmtTL(ca)+' / '+fmtTL(cb)+' · <b style="color:'+((ca>=cb)?'#15803d':'#B91C1C')+'">'+ok(pct(ca,cb))+'</b>')+
+      `<div class="ka-note">İçinde bulunulan ay tamamlanmadığı için fark ay sonuna kadar değişir.</div>`);
+  }).filter(Boolean).join('')||null;
 }
-// "Kaç müşterimiz var" — müşteri envanteri
+
+// ---- Tonaj hedefi (TMR) ----
+function ansHedef(q){
+  if(!norm(q).includes('hedef'))return null;
+  const H=(D().meta&&D().meta.tonajHedef)||{};const yil=String(new Date().getFullYear());
+  const os=D().orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===yil);
+  const byM={};os.forEach(o=>{const m=o.date.slice(5,7);byM[m]=(byM[m]||0)+tmrTon(o);});
+  const rows=AYLAR_TR.map((ad,i)=>{const k=yil+'-'+String(i+1).padStart(2,'0');const hv=+H[k]||0,g=byM[String(i+1).padStart(2,'0')]||0;if(!hv&&!g)return '';return `<tr><td>${ad}</td><td class="n">${hv?fmtTon(hv):'—'}</td><td class="n">${g?fmtTon(g):'—'}</td><td class="n" style="font-weight:700">${hv?('%'+Math.round(g/hv*100)):'—'}</td></tr>`;}).join('');
+  if(!rows)return card('Tonaj Hedefleri — '+yil,`<p class="ka-p">Henüz aylık ton hedefi girilmemiş. Hedefler <a class="ka-link" href="siparis-takip/#raporlar">Sipariş Takip → Raporlar → Tonaj &amp; Hedef</a> ekranından girilir.</p>`);
+  return card('Tonaj Hedefleri — '+yil+' '+srcBadge('tmr'),table([{t:'Ay'},{t:'Hedef (t)',n:1},{t:'Gerçekleşen (t)',n:1},{t:'Oran',n:1}],rows)+`<a class="ka-link" href="siparis-takip/#raporlar">Tonaj &amp; Hedef raporunu aç →</a>`);
+}
+
+// ---- Plasiyer performansı (Yem plasiyerleri) ----
+function ansPlasiyerPerf(q){
+  const n=norm(q);const kw=/plasiyer|saha temsilci|saha satis/.test(n);const qt=tokensOf(q);
+  const mt=bestMatch(D().yemPlasiyerler,p=>p.name,qt.filter(t=>!/plasiyer|saha/.test(t)),kw?1:2);
+  if(!kw&&!(mt&&mt.score>=2))return null;   // anahtar kelime YA DA güçlü plasiyer-adı eşleşmesi
+  const P=parsePeriod(q),os=donemFiltre(D().yemOrders,P);
+  const agg={};
+  os.forEach(o=>{const pl=yemOrdPlasiyer(o);const key=pl?pl.id:'_merkez';const g=agg[key]||(agg[key]={ad:pl?pl.name:'Plasiyersiz (merkez)',ton:0,ciro:0,adet:0,mus:new Set()});g.ton+=yemTon(o);g.ciro+=yemTotal(o);g.adet++;if(o.customerId)g.mus.add(o.customerId);});
+  const list=Object.values(agg).map(g=>({...g,mus:g.mus.size})).sort((a,b)=>b.ciro-a.ciro);
+  if(!list.length)return null;
+  if(mt){const g=agg[mt.item.id];if(g)return card('Plasiyer — '+esc(mt.item.name)+' ('+esc(P.lbl)+') '+srcBadge('yem'),
+    row('Tonaj',`<span class="ka-big">${fmtTon(g.ton)} t</span>`)+row('Ciro',fmtTL(g.ciro))+row('Sipariş',g.adet+' adet')+row('Müşteri',g.mus.size+' müşteri')+
+    `<a class="ka-link" href="yem/#raporlar">Plasiyer Raporu →</a>`);}
+  const rows=list.map((g,i)=>`<tr><td><b>${i+1}.</b></td><td><b>${esc(g.ad)}</b></td><td class="n">${g.mus}</td><td class="n">${g.adet}</td><td class="n">${fmtTon(g.ton)} t</td><td class="n" style="font-weight:700">${fmtTL(g.ciro)}</td></tr>`).join('');
+  return card('Plasiyer Performansı — '+esc(P.lbl)+' '+srcBadge('yem'),table([{t:''},{t:'Plasiyer'},{t:'Müşteri',n:1},{t:'Sipariş',n:1},{t:'Tonaj',n:1},{t:'Ciro',n:1}],rows)+`<a class="ka-link" href="yem/#raporlar">Plasiyer Raporu →</a>`);
+}
+
+// ---- Ürün fiyatı: TMR ----
+function ansUrun(q){
+  const nq=bare(q);
+  let hits=D().products.filter(p=>p.active!==false&&nq.includes(bare(p.code)));
+  hits.sort((a,b)=>b.code.length-a.code.length);
+  hits=hits.filter(p=>!hits.some(o=>o!==p&&bare(o.code).includes(bare(p.code))));
+  if(!hits.length)return null;
+  const pl=activePL();
+  return hits.slice(0,3).map(p=>{
+    const bayiNot=/bayi/.test(norm(q))?`<div class="ka-note">Bayi alış fiyatı = Fabrika × (1 − bayi iskontosu). Örn. %3 iskontolu: ${fmtN((+p.fabrika||0)*0.97)} ₺</div>`:'';
+    return card('Ürün Fiyatı — '+esc(p.code)+' ('+esc(p.pkg||'25 kg')+') '+srcBadge('tmr'),
+      row('Fabrika Teslim',fmtN(p.fabrika)+' ₺')+row('Yakın Bayi Satış',fmtN(p.yakin)+' ₺')+row('Uzak Bayi Satış',fmtN(p.uzak)+' ₺')+
+      (p.danismanListe?row('Danışman Liste (Torbalı)',fmtN(p.danismanListe)+' ₺'):'')+
+      bayiNot+`<div class="ka-note">Güncel tarife: ${esc(D().meta.priceDate||(pl?fmtDate(pl.date):'—'))}</div>`);
+  }).join('');
+}
+// ---- Ürün fiyatı: YEM (vade bazlı çuval/birim fiyatı) ----
+function ansYemUrun(q){
+  const nq=bare(q);
+  let hits=D().yemProducts.filter(p=>p.active!==false&&bare(p.code)&&nq.includes(bare(p.code)));
+  hits.sort((a,b)=>b.code.length-a.code.length);
+  hits=hits.filter(p=>!hits.some(o=>o!==p&&bare(o.code).includes(bare(p.code))));
+  if(!hits.length)return null;
+  const VLBL={pesin:'Peşin','15':'15 gün','30':'30 gün','45':'45 gün','60':'60 gün','90':'90 gün'};
+  return hits.slice(0,3).map(p=>{
+    const cv=p.cuval||{},br=p.birim||{};
+    let body='';
+    const vd=['pesin','15','30','45','60','90'].filter(v=>(cv[v]!=null&&cv[v]!=='')||(br[v]!=null&&br[v]!==''));
+    if(vd.length){body+=`<div class="ka-sub">Vade fiyatları (çuval / ${esc(p.pkg||'')})</div>`;
+      vd.forEach(v=>{const c=(cv[v]!=null&&cv[v]!=='')?+cv[v]:((br[v]!=null&&br[v]!=='')?(+br[v]*(+p.kg||1)):null);if(c!=null)body+=row(VLBL[v]||v,fmtN(c)+' ₺');});
+    } else body+=`<p class="ka-p">Bu ürün için sabit vade fiyatı tanımlı değil (elle girilir${p.kanatli?' · kanatlı':''}).</p>`;
+    return card('Yem Ürün Fiyatı — '+esc(p.code)+' ('+esc(p.pkg||'')+') '+srcBadge('yem'),
+      body+`<div class="ka-note">Müşteriye göre iskonto/nakliye/hammaliye ayrıca uygulanır · tarife: ${esc(D().yemMeta.fiyatTarihi||'—')} · <a href="yem/#urunler">Yem ürünleri</a></div>`);
+  }).join('');
+}
+
+// ---- Kaç müşteri (TMR + Yem) ----
 function ansKacMusteri(q){
   const n=norm(q);
-  if(!/kac (tane )?musteri|musteri sayisi|toplam musteri|kac firma/.test(n))return null;
-  const cs=D().customers;
-  const bayili=cs.filter(c=>c.bayiId).length,danli=cs.filter(c=>!c.bayiId&&c.danismanId).length;
-  const iller={};cs.forEach(c=>{if(c.city)iller[c.city]=(iller[c.city]||0)+1;});
-  const topIl=Object.entries(iller).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  return card('Müşteri Envanteri',
-    row('Toplam Müşteri',`<span class="ka-big">${cs.length}</span>`)+
-    row('Bayiye bağlı',bayili)+row('Danışmana bağlı',danli)+row('Fabrika (direkt)',cs.length-bayili-danli)+
-    (topIl.length?`<div class="ka-sub">En çok müşteri olan iller</div>`+topIl.map(([il,adet])=>row(il,adet+' müşteri')).join(''):'')+
-    `<a class="ka-link" href="siparis-takip/#musteriler">Müşteri listesini aç</a>`);
+  if(!/kac (tane )?musteri|musteri sayisi|toplam musteri|kac firma|musteri envanter/.test(n))return null;
+  return datasets().map(ds=>{
+    const cs=ds.custs.filter(c=>!c.arsiv);const iller={};cs.forEach(c=>{if(c.city)iller[c.city]=(iller[c.city]||0)+1;});
+    const topIl=Object.entries(iller).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const bayili=ds.src==='tmr'?cs.filter(c=>c.bayiId).length:0,danli=ds.src==='tmr'?cs.filter(c=>!c.bayiId&&c.danismanId).length:0;
+    return card('Müşteri Envanteri '+srcBadge(ds.src),
+      row('Toplam Müşteri',`<span class="ka-big">${cs.length}</span>`)+
+      (ds.src==='tmr'?row('Bayiye bağlı',bayili)+row('Danışmana bağlı',danli)+row('Fabrika (direkt)',cs.length-bayili-danli):'')+
+      (topIl.length?`<div class="ka-sub">En çok müşteri olan iller</div>`+topIl.map(([il,adet])=>row(il,adet+' müşteri')).join(''):'')+
+      `<a class="ka-link" href="${ds.src==='yem'?'yem/#musteriler':'siparis-takip/#musteriler'}">Müşteri listesini aç →</a>`);
+  }).join('')||null;
 }
-// "[bayi/danışman] müşterileri" ve "[il]'deki müşteriler"
-function ansAtanmisMusteriler(q){
-  const n=norm(q);
-  if(!/musteri/.test(n))return null;
+
+// ---- ŞEHİR MODU: bir il yazılınca o ildeki HER ŞEY (çok bölüm) ----
+function ansSehir(q){
+  const hits=sehirEslesme(q);if(!hits.length)return [];
   const qt=tokensOf(q);
-  const mt=bestMatch(D().koms,k=>k.name,qt);
-  if(mt){
-    const k=mt.item;
-    const list=D().customers.filter(c=>k.type==='bayi'?c.bayiId===k.id:c.danismanId===k.id);
+  // şehir dışında güçlü bir isim eşleşmesi varsa (ör. "afyonlu ahmet") şehir modunu bastırma
+  const c=hits[0];const cadd=(x)=>norm(x||'').includes(c.nn);
+  const out=[];
+  // Müşteriler (TMR + Yem)
+  [['tmr','TMR',D().customers,'siparis-takip/#musteriler'],['yem','Yem',D().yemCustomers,'yem/#musteriler']].forEach(([src,lbl,list,href])=>{
+    const ms=list.filter(m=>!m.arsiv&&cadd(m.city));if(!ms.length)return;
+    const rows=ms.slice(0,25).map(m=>`<tr><td><b>${esc(m.name)}</b></td><td>${telLink(m.phone)}</td><td>${mapsLink(m)}</td></tr>`).join('');
+    out.push(card(esc(c.ad)+' Müşterileri ('+ms.length+') '+srcBadge(src),
+      table([{t:'Müşteri'},{t:'Telefon'},{t:'Adres'}],rows)+(ms.length>25?`<div class="ka-note">İlk 25 gösterildi · <a href="${href}">tümü</a></div>`:'')));
+  });
+  // Bayiler + Danışmanlar (TMR / saha)
+  [['bayi','Bayiler'],['danisman','Danışmanlar']].forEach(([tip,bas])=>{
+    const ks=D().koms.filter(k=>k.type===tip&&k.active!==false&&cadd(k.city));if(!ks.length)return;
+    const rows=ks.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${telLink(k.phone)}</td><td>${mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city})}</td>${tip==='bayi'?`<td class="n">%${fmtN(k.rate||0)}</td>`:''}</tr>`).join('');
+    out.push(card(esc(c.ad)+' — '+bas+' ('+ks.length+')',
+      table(tip==='bayi'?[{t:'Ad'},{t:'Telefon'},{t:'Adres'},{t:'İskonto',n:1}]:[{t:'Ad'},{t:'Telefon'},{t:'Adres'}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç →</a>`));
+  });
+  // Şehir satış özeti (TMR + Yem)
+  const P=parsePeriod(q);
+  datasets().forEach(ds=>{
+    const os=donemFiltre(ds.orders,P).filter(o=>cadd(ds.custCity(o)));if(!os.length)return;
+    let ton=0,ciro=0;os.forEach(o=>{ton+=ds.ton(o);ciro+=ds.total(o);});
+    out.push(card(esc(c.ad)+' Satış Özeti — '+esc(P.lbl)+' '+srcBadge(ds.src),
+      row('Tonaj',`<span class="ka-big">${fmtTon(ton)} t</span>`)+row('Ciro',fmtTL(ciro))+row('Sipariş',os.length+' adet')));
+  });
+  return out;
+}
+
+// ---- Bayi/danışmana atanmış müşteriler + il müşterileri ----
+function ansAtanmisMusteriler(q){
+  const n=norm(q);if(!/musteri/.test(n))return null;
+  const qt=tokensOf(q);const mt=bestMatch(D().koms,k=>k.name,qt);
+  if(mt){const k=mt.item;const list=D().customers.filter(c=>k.type==='bayi'?c.bayiId===k.id:c.danismanId===k.id);
     const rows=list.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.city||'—')}</td><td>${telLink(c.phone)}</td></tr>`).join('');
     return card((k.type==='bayi'?'Bayi':'Danışman')+' Müşterileri — '+esc(k.name)+' ('+list.length+')',
-      rows?table([{t:'Müşteri'},{t:'İl'},{t:'Telefon'}],rows):'<p class="ka-p">Bu '+(k.type==='bayi'?'bayiye':'danışmana')+' atanmış müşteri yok.</p>');
-  }
-  // il eşleşmesi
-  const ilHit=qt.find(t=>t.length>=4&&D().customers.some(c=>norm(c.city||'').includes(t)));
-  if(ilHit){
-    const list=D().customers.filter(c=>norm(c.city||'').includes(ilHit));
-    if(list.length){
-      const rows=list.slice(0,25).map(c=>`<tr><td><b>${esc(c.name)}</b></td><td>${telLink(c.phone)}</td><td>${mapsLink(c)}</td></tr>`).join('');
-      return card('Müşteriler — '+esc(list[0].city)+' ('+list.length+')',table([{t:'Müşteri'},{t:'Telefon'},{t:'Adres'}],rows));
-    }
+      rows?table([{t:'Müşteri'},{t:'İl'},{t:'Telefon'}],rows):'<p class="ka-p">Bu '+(k.type==='bayi'?'bayiye':'danışmana')+' atanmış müşteri yok.</p>');}
+  return null;
+}
+
+// ---- Bayi / Danışman detay ----
+function ansBayiDanisman(q){
+  const n=norm(q);if(!/bayi|danisman/.test(n))return null;
+  const tip=/danisman/.test(n)?'danisman':'bayi';
+  const list=D().koms.filter(k=>k.type===tip&&k.active!==false);const qt=tokensOf(q);
+  const mt=bestMatch(list,k=>k.name,qt);
+  if(mt){const k=mt.item;const dan=k.danismanId?komById(k.danismanId):null;
+    const musSay=D().customers.filter(c=>tip==='bayi'?c.bayiId===k.id:c.danismanId===k.id).length;
+    return card((tip==='bayi'?'Bayi':'Teknik Danışman')+' — '+esc(k.name),
+      row('Şehir',esc(k.city||'—'))+row('Telefon',telLink(k.phone))+row('Adres',mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city}))+
+      (tip==='bayi'?row('İskonto Oranı','%'+fmtN(k.rate||0)):'')+(dan?row('Bağlı Danışman',esc(dan.name)):'')+row('Atanmış Müşteri',musSay+' müşteri')+
+      `<a class="ka-link" href="saha/">Saha modülünde aç →</a>`);}
+  if(/kimler|listesi|hepsi|tum|kac (tane )?bayi|kac (tane )?danisman/.test(n)||qt.length<=1){
+    const rows=list.slice(0,30).map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${esc(k.city||'—')}</td><td>${esc(k.phone||'—')}</td></tr>`).join('');
+    return card((tip==='bayi'?'Bayiler':'Danışmanlar')+' ('+list.length+')',table([{t:'Ad'},{t:'Şehir'},{t:'Telefon'}],rows)+`<a class="ka-link" href="saha/">Saha modülünde aç →</a>`);
   }
   return null;
 }
-// ============ İK SORULARI (veri girildikçe zenginleşir) ============
-function ikYok(baslik){return card(baslik,'<p class="ka-p">İK modülünde henüz bu veriler girilmemiş. Kayıtlar eklendikçe bu soru otomatik cevaplanır. <a class="ka-link" href="hr/">İK modülünü aç</a></p>');}
-// Avanslar: tutar / taksit / kalan
-function avansAylik(a){return (+a.tutar||0)/Math.max(1,+a.taksit||1);}
-function avansAylarL(a){const out=[];if(!a.baslangicAy)return out;let[y,m]=a.baslangicAy.split('-').map(Number);for(let i=0;i<(+a.taksit||1);i++){out.push(y+'-'+String(m).padStart(2,'0'));m++;if(m>12){m=1;y++;}}return out;}
-function avansKalanH(a){const ref=new Date().toISOString().slice(0,7);const kes=avansAylarL(a).filter(ym=>ym<=ref).length*avansAylik(a);return Math.max(0,(+a.tutar||0)-Math.min(+a.tutar||0,kes));}
+
+// ---- Müşteri detay (TMR + Yem) ----
+function ansMusteri(q){
+  const qt=tokensOf(q);if(!qt.length)return null;const minS=Math.min(2,qt.filter(t=>t.length>=3).length)||1;
+  const out=[];
+  const mt=bestMatch(D().customers,c=>c.name,qt,minS);
+  if(mt&&mt.score>=minS){const c=mt.item;const os=D().orders.filter(o=>o.customerId===c.id);
+    const son=os.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+    const bayi=c.bayiId?komById(c.bayiId):null,dan=c.danismanId?komById(c.danismanId):null;
+    out.push(card('Müşteri — '+esc(c.name)+(c.arsiv?' <span class="ka-src" style="background:#eef2f7;color:#8aa0b8">ARŞİV</span>':'')+' '+srcBadge('tmr'),
+      row('Telefon',telLink(c.phone))+row('Adres',mapsLink(c))+row('Şehir',esc(c.city||'—'))+(c.firma?row('Firma',esc(c.firma)):'')+
+      (bayi?row('Bayisi',esc(bayi.name)):'')+(dan?row('Danışmanı',esc(dan.name)):'')+(!bayi&&!dan?row('Bağlantı','Fabrika (direkt)'):'')+
+      row('Sipariş Sayısı',os.length+(c.orderCount?' (+'+c.orderCount+' arşiv)':''))+(son?row('Son Sipariş',fmtDate(son.date)+' · #'+son.no):'')+
+      `<a class="ka-link" href="siparis-takip/#musteriler">Müşteriler sayfasında aç →</a>`));}
+  const my=bestMatch(D().yemCustomers,c=>c.name,qt,minS);
+  if(my&&my.score>=minS){const c=my.item;const os=D().yemOrders.filter(o=>o.customerId===c.id);
+    const son=os.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];const pl=c.plasiyerId?yemPlasById(c.plasiyerId):null;
+    out.push(card('Müşteri — '+esc(c.name)+' '+srcBadge('yem'),
+      row('Telefon',telLink(c.phone))+row('Adres',mapsLink(c))+row('Şehir / İlçe',esc([c.city,c.ilce].filter(Boolean).join(' / ')||'—'))+
+      (c.grup?row('Grup',esc(c.grup)):'')+(pl?row('Plasiyeri',esc(pl.name)):'')+
+      (c.iskonto?row('İskonto','%'+fmtN(c.iskonto)+(c.iskontoTL?' + '+fmtN(c.iskontoTL)+' ₺/çuval':'')):'')+
+      row('Sipariş Sayısı',os.length+' adet')+(son?row('Son Sipariş',fmtDate(son.date)+' · #Y'+son.no):'')+
+      `<a class="ka-link" href="yem/#musteriler">Yem müşterileri →</a>`));}
+  return out.length?out.join(''):null;
+}
+
+// ---- Personel ----
+function ansPersonel(q){
+  const ps=D().personeller;if(!ps.length)return null;
+  const mt=bestMatch(ps,p=>p.ad,tokensOf(q),2);if(!mt)return null;
+  const p=mt.item;const s=izinOzet(p,new Date().getFullYear());
+  return card('Personel — '+esc(p.ad),
+    row('Görev',esc(p.gorev||'—'))+row('Departman',esc(p.departman||'—'))+row('Telefon',esc(p.telefon||'—'))+row('İşe Giriş',fmtDate(p.iseGiris))+row('Kalan Yıllık İzin',s.kalan+' gün')+
+    `<div class="ka-note">Ücret ve mali bilgiler aramaya kapalıdır.</div><a class="ka-link" href="hr/">İK modülünde aç →</a>`);
+}
+function ansIzin(q){
+  const n=norm(q);if(!n.includes('izin')&&!n.includes('izn'))return null;
+  const yil=new Date().getFullYear();const ps=D().personeller.filter(p=>(p.durum||'aktif')!=='ayrildi');
+  if(!ps.length)return card('Yıllık İzin',`<p class="ka-p">İK modülünde henüz personel kaydı yok. <a class="ka-link" href="hr/">İK modülünü aç</a></p>`);
+  const mt=bestMatch(ps,p=>p.ad,tokensOf(q));
+  if(mt){const p=mt.item,s=izinOzet(p,yil);
+    return card('Yıllık İzin — '+esc(p.ad)+' ('+yil+')',
+      row('Devir',s.devir+' gün')+row('Hak Ediş',s.hak+' gün')+row('Kullanılan',s.kullanilan+' gün')+
+      row('Kalan',`<span class="ka-big" style="color:${s.kalan<0?'#B91C1C':'#15803d'}">${s.kalan} gün</span>`)+`<a class="ka-link" href="hr/">İK modülünde aç →</a>`);}
+  const rows=ps.map(p=>({p,s:izinOzet(p,yil)})).sort((a,b)=>b.s.kalan-a.s.kalan).map(({p,s})=>`<tr><td>${esc(p.ad)}</td><td class="n">${s.hak+s.devir}</td><td class="n">${s.kullanilan}</td><td class="n" style="font-weight:700;color:${s.kalan<0?'#B91C1C':'#15803d'}">${s.kalan}</td></tr>`).join('');
+  return card('Yıllık İzin Durumu — '+yil,table([{t:'Personel'},{t:'Toplam Hak',n:1},{t:'Kullanılan',n:1},{t:'Kalan',n:1}],rows)+`<a class="ka-link" href="hr/">İK modülünde aç →</a>`);
+}
 function ansAvans(q){
   const n=norm(q);if(!/avans/.test(n))return null;
-  const av=D().avanslar;if(!av.length)return ikYok('Avanslar');
-  const qt=tokensOf(q);
-  const mt=bestMatch(D().personeller,p=>p.ad,qt);
-  const list=mt?av.filter(a=>a.personelId===mt.item.id):av;
+  const av=D().avanslar;if(!av.length)return card('Avanslar','<p class="ka-p">İK modülünde henüz avans kaydı yok. <a class="ka-link" href="hr/">İK modülünü aç</a></p>');
+  const mt=bestMatch(D().personeller,p=>p.ad,tokensOf(q));const list=mt?av.filter(a=>a.personelId===mt.item.id):av;
   const pAd=id=>{const p=D().personeller.find(x=>x.id===id);return p?p.ad:'—';};
-  const rows=list.slice().sort((a,b)=>(b.tarih||'').localeCompare(a.tarih||'')).slice(0,15)
-    .map(a=>`<tr><td><b>${esc(pAd(a.personelId))}</b></td><td>${fmtDate(a.tarih)}</td><td class="n">${fmtTL(a.tutar)}</td><td class="n">${a.taksit||1} ay</td><td class="n" style="font-weight:700">${fmtTL(avansKalanH(a))}</td></tr>`).join('');
+  const rows=list.slice().sort((a,b)=>(b.tarih||'').localeCompare(a.tarih||'')).slice(0,15).map(a=>`<tr><td><b>${esc(pAd(a.personelId))}</b></td><td>${fmtDate(a.tarih)}</td><td class="n">${fmtTL(a.tutar)}</td><td class="n">${a.taksit||1} ay</td><td class="n" style="font-weight:700">${fmtTL(avansKalanH(a))}</td></tr>`).join('');
   const acik=list.reduce((s,a)=>s+avansKalanH(a),0);
-  return card('Avanslar'+(mt?' — '+esc(mt.item.ad):''),
-    row('Açık Avans Bakiyesi',`<span class="ka-big">${fmtTL(acik)}</span>`)+
-    table([{t:'Personel'},{t:'Tarih'},{t:'Tutar',n:1},{t:'Taksit',n:1},{t:'Kalan',n:1}],rows)+
-    `<a class="ka-link" href="hr/">İK modülünde aç</a>`);
+  return card('Avanslar'+(mt?' — '+esc(mt.item.ad):''),row('Açık Avans Bakiyesi',`<span class="ka-big">${fmtTL(acik)}</span>`)+table([{t:'Personel'},{t:'Tarih'},{t:'Tutar',n:1},{t:'Taksit',n:1},{t:'Kalan',n:1}],rows)+`<a class="ka-link" href="hr/">İK modülünde aç →</a>`);
 }
-// Kıdem / İhbar tazminatı (4857): süreler + ücret kayıtlıysa tahmini tutar
-function aylarFarki(iso){const d=new Date(iso);if(isNaN(d))return 0;const n2=new Date();let m=(n2.getFullYear()-d.getFullYear())*12+(n2.getMonth()-d.getMonth());if(n2.getDate()<d.getDate())m--;return Math.max(0,m);}
-function ihbarHaftasi(iseGiris){const ay=aylarFarki(iseGiris);return ay<6?2:(ay<18?4:(ay<36?6:8));}
 function ansTazminat(q){
   const n=norm(q);if(!/kidem|ihbar|tazminat/.test(n))return null;
-  const ps=D().personeller.filter(p=>(p.durum||'aktif')!=='ayrildi');
-  if(!ps.length)return ikYok('Kıdem / İhbar Tazminatı');
+  const ps=D().personeller.filter(p=>(p.durum||'aktif')!=='ayrildi');if(!ps.length)return card('Kıdem / İhbar','<p class="ka-p">İK modülünde henüz personel kaydı yok. <a class="ka-link" href="hr/">İK modülünü aç</a></p>');
   const tavan=+(D().tazminatAyar.kidemTavan)||0;
-  const hesap=p=>{
-    const ay=aylarFarki(p.iseGiris),yil=Math.floor(ay/12),kalanAy=ay%12;
-    const hafta=ihbarHaftasi(p.iseGiris);
-    const brut=+String(p.ucret||'').replace(/[^\d.,]/g,'').replace(',','.')||0;
-    const esas=tavan?Math.min(brut,tavan):brut;
-    const kidemT=brut?esas*(ay/12):0;
-    const ihbarT=brut?(brut/30)*(hafta*7):0;
-    return {ay,yil,kalanAy,hafta,brut,kidemT,ihbarT};
-  };
-  const qt=tokensOf(q);
-  const mt=bestMatch(ps,p=>p.ad,qt);
+  const hesap=p=>{const ay=aylarFarki(p.iseGiris),yil=Math.floor(ay/12),kalanAy=ay%12;const hafta=ihbarHaftasi(p.iseGiris);const brut=+String(p.ucret||'').replace(/[^\d.,]/g,'').replace(',','.')||0;const esas=tavan?Math.min(brut,tavan):brut;return {ay,yil,kalanAy,hafta,brut,kidemT:brut?esas*(ay/12):0,ihbarT:brut?(brut/30)*(hafta*7):0};};
+  const mt=bestMatch(ps,p=>p.ad,tokensOf(q));
   if(mt){const p=mt.item,r=hesap(p);
     return card('Kıdem & İhbar — '+esc(p.ad),
-      row('İşe Giriş',fmtDate(p.iseGiris))+
-      row('Kıdem',(r.yil?r.yil+' yıl ':'')+(r.kalanAy?r.kalanAy+' ay':(r.yil?'':'1 yıldan az')))+
-      row('Yasal İhbar Süresi',r.hafta+' hafta ('+(r.hafta*7)+' gün)')+
-      (r.brut?row('Tahmini Kıdem Tazminatı (brüt)',fmtTL(r.kidemT))+row('Tahmini İhbar Tazminatı (brüt)',fmtTL(r.ihbarT)):'')+
-      `<div class="ka-note">${r.brut?'Kıdem tavanı uygulanmıştır ('+fmtTL(tavan)+'). Tutarlar brüt tahmindir; kesin hesap İK modülünde yapılır.':'Ücret kaydı girilmediği için tutar hesaplanamadı — süreler gösterildi.'} 4857 sayılı İş Kanunu m.17 & 1475 m.14.</div>`+
-      `<a class="ka-link" href="hr/">İK modülünde aç</a>`);}
+      row('İşe Giriş',fmtDate(p.iseGiris))+row('Kıdem',(r.yil?r.yil+' yıl ':'')+(r.kalanAy?r.kalanAy+' ay':(r.yil?'':'1 yıldan az')))+row('Yasal İhbar',r.hafta+' hafta ('+(r.hafta*7)+' gün)')+
+      (r.brut?row('Tahmini Kıdem (brüt)',fmtTL(r.kidemT))+row('Tahmini İhbar (brüt)',fmtTL(r.ihbarT)):'')+
+      `<div class="ka-note">${r.brut?'Kıdem tavanı uygulanmıştır. Tutarlar brüt tahmindir.':'Ücret girilmediği için tutar hesaplanamadı.'} 4857 m.17 & 1475 m.14.</div><a class="ka-link" href="hr/">İK modülünde aç →</a>`);}
   const rows=ps.map(p=>{const r=hesap(p);return `<tr><td><b>${esc(p.ad)}</b></td><td>${fmtDate(p.iseGiris)}</td><td>${r.yil} yıl ${r.kalanAy} ay</td><td class="n">${r.hafta} hafta</td><td class="n">${r.brut?fmtTL(r.kidemT):'—'}</td></tr>`;}).join('');
-  return card('Kıdem & İhbar Özeti',
-    table([{t:'Personel'},{t:'İşe Giriş'},{t:'Kıdem'},{t:'İhbar',n:1},{t:'Tahmini Kıdem Tazm.',n:1}],rows)+
-    `<div class="ka-note">Tutarlar brüt tahmindir (tavan uygulanır); ücret girilmeyenlerde gösterilmez.</div>`);
+  return card('Kıdem & İhbar Özeti',table([{t:'Personel'},{t:'İşe Giriş'},{t:'Kıdem'},{t:'İhbar',n:1},{t:'Tahmini Kıdem',n:1}],rows)+`<div class="ka-note">Tutarlar brüt tahmindir (tavan uygulanır).</div>`);
 }
-// "Kaç personelimiz var"
+function ansKomisyon(q){
+  const n=norm(q);if(!/komisyon|hakedis|hak edis|prim|iskonto/.test(n))return null;
+  const mt=bestMatch(D().koms,k=>k.name,tokensOf(q));
+  if(mt){const k=mt.item;
+    if(k.type==='danisman'){const h=danismanHakedis(k.id);return card('Danışman Hakedişi — '+esc(k.name),row('Hak Edilen (toplam)',fmtTL(h.hak))+row('Ödenen',fmtTL(h.odenen))+row('Kalan Bakiye',`<span class="ka-big" style="color:${h.bakiye>0?'#B91C1C':'#15803d'}">${fmtTL(h.bakiye)}</span>`)+row('Sipariş',h.adet+' adet')+`<div class="ka-note">Prim fatura karşılığı ödenir · <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
+    const yil=new Date().getFullYear();const A=bayiAlimOzet(k.id,yil);
+    return card('Bayi İskonto Raporu — '+esc(k.name)+' ('+yil+')',row('Alım',A.adet+' sipariş · '+fmtTL(A.fatura))+row('Yararlanılan İskonto (%'+fmtN(k.rate||0)+')',`<span class="ka-big" style="color:#B45309">${fmtTL(A.iskonto)}</span>`)+`<div class="ka-sub">Çeyrek kırılımı</div>`+['Ç1 (Oca–Mar)','Ç2 (Nis–Haz)','Ç3 (Tem–Eyl)','Ç4 (Eki–Ara)'].map((cl,i)=>row(cl,fmtTL(A.ceyrek[i]))).join('')+`<div class="ka-note">Bayi iskontosu fatura anında uygulanır; birikme yoktur. <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
+  const ds=D().koms.filter(k=>k.type==='danisman').map(k=>({k,h:danismanHakedis(k.id)})).filter(x=>x.h.adet>0);
+  if(!ds.length)return null;
+  const rows=ds.sort((a,b)=>b.h.bakiye-a.h.bakiye).map(({k,h})=>`<tr><td>${esc(k.name)}</td><td class="n">${fmtTL(h.hak)}</td><td class="n">${fmtTL(h.odenen)}</td><td class="n" style="font-weight:700">${fmtTL(h.bakiye)}</td></tr>`).join('');
+  return card('Danışman Komisyon Bakiyeleri',table([{t:'Danışman'},{t:'Hak Edilen',n:1},{t:'Ödenen',n:1},{t:'Bakiye',n:1}],rows));
+}
 function ansPersonelSayisi(q){
-  const n=norm(q);
-  if(!/kac (tane )?personel|personel sayisi|kac calisan|calisan sayisi/.test(n))return null;
-  const ps=D().personeller;if(!ps.length)return ikYok('Personel');
-  const aktif=ps.filter(p=>(p.durum||'aktif')!=='ayrildi');
-  const dep={};aktif.forEach(p=>{const d2=p.departman||'Belirsiz';dep[d2]=(dep[d2]||0)+1;});
-  return card('Personel',
-    row('Aktif Personel',`<span class="ka-big">${aktif.length}</span>`)+
-    (ps.length>aktif.length?row('Ayrılan',ps.length-aktif.length):'')+
-    Object.entries(dep).sort((a,b)=>b[1]-a[1]).map(([d2,adet])=>row(d2,adet)).join('')+
-    `<a class="ka-link" href="hr/">İK modülünde aç</a>`);
+  const n=norm(q);if(!/kac (tane )?personel|personel sayisi|kac calisan|calisan sayisi/.test(n))return null;
+  const ps=D().personeller;if(!ps.length)return card('Personel','<p class="ka-p">İK modülünde henüz personel kaydı yok. <a class="ka-link" href="hr/">İK modülünü aç</a></p>');
+  const aktif=ps.filter(p=>(p.durum||'aktif')!=='ayrildi');const dep={};aktif.forEach(p=>{const d2=p.departman||'Belirsiz';dep[d2]=(dep[d2]||0)+1;});
+  return card('Personel',row('Aktif Personel',`<span class="ka-big">${aktif.length}</span>`)+(ps.length>aktif.length?row('Ayrılan',ps.length-aktif.length):'')+Object.entries(dep).sort((a,b)=>b[1]-a[1]).map(([d2,adet])=>row(d2,adet)).join('')+`<a class="ka-link" href="hr/">İK modülünde aç →</a>`);
 }
 
+// ---- Serbest çok-varlık arama (fallback) ----
 function ansGenel(q){
-  // serbest arama: tüm varlıklar
-  const qt=tokensOf(q);if(!qt.length)return null;
-  const out=[];
-  const mCust=D().customers.filter(c=>nameScore(c.name,qt)>=1).slice(0,5);
-  const mKom=D().koms.filter(k=>nameScore(k.name,qt)>=1).slice(0,5);
-  const mPer=D().personeller.filter(p=>nameScore(p.ad,qt)>=1).slice(0,5);
-  const nq=norm(q).replace(/[\s-]/g,'');
-  const mProd=D().products.filter(p=>nq.includes(norm(p.code).replace(/[\s-]/g,''))||qt.some(t=>norm(p.code).replace(/[\s-]/g,'').includes(t))).slice(0,5);
-  const li=(tip,ad,ek,href)=>`<tr><td><span class="ka-chip">${tip}</span></td><td><b>${esc(ad)}</b></td><td>${ek||''}</td><td><a class="ka-link" href="${href}">aç</a></td></tr>`;
+  const qt=tokensOf(q);if(!qt.length)return null;const nq=bare(q);
+  const mCust=D().customers.filter(c=>nameScore(c.name,qt)>=1).slice(0,6);
+  const mYCust=D().yemCustomers.filter(c=>nameScore(c.name,qt)>=1).slice(0,6);
+  const mKom=D().koms.filter(k=>k.active!==false&&nameScore(k.name,qt)>=1).slice(0,6);
+  const mPer=D().personeller.filter(p=>nameScore(p.ad,qt)>=1).slice(0,6);
+  const mProd=D().products.filter(p=>p.active!==false&&(nq.includes(bare(p.code))||qt.some(t=>bare(p.code).includes(t)))).slice(0,4);
+  const mYProd=D().yemProducts.filter(p=>p.active!==false&&(nq.includes(bare(p.code))||qt.some(t=>bare(p.code).includes(t)))).slice(0,4);
+  const li=(tip,src,ad,ek,href)=>`<tr><td><span class="ka-chip">${tip}</span></td><td><b>${esc(ad)}</b>${srcBadge(src)}</td><td>${ek||''}</td><td><a class="ka-link" href="${href}">aç</a></td></tr>`;
   let rows='';
-  mCust.forEach(c=>rows+=li('Müşteri',c.name,[telLink(c.phone),mapsLink(c)].filter(x=>x!=='—').join(' · ')||'',
-    'siparis-takip/#musteriler'));
-  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman',k.name,[telLink(k.phone),mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city})].filter(x=>x!=='—').join(' · ')||esc(k.city||''),'saha/'));
-  mPer.forEach(p=>rows+=li('Personel',p.ad,esc(p.gorev||''),'hr/'));
-  mProd.forEach(p=>rows+=li('Ürün',p.code,esc(p.pkg||''),'siparis-takip/#urunler'));
+  mCust.forEach(c=>rows+=li('Müşteri','tmr',c.name,[telLink(c.phone),mapsLink(c)].filter(x=>x!=='—').join(' · ')||'','siparis-takip/#musteriler'));
+  mYCust.forEach(c=>rows+=li('Müşteri','yem',c.name,[telLink(c.phone),esc(c.city||'')].filter(x=>x&&x!=='—').join(' · ')||'','yem/#musteriler'));
+  mKom.forEach(k=>rows+=li(k.type==='bayi'?'Bayi':'Danışman','tmr',k.name,[telLink(k.phone),esc(k.city||'')].filter(x=>x&&x!=='—').join(' · ')||'','saha/'));
+  mPer.forEach(p=>rows+=li('Personel','ik',p.ad,esc(p.gorev||''),'hr/'));
+  mProd.forEach(p=>rows+=li('Ürün','tmr',p.code,esc(p.pkg||''),'siparis-takip/#urunler'));
+  mYProd.forEach(p=>rows+=li('Ürün','yem',p.code,esc(p.pkg||''),'yem/#urunler'));
   if(!rows)return null;
-  return card('Arama Sonuçları',table([{t:''},{t:'Ad'},{t:'Bilgi'},{t:''}],rows));
+  return card('Eşleşen Kayıtlar',table([{t:''},{t:'Ad'},{t:'Bilgi'},{t:''}],rows));
 }
+
 function ansBos(){
   return card('Sonuç Bulunamadı',`<p class="ka-p">Bu soruya karşılık gelen bir veri bulunamadı. Şunları deneyebilirsiniz:</p>
-  <ul class="ka-ul"><li>"En çok satan ürün hangisi?"</li><li>"Bu ay geçen aya göre satış nasıl?"</li><li>"En iyi 5 müşterimiz kim?"</li><li>"[bayi adı] hangi müşterilere bakıyor?"</li><li>"Balıkesir'deki müşteriler"</li><li>"[müşteri adı] bu yıl kaç ton aldı?"</li><li>"Bekleyen siparişler"</li><li>"Bu yıl ciro ne kadar?"</li><li>"[danışman adı] komisyon bakiyesi"</li><li>"Kimin kaç gün izni kaldı?"</li><li>"[personel] kıdem tazminatı"</li><li>"Avans bakiyeleri"</li></ul>`);
+  <ul class="ka-ul"><li>"En çok satan ürün"</li><li>"Bu ay geçen aya göre satış"</li><li>"En iyi 5 müşteri"</li><li>"Afyon" (bir il yazın — o ildeki her şey gelir)</li><li>"[müşteri adı] kaç ton aldı"</li><li>"Bekleyen siparişler"</li><li>"Bu yıl ciro"</li><li>"Plasiyer performansı"</li><li>"[danışman] komisyon bakiyesi"</li><li>"Kimin izni kaldı"</li><li>"[ürün kodu] fiyatı"</li></ul>`);
 }
 
-// ---------- ana akış ----------
+// ============================================================
+//  ORKESTRASYON — çok bölümlü sonuç
+// ============================================================
+function analyze(q){
+  const secs=[];  // {w, h}
+  const push=(w,h)=>{if(h)secs.push({w,h});};
+  push(100, ansSiparis(q));
+  // Raporlar (yüksek değer)
+  push(92, ansDurumSayim(q)); push(92, ansKiyas(q)); push(92, ansEnCok(q)); push(92, ansCiro(q)); push(92, ansTonaj(q));
+  push(90, ansHedef(q)); push(90, ansKomisyon(q)); push(90, ansPlasiyerPerf(q));
+  push(88, ansKacMusteri(q)); push(88, ansPersonelSayisi(q));
+  // İK
+  push(86, ansIzin(q)); push(86, ansAvans(q)); push(86, ansTazminat(q));
+  // Ürün fiyatı
+  push(84, ansUrun(q)); push(84, ansYemUrun(q));
+  // Şehir modu (çok bölüm)
+  ansSehir(q).forEach(h=>push(70,h));
+  // Atanmış müşteriler + varlık detayları
+  push(76, ansAtanmisMusteriler(q));
+  push(74, ansBayiDanisman(q)); push(72, ansMusteri(q)); push(70, ansPersonel(q));
+  // Fallback serbest arama — yalnız hiç özel sonuç yoksa (tekrarı önler)
+  if(secs.length===0) push(30, ansGenel(q));
+  secs.sort((a,b)=>b.w-a.w);
+  // aynı HTML tekrarını ele
+  const seen=new Set();const uniq=secs.filter(s=>{if(seen.has(s.h))return false;seen.add(s.h);return true;});
+  return uniq.map(s=>s.h);
+}
+
+// ---------- yetki + ana arama ----------
+let PROFIL=null;
+async function portalProfil(au){
+  if(PROFIL!==null)return PROFIL;
+  try{const s=await getDoc(doc(db,'apps','portal'));const d=s.exists()?s.data().data:null;const p=d&&d.rota_portal_v1?JSON.parse(d.rota_portal_v1):null;const ad=String(au.email||'').split('@')[0].toLowerCase();PROFIL=(p&&Array.isArray(p.users))?(p.users.find(u=>String(u.username||'').toLowerCase()===ad)||false):false;}catch(e){PROFIL=false;}
+  return PROFIL;
+}
 async function search(q){
-  q=String(q||'').trim();
-  if(!q)return '';
-  if(!(await authReady))return card('Giriş Gerekli','<p class="ka-p">Kurumsal arama yalnızca giriş yapmış kullanıcılara açıktır. Sağ üstten <b>Giriş Yap</b> ile oturum açın.</p>');
+  q=String(q||'').trim();if(!q)return '';
+  const au=await authReady;
+  if(!au)return card('Giriş Gerekli','<p class="ka-p">Kurumsal arama yalnızca giriş yapmış kullanıcılara açıktır. Sağ üstten <b>Giriş Yap</b> ile oturum açın.</p>');
+  const prof=await portalProfil(au);
+  // BEYAZ-LİSTE: arama tüm modülleri (sipariş, yem, İK, saha) tarar; başlık-bazlı filtre yerine
+  // yalnız açıkça yetkilendirilmiş kişiler kullanabilir. Portal Yöneticisi VEYA "Arama" izni.
+  if(!(prof&&(prof.portalYonetici===true||prof.arama===true)))
+    return card('Arama Yetkiniz Yok','<p class="ka-p">Kurumsal arama tüm modüllerdeki verilerde arama yaptığı için yalnızca yetkilendirilmiş kullanıcılara açıktır. Erişim için yöneticinizin <b>Portal → Erişim Yönetimi</b> ekranından hesabınıza <b>Arama</b> iznini vermesi gerekir.</p>');
   if(yasakMi(q))return ansYasak();
   await loadData();
-  // niyet zinciri: özelden genele
-  return ansSiparis(q)||ansDurumSayim(q)||ansKiyas(q)||ansEnCok(q)||ansCiro(q)||ansTonaj(q)||ansIzin(q)||ansAvans(q)||ansTazminat(q)||ansPersonelSayisi(q)||ansHedef(q)||ansKomisyon(q)||ansUrun(q)||ansKacMusteri(q)||ansAtanmisMusteriler(q)||ansBayiDanisman(q)||ansMusteri(q)||ansPersonel(q)||ansGenel(q)||ansBos();
+  const cards=analyze(q);
+  if(!cards.length)return ansBos();
+  const bilgi=`<div class="ka-hd"><span>${cards.length} sonuç bölümü</span><span>“${esc(q)}”</span></div>`;
+  return bilgi+cards.join('');
 }
 
-// ---------- UI bağlama ----------
+// ---------- autocomplete önerileri ----------
+function suggest(q){
+  q=String(q||'').trim();if(q.length<2||!IDX)return [];
+  const qt=tokensOf(q),qn=norm(q),nq=bare(q);if(!qt.length&&qn.length<2)return [];
+  const scored=[];
+  IDX.forEach(e=>{
+    let sc=0;
+    if(e.nn===qn)sc=100;
+    else if(e.nn.startsWith(qn))sc=80;
+    else if((' '+e.nn).includes(' '+qn))sc=60;                       // kelime başı
+    else if(e.type==='Ürün'&&bare(e.name).includes(nq)&&nq.length>=2)sc=55;
+    else {const ns=nameScore(e.name,qt);if(ns>0)sc=30+ns*8;}
+    if(sc>0)scored.push({e,sc});
+  });
+  // şehir önerileri
+  sehirEslesme(q).forEach(c=>scored.push({e:{type:'İl',src:'',name:c.ad,ek:'ildeki her şey',go:c.ad},sc:70}));
+  scored.sort((a,b)=>b.sc-a.sc||a.e.name.length-b.e.name.length);
+  return uniqBy(scored,x=>x.e.type+'|'+x.e.nn+'|'+x.e.name).slice(0,8).map(x=>x.e);
+}
+
+// ============================================================
+//  UI BAĞLAMA — canlı + autocomplete
+// ============================================================
 const $=id=>document.getElementById(id);
-async function runSearch(){
+let seq=0, acItems=[], acSel=-1, dataPrimed=false;
+
+function hiName(name,q){
+  const qn=norm(q);if(!qn)return esc(name);const nn=norm(name);const i=nn.indexOf(qn.split(' ')[0]||qn);
+  if(i<0)return esc(name);const len=(qn.split(' ')[0]||qn).length;
+  return esc(name.slice(0,i))+'<b>'+esc(name.slice(i,i+len))+'</b>'+esc(name.slice(i+len));
+}
+function renderAC(){
+  const box=$('ka-ac');if(!box)return;
+  if(!acItems.length){box.style.display='none';box.innerHTML='';return;}
+  box.style.display='block';
   const q=$('ka-q').value;
-  const out=$('ka-out');
+  box.innerHTML=acItems.map((e,i)=>`<div class="ka-ac-item${i===acSel?' sel':''}" data-i="${i}">
+    <span class="ka-ac-cat${e.src==='yem'?' yem':''}">${esc(e.type)}</span>
+    <span class="ka-ac-nm">${hiName(e.name,q)}</span>${e.ek?`<span class="ka-ac-ek">${esc(e.ek)}</span>`:''}</div>`).join('')
+    +`<div class="ka-ac-hint">↑↓ gez · Enter ara · Esc kapat</div>`;
+  box.querySelectorAll('.ka-ac-item').forEach(el=>el.addEventListener('mousedown',ev=>{ev.preventDefault();pick(+el.dataset.i);}));
+}
+function pick(i){const e=acItems[i];if(!e)return;$('ka-q').value=e.name;closeAC();runSearch();}
+function closeAC(){acItems=[];acSel=-1;renderAC();}
+
+let araYetki=null;
+async function aramaYetkili(){
+  if(araYetki!==null)return araYetki;
+  const au=await authReady;if(!au){araYetki=false;return false;}
+  try{const prof=await portalProfil(au);araYetki=!!(prof&&(prof.portalYonetici===true||prof.arama===true));}catch(e){araYetki=false;}
+  return araYetki;
+}
+async function primeData(){
+  if(dataPrimed)return;
+  if(!(await aramaYetkili()))return;   // yetkisiz kullanıcı → veri yüklenmez, öneri/autocomplete çıkmaz
+  try{await loadData();dataPrimed=true;refreshAC();}catch(e){}
+}
+function refreshAC(){
+  const q=$('ka-q').value;
+  if(!dataPrimed||q.trim().length<2){closeAC();return;}
+  acItems=suggest(q);acSel=-1;renderAC();
+}
+
+let liveTimer=null;
+async function runSearch(){
+  const q=$('ka-q').value;const out=$('ka-out');const my=++seq;
+  closeAC();
   if(!q.trim()){out.innerHTML='';out.style.display='none';return;}
   out.style.display='block';
-  out.innerHTML='<div class="ka-loading"><span class="ka-spin"></span> Aranıyor…</div>';
-  try{out.innerHTML=(await search(q))+`<button class="ka-close" onclick="this.parentElement.style.display='none'">Kapat</button>`;}
-  catch(e){out.innerHTML='<div class="ka-card ka-red"><div class="ka-card-t">Hata</div><p class="ka-p">Arama sırasında bir sorun oluştu. Lütfen tekrar deneyin.</p></div>';}
+  if(!out.innerHTML)out.innerHTML='<div class="ka-loading"><span class="ka-spin"></span> Aranıyor…</div>';
+  try{
+    const html=await search(q);
+    if(my!==seq)return;                 // eski sonuç — güncel değilse yansıtma
+    out.innerHTML=html+`<button class="ka-close" onclick="this.parentElement.style.display='none'">Kapat</button>`;
+  }catch(e){if(my===seq)out.innerHTML='<div class="ka-card ka-red"><div class="ka-card-t">Hata</div><p class="ka-p">Arama sırasında bir sorun oluştu. Lütfen tekrar deneyin.</p></div>';}
 }
-window.kaAsk=function(s){$('ka-q').value=s;runSearch();};
+function liveInput(){
+  refreshAC();
+  clearTimeout(liveTimer);
+  const q=$('ka-q').value.trim();
+  if(q.length<2){$('ka-out').innerHTML='';$('ka-out').style.display='none';return;}
+  liveTimer=setTimeout(runSearch,260);   // yazdıkça (debounce)
+}
+
+window.kaAsk=function(s){$('ka-q').value=s;closeAC();runSearch();};
 document.addEventListener('DOMContentLoaded',()=>{
   const inp=$('ka-q');if(!inp)return;
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')runSearch();});
-  $('ka-btn').addEventListener('click',runSearch);
+  // autocomplete kutusunu arama çubuğunun altına ekle
+  if(!$('ka-ac')){const ac=document.createElement('div');ac.id='ka-ac';ac.className='ka-ac';ac.style.display='none';const bar=inp.closest('.ka-bar')||inp.parentElement;bar.appendChild(ac);}
+  inp.addEventListener('focus',primeData);
+  inp.addEventListener('input',liveInput);
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'&&acItems.length){e.preventDefault();acSel=(acSel+1)%acItems.length;renderAC();return;}
+    if(e.key==='ArrowUp'&&acItems.length){e.preventDefault();acSel=(acSel-1+acItems.length)%acItems.length;renderAC();return;}
+    if(e.key==='Enter'){e.preventDefault();if(acSel>=0&&acItems[acSel]){pick(acSel);}else{clearTimeout(liveTimer);runSearch();}return;}
+    if(e.key==='Escape'){closeAC();}
+  });
+  document.addEventListener('click',e=>{if(!e.target.closest('.ka-box'))closeAC();});
+  $('ka-btn').addEventListener('click',()=>{clearTimeout(liveTimer);runSearch();});
 });

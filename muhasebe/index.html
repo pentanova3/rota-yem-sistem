@@ -217,9 +217,10 @@ table.cf .pos{color:var(--green-700)}table.cf .neg{color:var(--red-700)}
     <img src="../rota-smi.png" class="logo" alt="Rota SMI" onerror="this.style.display='none'">
     <h1>Mali İşler</h1>
     <div class="sub">Nakit Akış &amp; Finans Yönetimi</div>
-    <input id="gpass" type="password" placeholder="Erişim şifresi" autocomplete="current-password">
+    <input id="gpass" type="password" placeholder="Portal şifreniz" autocomplete="current-password">
     <button onclick="unlock()">Giriş</button>
     <div class="gate-err" id="gerr"></div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.5">Portal hesabınızın şifresiyle doğrulanır. Yalnız muhasebe yetkilisi girebilir.</div>
   </div>
 </div>
 
@@ -246,7 +247,7 @@ table.cf .pos{color:var(--green-700)}table.cf .neg{color:var(--red-700)}
 <script>
 // ============ VERİ ============
 const LSKEY='rota_nakit_v1';
-const GATE_PASS='rota2026';
+// Erişim kapısı artık sabit şifre değil — kullanıcı KENDİ portal şifresiyle Firebase üzerinden yeniden doğrulanır (unlock()).
 const AYLAR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const GUNLER=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
 let DB=null, weekOffset=0, cfChart=null;
@@ -516,8 +517,23 @@ function thisWeek(){weekOffset=0;render();}
 // ============ GİRİŞ KAPISI ============
 function unlock(){
   const p=document.getElementById('gpass').value;
-  if(p===GATE_PASS){sessionStorage.setItem('rota_nakit_ok','1');showApp();}
-  else {document.getElementById('gerr').textContent='Şifre hatalı.';}
+  const gerr=document.getElementById('gerr');gerr.textContent='Doğrulanıyor…';
+  const btn=document.querySelector('#gate button');if(btn)btn.disabled=true;
+  (async function(){
+    try{
+      if(!window.PortalAuth||!PortalAuth.reauth){gerr.textContent='Portal bağlantısı yok — sayfayı yenileyin.';return;}
+      await PortalAuth.reauth(p);                                  // KENDİ portal şifresi, Firebase sunucuda doğrular
+      const lvl=await PortalAuth.level('muhasebe');
+      if(lvl!=='yonetici'){gerr.textContent='Bu modüle erişim yetkiniz yok.';return;}   // yalnız muhasebe yöneticisi
+      sessionStorage.setItem('rota_nakit_ok','1');           // 1. adım (şifre) OK
+      try{await window.__muhOnayReady;}catch(_){}             // onay scripti hazır olsun — onay adımının atlanmasını (yarış) önler
+      (window.__muhProceed||showApp)();                      // 2. adım: gerekliyse Telegram onayı, değilse doğrudan aç
+    }catch(e){
+      gerr.textContent=(e&&e.code==='no-session')?'Önce portaldan giriş yapın: rota-yem.web.app'
+        :(e&&e.code==='auth/too-many-requests')?'Çok fazla deneme — bir süre bekleyin.'
+        :'Şifre hatalı.';
+    }finally{if(btn)btn.disabled=false;}
+  })();
 }
 function showApp(){
   document.getElementById('gate').classList.add('hidden');
@@ -526,15 +542,14 @@ function showApp(){
 }
 document.getElementById('gpass').addEventListener('keydown',e=>{if(e.key==='Enter')unlock();});
 window.__reloadMuhasebe=function(){var w=(typeof weekOffset!=='undefined')?weekOffset:0;loadDB();weekOffset=w;if(!document.getElementById('app').classList.contains('hidden'))render();};
-if(sessionStorage.getItem('rota_nakit_ok')==='1')showApp();
-else document.getElementById('gpass').focus();
+document.getElementById('gpass').focus();   // ilk odak; erişim kararını aşağıdaki script verir (reauth → gerekliyse Telegram onayı → aç)
 </script>
 <script src="finans.js"></script>
 <!-- Firebase senkron (apps/muhasebe) - guvenli: son duzenleme zamanina gore -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const fbApp=initializeApp(firebaseConfig),fdb=getFirestore(fbApp),dref=doc(fdb,"apps","muhasebe");
 const __pAuth=getAuth();
@@ -573,10 +588,13 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 })();
 </script>
 <script>
-// ============ PORTAL YETKİ + ÇİFT ONAYLI GİRİŞ ============
-// Portal kuruluysa: yalnızca muhasebe=Yönetici yetkisi olanlar girebilir.
-// Onay alıcıları tanımlıysa her yeni oturumda Telegram'dan giriş onayı istenir.
+// ============ PORTAL YETKİ + SIRALI 2-ADIM GİRİŞ (önce reauth şifresi → sonra Telegram onayı) ============
+// Yalnızca muhasebe=Yönetici girebilir. unlock() reauth ile şifreyi doğrular; SONRA (onay alıcısı
+// tanımlıysa) Telegram giriş onayı istenir. Onay 10 dk kuralıyla oturumda hatırlanır (şifre oturum boyu).
+let __muhReadyResolve; window.__muhOnayReady=new Promise(function(r){__muhReadyResolve=r;});
+window.__muhProceed=function(){var g=document.getElementById('gerr');if(g){g.textContent='Onay sistemi hazırlanamadı — sayfayı yenileyin.';g.style.color='#B91C1C';}};   // FAIL-CLOSED varsayılan: IIFE kurulumu tamamlanmadıysa ekranı AÇMA (onay atlanmasın). Gerçek sürüm aşağıda override eder.
 (async function(){
+ try{
   for(let i=0;i<100&&!window.PortalAuth;i++)await new Promise(r=>setTimeout(r,100));   // bekçi modülü yüklensin
   if(!window.PortalAuth)return;
   let d=null;try{d=await PortalAuth.getData();}catch(e){return;}
@@ -591,7 +609,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     return;
   }
   const M=d.muhasebeOnay||{};const alicilar=M.alicilar||[];const gerekli=Math.min(+M.gerekli||1,alicilar.length||1);
-  if(!alicilar.length)return;                                       // alıcı tanımlı değil → eski şifre geçerli
+  // (onay alıcısı tanımlı değilse __muhProceed aşağıda yalnız şifreyle showApp yapar)
   // ---- Giriş geçmişi (denetim kaydı): kim, ne zaman girdi, ne kadar kaldı (apps/muhasebeLog) ----
   const LKEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
   const LOGURL='https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/apps/muhasebeLog?key='+LKEY;
@@ -626,7 +644,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     const now=Date.now();
     const rows=list.map(function(e){
       const aktif=(now-new Date(e.son).getTime())<150000;
-      const ad=String(e.u||'').replace(/</g,'&lt;');
+      const ad=String(e.u||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       return '<tr><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9"><b style="color:#0C2340">'+ad+'</b></td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap">'+fmt(e.giris)+'</td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap">'+(aktif?'<span style="color:#15803D;font-weight:700">şu an içeride</span>':fmt(e.son))+'</td><td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;font-weight:700;color:#0C2340;white-space:nowrap">'+dur(e.giris,e.son)+'</td></tr>';
     }).join('');
     document.getElementById('muhLogIc').innerHTML=list.length
@@ -644,7 +662,10 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     window.addEventListener('pagehide',function(){beat();logBeat(true);});
     document.addEventListener('visibilitychange',beat);
   }
-  const onayVar=sessionStorage.getItem('rota_muh_onay')==='1';
+  window.__muhProceed=async function(){   // reauth (1. adım) SONRASI çağrılır — sıralı 2. adım (içinde await var → async)
+   if(window.__muhBusy)return; window.__muhBusy=true;   // re-entrancy: unlock ile load-kararı aynı anda çağırsa çift Telegram/timer olmasın (reload'da sıfırlanır)
+   if(!alicilar.length){showApp();return;}   // onaycı tanımlı değil → yalnız şifre yeterli
+   const onayVar=sessionStorage.getItem('rota_muh_onay')==='1';
   const seen=+sessionStorage.getItem('rota_muh_seen')||0;
   const sureAsimi=onayVar&&(!seen||(Date.now()-seen)>ONAY_MS);
   if(onayVar&&!sureAsimi){sessionStorage.setItem('rota_nakit_ok','1');
@@ -654,23 +675,20 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
     if(sessionStorage.getItem('rota_muh_logid'))logBeat();else logStart();
     logButton();return;}
   if(sureAsimi){sessionStorage.removeItem('rota_muh_onay');sessionStorage.removeItem('rota_muh_seen');sessionStorage.removeItem('rota_muh_logid');}
-  // onay gerekli: uygulamayı kapat, gate'i onay ekranına çevir
-  sessionStorage.removeItem('rota_nakit_ok');
+  // onay gerekli: uygulamayı kapat, gate'i onay ekranına çevir (şifre oturumda kalır — 10 dk kuralı yalnız onayı yeniler)
   document.getElementById('app').classList.add('hidden');
   const gate=document.getElementById('gate');gate.classList.remove('hidden');
   gate.innerHTML='<div style="max-width:360px;margin:0 auto;text-align:center;padding:40px 20px">'+(sureAsimi?'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:9px 13px;font-size:12px;color:#92400E;font-weight:600;margin-bottom:14px">Oturum süresi doldu (10 dk) — güvenlik gereği yeniden onay gerekiyor.</div>':'')+'<h1 style="font-size:19px;color:#0C2340;margin-bottom:6px">Giriş Onayı Bekleniyor</h1><div style="font-size:13px;color:#64748B;line-height:1.7;margin-bottom:18px">Güvenlik gereği muhasebe ekranına giriş için onay mesajı gönderildi.<br><b>'+alicilar.map(a=>String(a.ad||a.chatId).replace(/</g,'&lt;')).join('</b> ve <b>')+'</b> Telegram üzerinden onaylayınca ekran açılacak.<br><span style=\'font-size:11px;color:#94A3B8\'>Onay, ekran açık kaldığı sürece geçerlidir; 10 dakikadan uzun ayrılır veya siteyi kapatırsanız yeniden onay istenir.</span>'+(gerekli>1?' (<b>'+gerekli+' kişinin de onayı</b> gerekli)':'')+'</div><div id="mgDurum" style="font-size:13px;font-weight:700;color:#1D62A8">Onay mesajı gönderiliyor…</div><a href="/" style="display:inline-block;margin-top:22px;font-size:12px;color:#64748B">Portala dön</a></div>';
   const st=document.getElementById('mgDurum');
-  // tgToken apps/siparis meta'dan
+  // Telegram gönderimi sunucu ucundan (tgGonder); token istemcide yok
   const KEY='AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8';
   async function fsGet(path){const tk=await PortalAuth.token();const r=await fetch('https://firestore.googleapis.com/v1/projects/rota-yem/databases/(default)/documents/'+path+'?key='+KEY,{headers:tk?{'Authorization':'Bearer '+tk}:{}});return r.ok?r.json():null;}
-  let token='';
-  try{const j=await fsGet('apps/siparis');token=JSON.parse(j.fields.data.mapValue.fields.rota_so_v1.stringValue).meta.tgToken||'';}catch(e){}
-  if(!token){st.textContent='Onay sistemi yapılandırılamadı (bot erişilemedi). Yöneticiye bildirin.';st.style.color='#B91C1C';return;}
+  const TG_URL='https://us-central1-rota-yem.cloudfunctions.net/tgGonder';
+  async function tgProxy(text,buttons,chatId){try{const idt=await PortalAuth.token();if(!idt)return;await fetch(TG_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},body:JSON.stringify({text,buttons,chatId})});}catch(e){}}
   const reqId='mg'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const metin='MUHASEBE GİRİŞ TALEBİ\n\n'+(u.name||u.username)+' ('+u.username+'), Muhasebe & Finans ekranına giriş onayı istiyor.\nTarih: '+new Date().toLocaleString('tr-TR')+'\n\nOnaylıyor musunuz?';
   for(const a of alicilar){
-    try{await fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({chat_id:a.chatId,text:metin,reply_markup:{inline_keyboard:[[{text:'Onayla',callback_data:'mg:ok:'+reqId},{text:'Reddet',callback_data:'mg:no:'+reqId}]]}})});}catch(e){}
+    await tgProxy(metin,[[{text:'Onayla',cb:'mg:ok:'+reqId},{text:'Reddet',cb:'mg:no:'+reqId}]],a.chatId);
   }
   st.textContent='Onay mesajı gönderildi. Bekleniyor…';
   const t0=Date.now();
@@ -686,7 +704,13 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
       st.textContent='Onaylandı — açılıyor…';st.style.color='#15803D';
       setTimeout(function(){location.reload();},700);}
   },2500);
+  };   // __muhProceed sonu
+  // LOAD: reauth bu oturumda geçtiyse (reload/geri dönüş) doğrudan onay-veya-aç; değilse şifre kapısında bekle
+  if(sessionStorage.getItem('rota_nakit_ok')==='1')window.__muhProceed();
+ }finally{if(__muhReadyResolve)__muhReadyResolve();}
 })();
 </script>
+<script defer src="/sifre-goster.js"></script>
+<script defer src="/surum-kontrol.js"></script>
 </body>
 </html>

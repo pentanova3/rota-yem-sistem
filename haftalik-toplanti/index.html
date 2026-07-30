@@ -405,7 +405,7 @@ function nextFri(){const d=new Date(),dy=d.getDay(),df=(5-dy+7)%7||(dy===5?0:7);
 function genNo(){const a=JSON.parse(localStorage.getItem('rota_arc')||'[]');return String(a.length+1).padStart(3,'0')}
 function fmtDate(s){if(!s)return'—';const d=new Date(s),days=['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];return`${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${days[d.getDay()]}`}
 function weekNum(d){const o=new Date(d.getFullYear(),0,1);return Math.ceil(((d-o)/864e5+o.getDay()+1)/7)}
-function esc(s){return(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function isMonthEnd(){const d=(md.meta&&md.meta.date)||nextFri();const dt=new Date(d);if(isNaN(dt))return false;const next=new Date(dt);next.setDate(dt.getDate()+7);return next.getMonth()!==dt.getMonth()}
 function visibleSections(){const me=isMonthEnd();return SECTIONS.filter(s=>!s.monthlyOnly||me)}
 function renderNav(){const visible=visibleSections();if(!visible.find(s=>s.id===cur))cur=visible[0].id;document.getElementById('sNav').innerHTML=visible.map(s=>`<div class="s-nav-item ${s.id===cur?'active':''} ${s.id==='onceki'?'prev-section':''} ${s.monthlyOnly?'monthly-section':''}" onclick="go('${s.id}')"><span class="s-nav-num">${s.num}</span><span>${s.title}${s.monthlyOnly?' <span class="monthly-badge">AY SONU</span>':''}</span></div>`).join('')}
@@ -1299,9 +1299,9 @@ async function downloadReport(){
 <div class="pn-foot">Pentanova · Kurumsal Çözümler</div>
 <!-- Firebase senkron katmanı (cihazlar arası veri) -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
 const DOC_ID="toplanti";
 function isSyncKey(k){return !!k&&(k.indexOf('rota_meeting_')===0||k==='rota_arc'||k.indexOf('rota_plasiyer_')===0||k.indexOf('rota_monthly_')===0||k.indexOf('rota_orders_')===0);}
@@ -1316,7 +1316,16 @@ const _set=localStorage.setItem.bind(localStorage),_rem=localStorage.removeItem.
 localStorage.setItem=function(k,v){_set(k,v);if(!suppress&&!window.__fbSuppress&&isSyncKey(k))schedulePush();};
 localStorage.removeItem=function(k){_rem(k);if(!suppress&&!window.__fbSuppress&&isSyncKey(k))schedulePush();};
 function schedulePush(){clearTimeout(timer);timer=setTimeout(push,900);}
-async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated});fbDot('#16A34A','Senkron');}catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');}}
+async function push(){   // Faz 0.4: yazma doğrudan setDoc yerine yaz() ucundan (kimlik+modül claim sunucuda doğrulanır)
+  if(!__pAuth.currentUser){fbDot('#EF4444','Oturum yok');return;}   // toplanti'de hydrated guard yok → currentUser guard'ı ŞART
+  try{lastUpdated=Date.now();
+    const body=JSON.stringify({app:DOC_ID,data:collectLocal(),updated:lastUpdated});
+    let t=await __pAuth.currentUser.getIdToken();
+    let r=await fetch('https://us-central1-rota-yem.cloudfunctions.net/yaz',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});
+    if(r.status===401||r.status===403){t=await __pAuth.currentUser.getIdToken(true);r=await fetch('https://us-central1-rota-yem.cloudfunctions.net/yaz',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});}   // bayat claim → zorla-yenile + retry
+    if(!r.ok)throw new Error('yaz '+r.status);
+    fbDot('#16A34A','Senkron');
+  }catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');}}
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isSyncKey(k))_set(k,d[k]);});}finally{suppress=false;}}
 let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Figtree,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${c}"></span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M17.5 19a4.5 4.5 0 0 0 0-9h-1.8A7 7 0 1 0 4 16.7"/></svg> ${t}`;}
 (async function(){
@@ -1340,5 +1349,6 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 })();
 </script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
+<script defer src="/surum-kontrol.js"></script>
 </body>
 </html>
