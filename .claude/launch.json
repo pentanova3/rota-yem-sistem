@@ -4,8 +4,36 @@
     {
       "name": "rota",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8777"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8777"
+      ],
       "port": 8777
+    },
+    {
+      "name": "ik-sablon",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8792",
+        "--directory",
+        "/Users/ismailizbudak/Pentanova/ik-demo-sablon/public"
+      ],
+      "port": 8792
+    },
+    {
+      "name": "ik-cokkiraci",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8791",
+        "--directory",
+        "/Users/ismailizbudak/Pentanova/pentanova-ik/public"
+      ],
+      "port": 8791
     }
   ]
 }

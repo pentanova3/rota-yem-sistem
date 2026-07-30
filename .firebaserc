@@ -10,6 +10,9 @@
         ],
         "musteri": [
           "rotasmi-bilgi"
+        ],
+        "bayi": [
+          "rotasmi-bayi"
         ]
       }
     }
