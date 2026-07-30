@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rota SMI · Sızma Provası (iç QA)</title>
+<style>
+  :root{--navy:#0C2340;--blue:#1E3E90;--line:#e2e8f0;--muted:#64748b;--ok:#15803d;--bad:#b91c1c;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,system-ui,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);background:#f1f5f9;color:var(--navy)}
+  .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;line-height:1.5}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  label{display:block;font-size:12px;font-weight:600;color:#334155;margin:8px 0 4px}
+  input{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--font)}
+  .btn{border:none;border-radius:9px;padding:11px 20px;font-size:14px;font-weight:700;font-family:var(--font);color:#fff;background:var(--blue);cursor:pointer}
+  .btn:disabled{opacity:.55;cursor:default}
+  .btn-o{background:#fff;color:var(--blue);border:1.5px solid var(--blue)}
+  .err{color:var(--bad);font-size:12.5px;margin-top:8px;min-height:16px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;padding:7px 8px;border-bottom:2px solid var(--line);color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.04em}
+  td{padding:7px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  .kat{font-size:10.5px;color:#94a3b8;text-transform:uppercase;letter-spacing:.03em}
+  .v-ok{color:var(--ok);font-weight:800;white-space:nowrap}
+  .v-bad{color:var(--bad);font-weight:800;white-space:nowrap}
+  .v-run{color:#94a3b8}
+  .ozet{border-radius:12px;padding:14px 18px;font-weight:700;margin-bottom:14px}
+  .ozet-ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+  .ozet-bad{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  code{background:#f1f5f9;border-radius:5px;padding:1px 5px;font-size:11.5px;color:#334155}
+  .whoami{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sızma Provası</h1>
+  <div class="sub">İç QA aracı — açılış öncesi ve her yeni özellikten sonra çalıştırılır. <b>Bir TEST bayi/danışman hesabıyla</b> giriş yapın; araç, bu hesabın erişmemesi gereken her yeri denemeye çalışır ve her kilidi <b>GEÇTİ (engellendi)</b> / <b>KALDI (açık delik!)</b> olarak raporlar. Canlı veriye zarar vermez (yazma denemeleri çöp belgelere gider).</div>
+
+  <div class="card" id="login-card">
+    <label>Test hesabı kullanıcı adı</label>
+    <input id="u" autocomplete="username" placeholder="ör. testbayi">
+    <label>Şifre</label>
+    <input id="p" type="password" autocomplete="current-password">
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+      <button class="btn" id="go">Giriş & Provayı Başlat</button>
+      <button class="btn btn-o" id="logout" style="display:none">Çıkış</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="whoami" id="whoami"></div>
+  </div>
+
+  <div id="ozet"></div>
+  <div class="card" id="sonuc-card" style="display:none"><div style="overflow:auto"><table id="tbl"><thead><tr><th style="width:34%">Saldırı</th><th>Hedef</th><th>Beklenen</th><th style="width:110px">Sonuç</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "/vendor/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, limit } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
+import { getStorage, ref, getBytes, uploadBytes, listAll, getMetadata, deleteObject } from "/vendor/firebasejs/10.12.0/firebase-storage.js";
+
+const cfg={apiKey:"AIzaSyB-eY1jv-HYfrNxzrhWS9sywLBFQarpLD8",authDomain:"rota-yem.firebaseapp.com",projectId:"rota-yem",storageBucket:"rota-yem.firebasestorage.app",messagingSenderId:"186408871052",appId:"1:186408871052:web:65791c132b2c1b525307a9"};
+const app=initializeApp(cfg), auth=getAuth(app), db=getFirestore(app), st=getStorage(app);
+const EPOSTA_SON='@rota-yem.firebaseapp.com';
+const sifreDolgu=p=>(p&&p.length>=6)?p:String(p)+'.rota';
+const FBASE='https://us-central1-rota-yem.cloudfunctions.net/';
+const $=id=>document.getElementById(id);
+
+// ---- yardımcılar: her saldırı {gecti:bool, detay:string} döndürür (gecti=engellendi=iyi) ----
+async function fsReadDenied(path){   // getDoc → permission-denied beklenir
+  try{ const p=path.split('/'); await getDoc(doc(db,...p)); return {gecti:false,detay:'OKUNDU — AÇIK!'}; }
+  catch(e){ return {gecti:e.code==='permission-denied', detay:e.code||String(e)}; }
+}
+async function fsColReadDenied(col){
+  try{ await getDocs(query(collection(db,col),limit(1))); return {gecti:false,detay:'OKUNDU — AÇIK!'}; }
+  catch(e){ return {gecti:e.code==='permission-denied', detay:e.code||String(e)}; }
+}
+async function fsWriteDenied(path,data){   // setDoc → permission-denied beklenir (ÇÖP belgeye yazar; canlıya değil)
+  try{ const p=path.split('/'); await setDoc(doc(db,...p),data,{merge:true}); return {gecti:false,detay:'YAZILDI — AÇIK!'}; }
+  catch(e){ return {gecti:e.code==='permission-denied', detay:e.code||String(e)}; }
+}
+async function stReadDenied(path){
+  try{ await getBytes(ref(st,path)); return {gecti:false,detay:'OKUNDU — AÇIK!'}; }
+  catch(e){ const c=(e&&e.code)||String(e); return {gecti:/unauthorized|denied|403|unauthenticated/i.test(c), detay:c}; }
+}
+async function stWriteDenied(path){
+  try{ await uploadBytes(ref(st,path), new Blob(['x'])); return {gecti:false,detay:'YÜKLENDİ — AÇIK!'}; }
+  catch(e){ const c=(e&&e.code)||String(e); return {gecti:/unauthorized|denied|403|unauthenticated/i.test(c), detay:c}; }
+}
+async function fnForbidden(uc,body){   // bayi token ile → HTTP 403 beklenir (mutasyondan ÖNCE reddedilir)
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch(FBASE+uc,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(body||{})});
+    return {gecti:r.status===403, detay:'HTTP '+r.status+(r.status===200?' — AÇIK!':'')};
+  }catch(e){ return {gecti:false,detay:'ağ hatası: '+(e.message||e)}; }
+}
+async function fnUnauth(uc,body){   // token YOK → HTTP 401 beklenir
+  try{
+    const r=await fetch(FBASE+uc,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+    return {gecti:r.status===401, detay:'HTTP '+r.status+(r.status===200?' — AÇIK!':'')};
+  }catch(e){ return {gecti:false,detay:'ağ hatası: '+(e.message||e)}; }
+}
+async function fnStatus(uc,body,bekle){   // belirli HTTP kodu beklenir (ör. 400 allowlist reddi)
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch(FBASE+uc,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(body||{})});
+    return {gecti:r.status===bekle||r.status===403, detay:'HTTP '+r.status+(r.status===200?' — AÇIK!':'')};
+  }catch(e){ return {gecti:false,detay:'ağ hatası: '+(e.message||e)}; }
+}
+async function fsDeleteDenied(path){
+  try{ const p=path.split('/'); await deleteDoc(doc(db,...p)); return {gecti:false,detay:'SİLİNDİ — AÇIK!'}; }
+  catch(e){ return {gecti:e.code==='permission-denied', detay:e.code||String(e)}; }
+}
+async function fsUpdateDenied(path){
+  try{ const p=path.split('/'); await updateDoc(doc(db,...p),{_sizma:1}); return {gecti:false,detay:'GÜNCELLENDİ — AÇIK!'}; }
+  catch(e){ return {gecti:e.code==='permission-denied'||e.code==='not-found', detay:e.code||String(e)}; }   // not-found da GEÇTİ: kural izin verse belge yoksa not-found; ama izin yoksa permission-denied önce gelir
+}
+async function stListDenied(prefix){
+  try{ const r=await listAll(ref(st,prefix)); return {gecti:false,detay:'LİSTELENDİ ('+(r.items.length)+' dosya) — AÇIK!'}; }
+  catch(e){ const c=(e&&e.code)||String(e); return {gecti:/unauthorized|denied|403|unauthenticated/i.test(c), detay:c}; }
+}
+async function karsiRolUc(){   // giriş yapan bayi ise danisman ucunu, danışman ise bayi ucunu dener → her ikisi de rol-uyuşmazlığından 403 vermeli
+  try{
+    const idr=await auth.currentUser.getIdTokenResult();
+    const uc=(idr.claims.rol==='danisman')?'bayi':'danisman';
+    return await fnForbidden(uc,{islem:'x'});
+  }catch(e){ return {gecti:false,detay:'test hatası: '+(e.message||e)}; }
+}
+async function webhookForge(){   // secret başlığı YOK → sunucu 403 verir; AMA webhook CORS izni vermez → tarayıcı yanıtı okuyamaz = tarayıcıdan forge EDİLEMEZ (koruma). Secret 403 sunucuda ayrıca doğrulandı.
+  try{
+    const r=await fetch(FBASE+'telegramWebhook',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({callback_query:{id:'1',from:{id:1},message:{chat:{id:1},message_id:1,text:''},data:'confirm:sizmatest'}})});
+    return {gecti:r.status===403, detay:'HTTP '+r.status+(r.status===200?' — AÇIK!':'')};
+  }catch(e){ return {gecti:true,detay:'tarayıcıdan erişilemez (CORS engeli) — forge edilemez; secret 403 sunucuda doğrulandı'}; }
+}
+async function bayiIdEnjeksiyon(){   // GET /bayi'ye sahte bayiId enjekte → yanıt YİNE kendi token'ının bayiId'sini döndürmeli (payload yok sayılır)
+  try{
+    const idr=await auth.currentUser.getIdTokenResult();
+    const benimId=idr.claims.bayiId||idr.claims.danismanId||'';
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch(FBASE+(idr.claims.rol==='danisman'?'danisman':'bayi')+'?bayiId=SAHTE_BASKA_BAYI',
+      {method:'GET',headers:{'Authorization':'Bearer '+t}});
+    if(r.status===401||r.status===403||r.status===428) return {gecti:true, detay:'HTTP '+r.status+' (erişim yok)'};
+    const j=await r.json().catch(()=>({}));
+    const donenId=(j.profil&&(j.profil.bayiId||j.profil.danismanId))||'';
+    const ok=(!benimId)||(donenId===benimId);   // dönen kimlik kendi token'ının kimliği olmalı, enjekte edilen değil
+    return {gecti:ok, detay:ok?('yalnız kendi verisi (id='+donenId+')'):('SAHTE ID VERİ DÖNDÜ! '+donenId)};
+  }catch(e){ return {gecti:false,detay:'test hatası: '+(e.message||e)}; }
+}
+
+// ---- SALDIRI BATARYASI ----
+const ATTACKS=[
+  // Firestore OKUMA — bayi hiçbir iç veriyi okuyamamalı
+  {ad:'Firestore: apps/siparis oku (tüm TMR DB)', kat:'firestore-read', hedef:'apps/siparis', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/siparis')},
+  {ad:'Firestore: apps/yem oku', kat:'firestore-read', hedef:'apps/yem', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/yem')},
+  {ad:'Firestore: apps/muhasebe oku (finans)', kat:'firestore-read', hedef:'apps/muhasebe', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/muhasebe')},
+  {ad:'Firestore: apps/muhasebeLog oku', kat:'firestore-read', hedef:'apps/muhasebeLog', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/muhasebeLog')},
+  {ad:'Firestore: apps/ik oku (KVKK/personel)', kat:'firestore-read', hedef:'apps/ik', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/ik')},
+  {ad:'Firestore: apps/portal oku (kullanıcılar/yetkiler)', kat:'firestore-read', hedef:'apps/portal', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/portal')},
+  {ad:'Firestore: apps/cross oku', kat:'firestore-read', hedef:'apps/cross', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/cross')},
+  {ad:'Firestore: apps/saha oku', kat:'firestore-read', hedef:'apps/saha', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/saha')},
+  {ad:'Firestore: apps/onaylar oku', kat:'firestore-read', hedef:'apps/onaylar', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/onaylar')},
+  {ad:'Firestore: apps/yemonay oku', kat:'firestore-read', hedef:'apps/yemonay', beklenen:'permission-denied', fn:()=>fsReadDenied('apps/yemonay')},
+  {ad:'Firestore: yedekler oku (tüm modül yedekleri)', kat:'firestore-read', hedef:'yedekler/*', beklenen:'permission-denied', fn:()=>fsColReadDenied('yedekler')},
+  {ad:'Firestore: denetim oku (güvenlik günlüğü)', kat:'firestore-read', hedef:'denetim/*', beklenen:'permission-denied', fn:()=>fsColReadDenied('denetim')},
+  {ad:'Firestore: rate oku (hız sayaçları)', kat:'firestore-read', hedef:'rate/*', beklenen:'permission-denied', fn:()=>fsColReadDenied('rate')},
+
+  // Firestore YAZMA — çöp belgeye dener (aynı kural), canlıya değil
+  {ad:'Firestore: apps yaz/ez (DB silme denemesi)', kat:'firestore-write', hedef:'apps/_sizma_test', beklenen:'permission-denied', fn:()=>fsWriteDenied('apps/_sizma_test',{data:{s:1}})},
+  {ad:'Firestore: denetim forge (sahte kayıt)', kat:'firestore-write', hedef:'denetim/_sizma_test', beklenen:'permission-denied', fn:()=>fsWriteDenied('denetim/_sizma_test',{s:1})},
+  {ad:'Firestore: rate sıfırla (limit atlatma)', kat:'firestore-write', hedef:'rate/_sizma_test', beklenen:'permission-denied', fn:()=>fsWriteDenied('rate/_sizma_test',{count:0})},
+  {ad:'Firestore: yedekler yaz/sil', kat:'firestore-write', hedef:'yedekler/_sizma_test', beklenen:'permission-denied', fn:()=>fsWriteDenied('yedekler/_sizma_test',{s:1})},
+  {ad:'Firestore: apps/cross sahte çapraz sipariş', kat:'firestore-write', hedef:'apps/cross', beklenen:'permission-denied', fn:()=>fsWriteDenied('apps/cross',{_sizma:Date.now()})},
+
+  // Storage — yedek/PII yolları
+  {ad:'Storage: yedek/ oku (muhasebe/İK yedeği)', kat:'storage', hedef:'yedek/…/muhasebe.json', beklenen:'unauthorized', fn:()=>stReadDenied('yedek/2000-01-01/muhasebe.json')},
+  {ad:'Storage: rastgele yol yükle', kat:'storage', hedef:'sizma_test/x.txt', beklenen:'unauthorized', fn:()=>stWriteDenied('sizma_test/x.txt')},
+
+  // Cloud Function YETKİ YÜKSELTME — bayi token ile 403 (mutasyondan önce)
+  {ad:'CF: yaz — modül ez (yetki yok)', kat:'function-escalation', hedef:'yaz', beklenen:'HTTP 403', fn:()=>fnForbidden('yaz',{app:'siparis'})},
+  {ad:'CF: yonetim — kullanıcı/yetki yönet', kat:'function-escalation', hedef:'yonetim', beklenen:'HTTP 403', fn:()=>fnForbidden('yonetim',{islem:'durum'})},
+  {ad:'CF: bayiYonetim — hesap aç', kat:'function-escalation', hedef:'bayiYonetim', beklenen:'HTTP 403', fn:()=>fnForbidden('bayiYonetim',{islem:'ac'})},
+  {ad:'CF: yedekYonet — yedek/geri-yükle', kat:'function-escalation', hedef:'yedekYonet', beklenen:'HTTP 403', fn:()=>fnForbidden('yedekYonet',{islem:'yedekle'})},
+  {ad:'CF: tgGonder — Telegram gönder', kat:'function-escalation', hedef:'tgGonder', beklenen:'HTTP 403', fn:()=>fnForbidden('tgGonder',{text:'x'})},
+  {ad:'CF: yemOnayKaydet — üretim onayı forge', kat:'function-escalation', hedef:'yemOnayKaydet', beklenen:'HTTP 403', fn:()=>fnForbidden('yemOnayKaydet',{oid:'x'})},
+
+  // Firestore YAZMA — varyantlar (delete/update/toplu-liste/alt-koleksiyon)
+  {ad:'Firestore: apps sil (deleteDoc)', kat:'firestore-write', hedef:'apps/_sizma_test', beklenen:'permission-denied', fn:()=>fsDeleteDenied('apps/_sizma_test')},
+  {ad:'Firestore: apps kısmi güncelle (updateDoc)', kat:'firestore-write', hedef:'apps/_sizma_test', beklenen:'permission-denied', fn:()=>fsUpdateDenied('apps/_sizma_test')},
+  {ad:'Firestore: denetim kaydı sil (iz temizle)', kat:'firestore-write', hedef:'denetim/_sizma_test', beklenen:'permission-denied', fn:()=>fsDeleteDenied('denetim/_sizma_test')},
+  {ad:'Firestore: yedekler sil (kurtarma sabotajı)', kat:'firestore-write', hedef:'yedekler/_sizma_test', beklenen:'permission-denied', fn:()=>fsDeleteDenied('yedekler/_sizma_test')},
+  {ad:'Firestore: apps koleksiyonunu toplu listele', kat:'firestore-read', hedef:'apps (list)', beklenen:'permission-denied', fn:()=>fsColReadDenied('apps')},
+  {ad:'Firestore: tanımsız kök koleksiyon (catch-all)', kat:'firestore-read', hedef:'bayiler', beklenen:'permission-denied', fn:()=>fsColReadDenied('bayiler')},
+
+  // Storage — belgeler/ (sözleşme/vergi/KVKK PII) + envanter listeleme + silme
+  {ad:'Storage: belgeler/ PII oku (sözleşme/vergi/TC/IBAN)', kat:'storage', hedef:'belgeler/…/sozlesme.pdf', beklenen:'unauthorized', fn:()=>stReadDenied('belgeler/x/sozlesme-0.pdf')},
+  {ad:'Storage: belgeler/ envanterini listele', kat:'storage', hedef:'belgeler/ (listAll)', beklenen:'unauthorized', fn:()=>stListDenied('belgeler')},
+  {ad:'Storage: yedek/ envanterini listele', kat:'storage', hedef:'yedek/ (listAll)', beklenen:'unauthorized', fn:()=>stListDenied('yedek')},
+  {ad:'Storage: yedek dosyasını sil', kat:'storage', hedef:'yedek/…/muhasebe.json', beklenen:'unauthorized', fn:()=>{ return (async()=>{ try{ await deleteObject(ref(st,'yedek/2000-01-01/muhasebe.json')); return {gecti:false,detay:'SİLİNDİ — AÇIK!'}; }catch(e){ const c=(e&&e.code)||String(e); return {gecti:/unauthorized|denied|403|not-found|object-not-found/i.test(c), detay:c}; } })(); }},
+
+  // Cloud Function — allowlist / path-injection / yanlış-rol
+  {ad:'CF: yaz allowlist-dışı (app=portal → 400)', kat:'function-escalation', hedef:'yaz', beklenen:'HTTP 400/403', fn:()=>fnStatus('yaz',{app:'portal',data:{x:1}},400)},
+  {ad:'CF: yaz path-injection (app=../portal)', kat:'function-escalation', hedef:'yaz', beklenen:'HTTP 400/403', fn:()=>fnStatus('yaz',{app:'../portal',data:{x:1}},400)},
+  {ad:'CF: karşı-rol ucu (bayi↔danışman yanlış rol)', kat:'function-escalation', hedef:'karşı rol ucu', beklenen:'HTTP 403', fn:()=>karsiRolUc()},
+  {ad:'CF: bayiYonetim başka hesabı sıfırla (ele geçirme)', kat:'function-escalation', hedef:'bayiYonetim', beklenen:'HTTP 403', fn:()=>fnForbidden('bayiYonetim',{islem:'sifirla',rol:'bayi',bayiId:'x',gecici:'Sifre1234'})},
+  {ad:'CF: komisyoncuYonet — bayi/danışman kaydı yaz (ana liste)', kat:'function-escalation', hedef:'komisyoncuYonet', beklenen:'HTTP 403', fn:()=>fnForbidden('komisyoncuYonet',{islem:'kaydet',kom:{name:'sizma',type:'bayi'}})},
+
+  // Çapraz-aktör — payload'la kimlik aşımı
+  {ad:'Çapraz-aktör: bayiId enjekte → yalnız kendi verisi dönmeli', kat:'cross-actor', hedef:'/bayi GET', beklenen:'yalnız-kendi-verisi', fn:()=>bayiIdEnjeksiyon()},
+
+  // Telegram webhook — sırsız sahte onay forge
+  {ad:'Webhook: sırsız sahte onay (confirm) enjekte', kat:'function-escalation', hedef:'telegramWebhook', beklenen:'HTTP 403', fn:()=>webhookForge()},
+
+  // Kimliksiz — token olmadan
+  {ad:'Kimliksiz: yaz çağır', kat:'unauth', hedef:'yaz', beklenen:'HTTP 401', fn:()=>fnUnauth('yaz',{app:'siparis'})},
+  {ad:'Kimliksiz: yonetim çağır', kat:'unauth', hedef:'yonetim', beklenen:'HTTP 401', fn:()=>fnUnauth('yonetim',{islem:'durum'})},
+  {ad:'Kimliksiz: bayiYonetim çağır', kat:'unauth', hedef:'bayiYonetim', beklenen:'HTTP 401', fn:()=>fnUnauth('bayiYonetim',{islem:'ac'})},
+  {ad:'Kimliksiz: yedekYonet çağır', kat:'unauth', hedef:'yedekYonet', beklenen:'HTTP 401', fn:()=>fnUnauth('yedekYonet',{islem:'geri-yukle'})},
+];
+
+// ---- token/claim doğrulama (ayrı — inceleme) ----
+async function claimCheck(){
+  const idr=await auth.currentUser.getIdTokenResult();
+  const c=idr.claims||{};
+  const moduller=['siparis','yem','muhasebe','ik','saha','bakim','toplanti'];
+  const acikModul=moduller.filter(m=>c[m]&&c[m]!=='yok');
+  const rolOk=(c.rol==='bayi'||c.rol==='danisman');
+  const temiz=acikModul.length===0 && !c.portalYonetici && !c.fiyatGor && rolOk;
+  return {gecti:temiz, detay:'rol='+(c.rol||'yok')+', portalYön='+(!!c.portalYonetici)+(acikModul.length?', AÇIK MODÜL: '+acikModul.join(','):', tüm modüller yok')};
+}
+
+function satirEkle(a, res){
+  const v=res.gecti?'<span class="v-ok">GEÇTİ</span>':'<span class="v-bad">KALDI — AÇIK!</span>';
+  $('rows').insertAdjacentHTML('beforeend',
+    `<tr><td>${a.ad}<div class="kat">${a.kat}</div></td><td><code>${a.hedef}</code></td><td style="color:#64748b">${a.beklenen}</td><td>${v}<div style="font-size:10.5px;color:#94a3b8">${(res.detay||'').replace(/</g,'&lt;')}</div></td></tr>`);
+}
+
+async function provaCalistir(){
+  $('rows').innerHTML=''; $('sonuc-card').style.display='block'; $('ozet').innerHTML='';
+  let gecti=0, toplam=0, acik=[];
+  // claim önce
+  toplam++; const cc=await claimCheck().catch(e=>({gecti:false,detay:String(e)}));
+  satirEkle({ad:'Token claim doğrulama (yetkiler minimal mi)',kat:'token-abuse',hedef:'idToken.claims',beklenen:'tüm modül yok + rol bayi/danışman'}, cc);
+  if(cc.gecti)gecti++; else acik.push('token claim');
+  for(const a of ATTACKS){
+    toplam++;
+    let res; try{ res=await a.fn(); }catch(e){ res={gecti:false,detay:'test hatası: '+(e.message||e)}; }
+    satirEkle(a,res);
+    if(res.gecti)gecti++; else acik.push(a.ad);
+  }
+  const hepsi=gecti===toplam;
+  $('ozet').innerHTML=`<div class="ozet ${hepsi?'ozet-ok':'ozet-bad'}">${hepsi?('TÜM KİLİTLER SAĞLAM — '+gecti+'/'+toplam+' saldırı engellendi. Açılışa uygun.'):('DİKKAT: '+gecti+'/'+toplam+' engellendi — '+acik.length+' AÇIK DELİK var: '+acik.join(' · '))}</div>`;
+}
+
+$('go').addEventListener('click',async()=>{
+  const u=$('u').value.trim().toLowerCase(), p=$('p').value;
+  if(!u||!p){$('err').textContent='Kullanıcı adı ve şifre girin.';return;}
+  $('err').textContent='Giriş yapılıyor…'; $('go').disabled=true;
+  try{
+    await signInWithEmailAndPassword(auth,u+EPOSTA_SON,sifreDolgu(p));
+    $('err').textContent='';
+    await provaCalistir();
+  }catch(e){ $('err').textContent='Giriş başarısız: '+(e.code||e.message||e); }
+  $('go').disabled=false;
+});
+$('logout').addEventListener('click',()=>signOut(auth));
+onAuthStateChanged(auth,u=>{
+  $('whoami').textContent=u?('Giriş: '+(u.email||'').replace(EPOSTA_SON,'')):'';
+  $('logout').style.display=u?'inline-block':'none';
+  $('login-card').style.opacity=u?'.7':'1';
+});
+</script>
+<script defer src="/sifre-goster.js"></script>
+</body>
+</html>
