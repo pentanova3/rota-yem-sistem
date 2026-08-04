@@ -563,6 +563,192 @@ exports.yemOnayKaydet = onRequest({region: "us-central1", cors: true, secrets: [
 });
 
 // ============================================================
+// PANELDEN ONAY VERME (31.07) — Telegram'a bağımlı olmadan, sipariş kartından onay.
+// GEREKÇE: muhasebe/üretim personeli Telegram butonuna her zaman ulaşamıyor, sipariş
+// "teslim"e ilerleyemiyordu. Artık kart üzerinden de onaylanabilir.
+//
+// GÜVENLİK — onay kaydı DAİMA sunucuda üretilir; istemci "onaylandı" diyemez:
+//   • Onay yalnız-sunucu-yazılabilir belgelere gider (apps/muhasebeonay · fabrikaonay · yemonay).
+//     Bloba yazılan o.muhasebeOnay forge edilebilir; rozet/kapı bu belgeleri okur.
+//   • "by" alanı İSTEMCİDEN ALINMAZ — jetondaki kimlikten portalAd() ile çözülür.
+//   • Telegram akışındaki KORUMALARIN TAMAMI burada da uygulanır: iptal edilmiş sipariş,
+//     bayat imza (onaycı EKRANDA GÖRMEDİĞİ içeriği onaylayamaz) ve KATI SIRA
+//     (muhasebe onayı olmadan üretim onayı yazılamaz).
+//
+// YETKİ (FAZ 1): şimdilik modül claim'i yeterli — siparis/yem modülüne erişimi olan iç
+// kullanıcı onaylayabilir. "Kim hangi onayı verebilir" rol politikası FAZ 2'de buraya
+// eklenecek (tek nokta). Arayüzde düğmeyi gizlemek GÜVENLİK DEĞİLDİR: kapı burasıdır.
+// ============================================================
+const ONAY_HEDEF = {   // (mod, tur) → yalnız-sunucu-yazılabilir belge
+  "t:muhasebe": "apps/muhasebeonay", "y:muhasebe": "apps/muhasebeonay",
+  "t:uretim": "apps/fabrikaonay", "y:uretim": "apps/yemonay",
+};
+// TMR ÜRETİM onaycıları (apps/portal → P.fabrikaOnay.alicilar[{username,chatId,ad}]).
+// Telegram'daki 'confirm:' akışında liste YOKTU (gruptaki herkes basabiliyordu); panelden
+// onay için kimin yetkili olduğunu tanımlamak gerekti — muhasebe/yem listeleriyle aynı şekil.
+async function getFabrikaOnaycilar() {
+  try {
+    const snap = await db.doc("apps/portal").get();
+    const data = snap.exists ? snap.data().data : null;
+    const P = data && data.rota_portal_v1 ? JSON.parse(data.rota_portal_v1) : null;
+    return (P && P.fabrikaOnay && Array.isArray(P.fabrikaOnay.alicilar)) ? P.fabrikaOnay.alicilar : [];
+  } catch (e) { return []; }
+}
+// PANELDEN ONAY YETKİSİ (firma kararı 31.07): Telegram için tanımlı onaycı listeleri panelde de
+// geçerlidir — TEK KAYNAK. Kullanıcı adı (e-postanın @ öncesi) listeyle eşleşmeli.
+// LİSTE BOŞSA: sessizce kilitlemek yerine AÇIK hata döneriz. Sessiz kilit, tam da bu özelliğin
+// çözmeye çalıştığı "sipariş ilerleyemiyor" durumunu yeniden üretirdi; kullanıcı nedenini bilmeli.
+const ONAY_LISTE_AD = {"t:muhasebe": "Muhasebe", "y:muhasebe": "Muhasebe", "t:uretim": "TMR Üretim", "y:uretim": "Yem Üretim"};
+async function onayYetkisi(dec, mod, tur) {
+  const anahtar = mod + ":" + tur;
+  let liste = [];
+  if (tur === "muhasebe") liste = await getMuhasebeSiparisOnaycilar();
+  else liste = (mod === "y") ? await getYemOnaycilar() : await getFabrikaOnaycilar();
+  const ad = ONAY_LISTE_AD[anahtar] || "Onay";
+  if (!liste.length) {
+    return {izin: false, kod: "onayci_tanimsiz",
+      mesaj: ad + " onaycısı tanımlı değil. Portal → çark → Onaycılar bölümünden en az bir kişi ekleyin."};
+  }
+  const uname = String(dec.email || "").replace(EPOSTA_SON, "").toLowerCase();
+  const var_ = liste.some((a) => String(a.username || "").toLowerCase() === uname);
+  return var_ ? {izin: true} : {izin: false, kod: "yetki_yok", mesaj: ad + " onayını yalnız tanımlı onaycılar verebilir."};
+}
+exports.onayVer = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, TG_CHAT]}, async (req, res) => {
+  try {
+    const idToken = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    let dec;
+    try { dec = await admin.auth().verifyIdToken(idToken); } catch (e) { res.status(401).json({hata: "kimlik doğrulanamadı"}); return; }
+    if (!(await rateLimit("onayVer:" + dec.uid, 40, 60))) { res.status(429).json({hata: "cok_fazla_istek"}); return; }
+
+    const b = req.body || {};
+    const mod = String(b.mod || "") === "y" ? "y" : (String(b.mod || "") === "t" ? "t" : "");
+    const tur = ["muhasebe", "uretim"].indexOf(String(b.tur || "")) >= 0 ? String(b.tur) : "";
+    const oid = String(b.oid || "").slice(0, 64);
+    const imza = String(b.imza || "").slice(0, 16);
+
+    // KAPI 1 — MODÜL ERİŞİMİ: dış portal hesapları (bayi/danışman) ASLA onaylayamaz.
+    const icKullanici = dec.rol !== "bayi" && dec.rol !== "danisman";
+    const modErisim = (m) => {
+      const app = m === "y" ? "yem" : "siparis";
+      return icKullanici && (dec.portalYonetici === true || (dec[app] && dec[app] !== "yok"));
+    };
+
+    // SORGU MODU: hiçbir şey yazmaz — "ben hangi onayı verebilirim" sorusunu yanıtlar.
+    // Arayüz düğmeyi buna göre gizler. GÜVENLİK DEĞİL, yalnız gösterim: gerçek kapı aşağıda.
+    if (b.sorgu === true) {
+      const y = {};
+      for (const m of ["t", "y"]) {
+        for (const t of ["muhasebe", "uretim"]) {
+          y[m + ":" + t] = modErisim(m) ? (await onayYetkisi(dec, m, t)).izin : false;
+        }
+      }
+      res.json({ok: true, yetkiler: y}); return;
+    }
+
+    if (!mod || !tur || !oid) { res.status(400).json({hata: "eksik parametre"}); return; }
+    if (!modErisim(mod)) { res.status(403).json({hata: "bu modülde onay yetkiniz yok"}); return; }
+    // KAPI 2 — ONAYCI LİSTESİ (firma kararı): Telegram için tanımlı liste panelde de geçerli.
+    const yet = await onayYetkisi(dec, mod, tur);
+    if (!yet.izin) { res.status(403).json({hata: yet.kod, mesaj: yet.mesaj}); return; }
+
+    const order = await orderYukle(mod, oid);
+    if (!order) { res.status(404).json({hata: "sipariş bulunamadı"}); return; }
+    if (String(order.status || "") === "iptal") { res.status(409).json({hata: "iptal_edilmis", mesaj: "Bu sipariş İPTAL EDİLMİŞ — onay verilemez."}); return; }
+    // BAYAT İMZA: ekranda görülen içerik ile sunucudaki kayıt ayrıştıysa onay geçersizdir.
+    if (imza && imzaHash(siparisImza(order)) !== imza) {
+      res.status(409).json({hata: "icerik_degisti", mesaj: "Sipariş siz ekranı açtıktan sonra değişti. Sayfayı yenileyip güncel içeriği görerek onaylayın."}); return;
+    }
+    // KATI SIRA: üretim onayı, muhasebe onayı olmadan YAZILAMAZ (Telegram yolundaki kuralın aynısı).
+    if (tur === "uretim" && order.muhasebeOnayGerek === true && !(await muhasebeOnayVarMi(oid))) {
+      res.status(409).json({hata: "once_muhasebe", mesaj: "Önce muhasebe onayı gerekli — bu sipariş henüz muhasebe onayından geçmedi."}); return;
+    }
+
+    const yol = ONAY_HEDEF[mod + ":" + tur];
+    // MÜKERRER ONAY: zaten onaylıysa üzerine YAZMA — ilk onaylayanın adı ve saati korunur.
+    try {
+      const s = await db.doc(yol).get();
+      const v = s.exists ? (s.data() || {})[oid] : null;
+      if (v && v.by) { res.json({ok: true, zaten: true, by: v.by, ts: v.ts || ""}); return; }
+    } catch (e) { /* okunamadıysa yazmayı dene */ }
+
+    const uname = String(dec.email || "").replace(EPOSTA_SON, "").toLowerCase() || dec.uid;
+    const ad = String((await portalAd(uname)) || uname).replace(/[\r\n\t]+/g, " ").trim().slice(0, 40);
+    const ts = new Date().toISOString();
+    await db.doc(yol).set({[oid]: {
+      by: ad, ts, uid: dec.uid, kaynak: "panel", mod, no: order.no || "",
+      imza: imzaHash(siparisImza(order)),   // NEYİN onaylandığının izi
+    }}, {merge: true});
+    try { await denetimVer("onay-panelden", uname, {mod, tur, oid, no: order.no || ""}); } catch (e) {}
+
+    // TELEGRAM BİLGİSİ — yazma yolunu ASLA bloklamaz (silme bildirimi dersi): hata yutulur.
+    // NOT: `tek()` burada KULLANILAMAZ — o, yaz() içinde YEREL bir sabit (modül düzeyinde yok).
+    // Çağrılsaydı mesaj gönderiminde ReferenceError olurdu (bkz. kayitSayisi vakası, 30.07).
+    const kirp = (s, n) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
+    (async () => {
+      const token = tgToken(), chat = tgChat();
+      if (!token || !chat) return;
+      const modAd = mod === "y" ? "Yem Sipariş" : "Sipariş Takip (TMR)";
+      const turAd = tur === "muhasebe" ? "MUHASEBE" : "ÜRETİM";
+      await tg(token, "sendMessage", {chat_id: chat, text:
+        ("✅ " + turAd + " ONAYI VERİLDİ (panelden)\n" + modAd +
+         "\n\nSipariş: #" + kirp(order.no || "?", 20) + "\nMüşteri: " + kirp(order.customer || order.aliciMusteri || "—", 40) +
+         "\nOnaylayan: " + ad).slice(0, 3900)});
+    })().catch((e) => console.error("onayVer/telegram", e));
+
+    res.json({ok: true, by: ad, ts});
+  } catch (e) {
+    console.error("onayVer", e);
+    res.status(500).json({hata: "kaydedilemedi"});
+  }
+});
+
+// ============================================================
+// SİLİNEN SİPARİŞLER (31.07) — "kim, ne zaman, neyi sildi" sipariş ekranından görünsün.
+// NEDEN AYRI UÇ: denetim koleksiyonu firestore.rules'ta YALNIZ portalYönetici'ye açık ve
+// içinde güvenlik olayları, kullanıcı yönetimi, İK izleri de var. Kuralı gevşetmek bunların
+// tamamını sipariş personeline açardı. Bunun yerine sunucu YALNIZ 'siparis-silindi'
+// kayıtlarını süzer ve modül claim'i olana döner — koleksiyona istemci hiç dokunmaz.
+// NOT: silinen siparişin İÇERİĞİ (kalemler, fiyatlar) blob'dan gitmiştir; burada yalnız
+// silme anında alınan özet vardır (no, müşteri, tutar, tarih). Tam kayıt için gece yedeği.
+// ============================================================
+exports.silinenler = onRequest({region: "us-central1", cors: true}, async (req, res) => {
+  try {
+    const idToken = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    let dec;
+    try { dec = await admin.auth().verifyIdToken(idToken); } catch (e) { res.status(401).json({hata: "kimlik doğrulanamadı"}); return; }
+    if (!(await rateLimit("silinenler:" + dec.uid, 30, 60))) { res.status(429).json({hata: "cok_fazla_istek"}); return; }
+    const b = req.body || {};
+    const app = ["siparis", "yem"].indexOf(String(b.app || "")) >= 0 ? String(b.app) : "siparis";
+    // Dış portal hesapları (bayi/danışman) ASLA göremez; iç modül claim'i şart.
+    const icKullanici = dec.rol !== "bayi" && dec.rol !== "danisman";
+    if (!icKullanici || !(dec.portalYonetici === true || (dec[app] && dec[app] !== "yok"))) {
+      res.status(403).json({hata: "bu modülde yetkiniz yok"}); return;
+    }
+    // orderBy KULLANILMIYOR: (islem, ts) bileşik indeksi gerektirirdi ve indeks yokken uç 500 döner.
+    // Tek alan eşitliği varsayılan indeksle çalışır; sıralama bellekte yapılır.
+    const snap = await db.collection("denetim").where("islem", "==", "siparis-silindi").limit(500).get();
+    const ham = [];
+    snap.forEach((d) => { const v = d.data() || {}; if (!v.detay || v.detay.app === app) ham.push(v); });
+    ham.sort((a, b2) => String(b2.ts || "").localeCompare(String(a.ts || "")));
+    const kesit = ham.slice(0, 200);
+    // aktör kullanıcı adı → portaldaki görünen ad (tekrarlı çözümü önlemek için önbellek)
+    const adOnbellek = {};
+    const kayitlar = [];
+    for (const k of kesit) {
+      const u = String(k.aktor || "?");
+      if (!(u in adOnbellek)) adOnbellek[u] = String((await portalAd(u)) || u).slice(0, 40);
+      kayitlar.push({ts: k.ts || "", kim: adOnbellek[u], kullanici: u,
+        siparisler: Array.isArray(k.detay && k.detay.siparisler) ? k.detay.siparisler : [],
+        adet: (k.detay && k.detay.adet) || 0});
+    }
+    res.json({ok: true, kayitlar});
+  } catch (e) {
+    console.error("silinenler", e);
+    res.status(500).json({hata: "okunamadı"});
+  }
+});
+
+// ============================================================
 // ÇAPRAZ SİPARİŞ BİLDİRİMİ (SUNUCU-TETİKLİ) — hedef modül KAPALI olsa bile çalışır.
 // Eskiden Telegram onay mesajını hedef istemci processCrossQueue'da gönderiyordu →
 // mesajın düşmesi için hedef panelin (TMR/Yem) açık olması gerekiyordu (mesai dışı sorun).
@@ -1159,11 +1345,12 @@ function prodKgOf(products, code) {
 const fmtTonFN = (t) => (+t || 0).toLocaleString("tr-TR", {minimumFractionDigits: 1, maximumFractionDigits: 1});
 const escHTML = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 // Aylık tonajı ve kırılımı hesapla. now = İstanbul saatiyle Date. Ekran tonajData() ile aynı küme:
-// o ayki iptal olmayan TÜM siparişler (bayi dahil); her satır qty × prodKg / 1000.
+// o ayki FİİLEN ÇIKAN siparişler (sevk + teslim; bayi dahil); her satır qty × prodKg / 1000.
+// Beklemede/onaylandı sipariş SAYILMAZ — bkz. cikanSiparisFN. Kural değişirse ekran da değişmeli.
 function tmrTonajHesap(DB, now) {
   const Y = now.getFullYear(), M = String(now.getMonth() + 1).padStart(2, "0");
   const curYM = Y + "-" + M;
-  const orders = (DB.orders || []).filter((o) => o && o.date && o.status !== "iptal" && String(o.date).slice(0, 7) === curYM);
+  const orders = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && String(o.date).slice(0, 7) === curYM);
   // İSTEMCİ tonajData() İLE BİREBİR: kodu olan HER satır sayılır (0 ton olsa da gün/ürün oluşur);
   // aktifGun = kodu olan satırı bulunan farklı gün sayısı. Aksi halde ekrandaki "18 satış günü" tutmaz.
   const prodTot = {}, gunler = {};
@@ -1180,8 +1367,28 @@ function tmrTonajHesap(DB, now) {
     if (coded) { gunler[String(o.date).slice(8, 10)] = true; siparis++; }
   });
   const aktifGun = Object.keys(gunler).length;
+  // BEKLEYEN: alınmış ama henüz çıkmamış mal. Rapor yalnız sevk edileni sayar (firma kararı 31.07) —
+  // bu satır olmadan ayın başında "0,0 t · 0 sipariş" görünüyor ve bekleyen siparişler yönetimden
+  // TAMAMEN gizleniyor. 04.08.2026 sabahı tam bu oldu: 4 sipariş vardı, rapor sıfır dedi.
+  // prodTotAy: ürün kırılımının AY TOPLAMI tabanı (sevk + bekleyen). Kırılım yalnız sevk'ten
+  // beslenirse ayın başında bomboş çıkar ve bekleyen 41 t ürün mesajda hiç görünmez (04.08 vakası).
+  let bekTon = 0, bekAdet = 0;
+  const prodTotAy = Object.assign({}, prodTot);
+  (DB.orders || []).forEach((o) => {
+    if (!o || !o.date || String(o.date).slice(0, 7) !== curYM) return;
+    if (o.status === "iptal" || cikanSiparisFN(o)) return;
+    let coded = false;
+    (o.lines || []).forEach((l) => {
+      if (!l || !l.code) return;
+      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      bekTon += t;
+      prodTotAy[l.code] = (prodTotAy[l.code] || 0) + t;
+      coded = true;
+    });
+    if (coded) bekAdet++;
+  });
   const hedef = (DB.meta && DB.meta.tonajHedef && +DB.meta.tonajHedef[curYM]) || 0;
-  return {Y, M, curYM, toplam, aktifGun, siparis, prodTot, hedef};
+  return {Y, M, curYM, toplam, aktifGun, siparis, prodTot, prodTotAy, hedef, bekTon, bekAdet};
 }
 // Telegram HTML mesajı — dikkat çekici başlık + hizalı <pre> tablolar.
 function tmrTonajMesaj(D, now) {
@@ -1190,11 +1397,15 @@ function tmrTonajMesaj(D, now) {
   const gunlukOrt = D.aktifGun ? D.toplam / D.aktifGun : 0;
   // özet tablosu (etiket sola, değer sağa hizalı — monospace <pre>)
   const sat = (lbl, val) => lbl.padEnd(17, " ") + String(val).padStart(11, " ");
+  // SIRA FİRMA TARAFINDAN BELİRLENDİ (04.08.2026) — değiştirme:
+  // 1 sevk edilen · 2 bekleyen · 3 toplam sipariş (sevk+bekleyen) · 4 satış günü · 5 günlük ort.
+  // Beş satır HER ZAMAN yazılır (bekleyen 0 olsa da) — sabit biçim, gözle kıyas kolay olsun.
   const ozet = [
-    sat("Aylık Toplam", fmtTonFN(D.toplam) + " t"),
+    sat("Sevk Edilen", fmtTonFN(D.toplam) + " t"),
+    sat("Bekleyen", fmtTonFN(D.bekTon) + " t"),
+    sat("Toplam Sipariş", (D.siparis + D.bekAdet) + " adet"),
     sat("Satış Günü", D.aktifGun + " gün"),
     sat("Günlük Ort.", fmtTonFN(gunlukOrt) + " t"),
-    sat("Sipariş", D.siparis + " adet"),
   ].join("\n");
   let hedefBlok = "";
   if (D.hedef > 0) {
@@ -1211,7 +1422,9 @@ function tmrTonajMesaj(D, now) {
     hedefBlok = "\n🎯 <b>Hedef</b>\n<pre>" + escHTML(hedefTablo) + "</pre>";
   }
   // ürün kırılımı: en yüksek 6 ürün + kalanı "Diğer" (0,0 t görünen ürünler gizlenir — kozmetik)
-  const arr = Object.entries(D.prodTot).filter(([, t]) => t >= 0.05).sort((a, b) => b[1] - a[1]);
+  // Taban AY TOPLAMI (sevk + bekleyen): yalnız sevk'ten beslenirse ay başında bomboş çıkar
+  // ve bekleyen siparişlerin ürünleri mesajda hiç görünmez (04.08 vakası).
+  const arr = Object.entries(D.prodTotAy).filter(([, t]) => t >= 0.05).sort((a, b) => b[1] - a[1]);
   const N = 6;
   const gorunen = arr.slice(0, N);
   const kalanlar = arr.slice(N);
@@ -1220,12 +1433,13 @@ function tmrTonajMesaj(D, now) {
     const digerTon = kalanlar.reduce((s, e) => s + e[1], 0);
     urunSat.push(("Diğer (" + kalanlar.length + ")").padEnd(16, " ") + (fmtTonFN(digerTon) + " t").padStart(12, " "));
   }
-  const urunBlok = urunSat.length ? ("\n📦 <b>Ürün Kırılımı</b>\n<pre>" + urunSat.join("\n") + "</pre>") : "";
+  const urunBlok = urunSat.length ? ("\n📦 <b>Ürün Kırılımı</b> — ay toplamı\n<pre>" + urunSat.join("\n") + "</pre>") : "";
   return "📊 <b>TMR TONAJ RAPORU</b>\n" +
     "🗓 <b>" + AYLAR_TR_FN[+D.M - 1] + " " + D.Y + "</b> · " + trTarih + " " + gunAd + "\n\n" +
     "<pre>" + escHTML(ozet) + "</pre>" +
     hedefBlok +
     urunBlok +
+    "\n\n<i>Bekleyen = sipariş alındı, henüz sevk edilmedi. Ürün kırılımı ay toplamıdır (sevk + bekleyen). Hedef takibi sevk edilen üzerinden yürür.</i>" +
     "\n\n<i>Sipariş Yönetimi · TMR · her sabah 10:00</i>";
 }
 // ---- TARİHSEL SATIŞ ARŞİVİ (istemci siparis-takip/index.html YON_TARIHSEL AYNASI) ----
@@ -1248,7 +1462,7 @@ function haftaOzetHesap(DB, now) {
   const oncekiSon = new Date(son); oncekiSon.setDate(son.getDate() - 7);
   const isoBas = isoTarih(bas), isoSon = isoTarih(son), oisoBas = isoTarih(oncekiBas), oisoSon = isoTarih(oncekiSon);
   const topla = (a, b) => {
-    const list = (DB.orders || []).filter((o) => o && o.date && o.status !== "iptal" && o.date >= a && o.date <= b);
+    const list = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && o.date >= a && o.date <= b);   // taban: fiilen çıkan mal
     let ton = 0; const gunler = {}, custTon = {}, prodTon = {};
     let siparis = 0;
     list.forEach((o) => {
@@ -1285,7 +1499,7 @@ function haftaOzetMesaj(Dmonth, H, now) {
   const sat = (lbl, val) => lbl.padEnd(15, " ") + String(val).padStart(13, " ");
   // özet + trend
   const ozet = [
-    sat("Tonaj", fmtTonFN(bu.ton) + " t"),
+    sat("Sevk edilen", fmtTonFN(bu.ton) + " t"),
     sat("  geçen hafta", fmtTonFN(onceki.ton) + " t"),
     sat("  değişim", trendEt(bu.ton, onceki.ton)),
     "",
@@ -1313,7 +1527,11 @@ function haftaOzetMesaj(Dmonth, H, now) {
   const daysInM = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const dayOfM = now.getDate();
   const proj = dayOfM ? (Dmonth.toplam / dayOfM * daysInM) : Dmonth.toplam;
-  let projSat = sat("Ay içi (bugüne)", fmtTonFN(Dmonth.toplam) + " t") + "\n" + sat("Tahmini kapanış", fmtTonFN(proj) + " t");
+  // Projeksiyon SEVK EDİLEN üzerinden kurulur; bekleyen ayrı satırda gösterilir ki
+  // "ay içi 0 t" görünürken bekleyen 14 t sipariş olduğu yönetimden gizlenmesin.
+  let projSat = sat("Ay içi sevk", fmtTonFN(Dmonth.toplam) + " t") + "\n" + sat("Tahmini kapanış", fmtTonFN(proj) + " t");
+  if (Dmonth.bekAdet > 0) projSat += "\n" + sat("Bekleyen", fmtTonFN(Dmonth.bekTon) + " t (" + Dmonth.bekAdet + " sipariş)");
+  projSat += "\n" + sat("Ay toplamı", fmtTonFN(Dmonth.toplam + Dmonth.bekTon) + " t");   // sevk + bekleyen
   if (Dmonth.hedef > 0) {
     const projYuzde = Dmonth.hedef > 0 ? proj / Dmonth.hedef * 100 : 0;
     projSat += "\n" + sat("Hedef", fmtTonFN(Dmonth.hedef) + " t") + "\n" + sat("Tahmini/Hedef", "%" + projYuzde.toLocaleString("tr-TR", {maximumFractionDigits: 1}));
@@ -1329,11 +1547,19 @@ function haftaOzetMesaj(Dmonth, H, now) {
 // ---- AYLIK RAPOR (her ayın 1'i, ÖNCEKİ ay) ----
 // HERHANGİ bir ayın TONAJI — istemci raporOrders() ile aynı sınır: ay > YON_TARIHSEL_SON ise CANLI
 // siparişler, değilse TARİHSEL arşiv (kg/1000). Geçen-yıl kıyası bu fonksiyonla yapılır.
+// TONAJ TABANI — siteyle AYNI kural (siparis-takip/index.html · tonajCikti).
+// Yalnız fabrikadan fiilen çıkan mal sayılır: sevk + teslim. Beklemede/onaylandı sayılmaz.
+// Tarihsel arşiv zaten fiilen satılan malı taşır → canlı ayları da aynı ölçüye getirir,
+// yoksa geçmiş "satılan", bugün "sipariş alınan" olur ve yıllık kıyas sahte artış gösterir.
+// Bu kural DEĞİŞİRSE site tarafı da değişmeli — iki rapor birbirini tutmalı.
+function cikanSiparisFN(o) {
+  return !!o && (o.status === "sevk" || o.status === "teslim");
+}
 function ayTonajOf(DB, ym) {
   if (ym > YON_TARIHSEL_SON_FN) {
     let ton = 0;
     (DB.orders || []).forEach((o) => {
-      if (!o || !o.date || o.status === "iptal" || String(o.date).slice(0, 7) !== ym) return;
+      if (!o || !o.date || !cikanSiparisFN(o) || String(o.date).slice(0, 7) !== ym) return;
       (o.lines || []).forEach((l) => { if (l && l.code) ton += (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000; });
     });
     return ton;
@@ -1350,7 +1576,7 @@ function danismanTonajOf(DB, ym) {
   if (ym <= YON_TARIHSEL_SON_FN) return null;
   const out = {};
   (DB.orders || []).forEach((o) => {
-    if (!o || !o.date || o.status === "iptal" || String(o.date).slice(0, 7) !== ym) return;
+    if (!o || !o.date || !cikanSiparisFN(o) || String(o.date).slice(0, 7) !== ym) return;   // taban: ayTonajOf ile AYNI — pay yüzdeleri tutarlı kalsın
     const did = String(o.danismanId || "");
     if (!did) return;                                     // danışmansız sipariş sayılmaz
     let t = 0;
@@ -1369,7 +1595,7 @@ function danismanAdi(DB, id) {
 function aylikRaporHesap(DB, ym) {
   const [Ys, Ms] = ym.split("-");
   const gecenYilYm = (String(+Ys - 1)) + "-" + Ms;
-  const list = (DB.orders || []).filter((o) => o && o.date && o.status !== "iptal" && String(o.date).slice(0, 7) === ym);
+  const list = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && String(o.date).slice(0, 7) === ym);   // taban: fiilen çıkan mal
   const prodTon = {}, custTon = {}, gunler = {}, haftaTon = {};
   let ton = 0, siparis = 0;
   list.forEach((o) => {
@@ -1387,6 +1613,23 @@ function aylikRaporHesap(DB, ym) {
     const gun = +String(o.date).slice(8, 10);
     const hafta = Math.min(4, Math.floor((gun - 1) / 7));   // 5. haftanın kalanı 4. haftaya biner
     haftaTon[hafta] = (haftaTon[hafta] || 0) + oTon;
+  });
+  // BEKLEYEN: o aya ait olup hâlâ sevk edilmemiş sipariş. Ay kapandıktan sonra bunlar hâlâ duruyorsa
+  // ya gerçekten çıkmamıştır ya da durumu güncellenmemiştir — ikisi de yönetimin görmesi gereken bilgi.
+  let bekTon = 0, bekAdet = 0;
+  const prodTonAy = Object.assign({}, prodTon);   // ürün kırılımının AY TOPLAMI tabanı (sevk + bekleyen)
+  (DB.orders || []).forEach((o) => {
+    if (!o || !o.date || String(o.date).slice(0, 7) !== ym) return;
+    if (o.status === "iptal" || cikanSiparisFN(o)) return;
+    let coded = false;
+    (o.lines || []).forEach((l) => {
+      if (!l || !l.code) return;
+      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      bekTon += t;
+      prodTonAy[l.code] = (prodTonAy[l.code] || 0) + t;
+      coded = true;
+    });
+    if (coded) bekAdet++;
   });
   // BAŞLIK TONAJI TEK KAYNAK (ayTonajOf): ekran/YTD ile aynı sayıyı verir. Rapor ayı arşive düşerse
   // (sınır ileri taşınırsa) canlı sipariş döngüsü 0 verirdi — o durumda arşiv değeri geçerlidir ve
@@ -1414,7 +1657,7 @@ function aylikRaporHesap(DB, ym) {
   }
   return {ym, Y: Ys, M: Ms, gecenYilYm, oncekiYm, danismanBu, danismanOnceki, danismanAd,
     ton, siparis, aktifGun: Object.keys(gunler).length,
-    prodTon, custTon, haftaTon, gecenYilTon, ytdBu, ytdGecen, ytdGecenTam, arsivAyi,
+    prodTon, prodTonAy, custTon, haftaTon, gecenYilTon, ytdBu, ytdGecen, ytdGecenTam, arsivAyi, bekTon, bekAdet,
     hedef: (DB.meta && DB.meta.tonajHedef && +DB.meta.tonajHedef[ym]) || 0};
 }
 function aylikRaporMesaj(A) {
@@ -1425,8 +1668,11 @@ function aylikRaporMesaj(A) {
     sat("Tonaj", fmtTonFN(A.ton) + " t"),
     "(arşiv ayı — kırılım kaydı yok)",
   ] : [
-    sat("Tonaj", fmtTonFN(A.ton) + " t"),
-    sat("Sipariş", A.siparis + " adet"),
+    // SIRA FİRMA TARAFINDAN BELİRLENDİ (04.08.2026) — günlük raporla AYNI:
+    // sevk · bekleyen · toplam sipariş · satış günü · günlük ort.
+    sat("Sevk edilen", fmtTonFN(A.ton) + " t"),
+    sat("Bekleyen", fmtTonFN(A.bekTon) + " t"),
+    sat("Toplam sipariş", (A.siparis + A.bekAdet) + " adet"),
     sat("Satış günü", A.aktifGun + " gün"),
     sat("Günlük ort.", fmtTonFN(gunlukOrt) + " t"),
   ]).join("\n");
@@ -1518,13 +1764,13 @@ function aylikRaporMesaj(A) {
     }
   }
   // ürün kırılımı (ilk 8) — YoY YOK (firma kararı: geçen yıl kıyası yalnız toplam tonaj)
-  const prodArr = Object.entries(A.prodTon).filter(([, t]) => t >= 0.05).sort((a, b) => b[1] - a[1]);
+  const prodArr = Object.entries(A.prodTonAy || A.prodTon).filter(([, t]) => t >= 0.05).sort((a, b) => b[1] - a[1]);   // ay toplamı (sevk + bekleyen)
   const prodSat = prodArr.slice(0, 8).map(([code, t]) => {
     const pay = A.ton > 0 ? (t / A.ton * 100) : 0;
     return escHTML(code).slice(0, 15).padEnd(16, " ") + (fmtTonFN(t) + " t").padStart(10, " ") +
       ("%" + pay.toLocaleString("tr-TR", {maximumFractionDigits: 1})).padStart(8, " ");
   });
-  const prodBlok = (!A.arsivAyi && prodSat.length) ? ("\n📦 <b>Ürün Kırılımı</b>\n<pre>" + prodSat.join("\n") + "</pre>") : "";
+  const prodBlok = (!A.arsivAyi && prodSat.length) ? ("\n📦 <b>Ürün Kırılımı</b> — ay toplamı\n<pre>" + prodSat.join("\n") + "</pre>") : "";
   return "📋 <b>AYLIK RAPOR — " + ayAd.toUpperCase() + "</b>\n" +
     "🏭 Sipariş Yönetimi · TMR\n\n" +
     "<pre>" + escHTML(ozet) + "</pre>" +
@@ -1836,6 +2082,7 @@ exports.yonetim = onRequest({region: "us-central1", cors: true, secrets: [TG_TOK
     if (b.muhasebeOnay) P.muhasebeOnay = b.muhasebeOnay;
     if (b.yemOnay) P.yemOnay = b.yemOnay;
     if (b.muhasebeSiparisOnay) P.muhasebeSiparisOnay = b.muhasebeSiparisOnay;   // sipariş muhasebe onaycıları
+    if (b.fabrikaOnay) P.fabrikaOnay = b.fabrikaOnay;   // TMR ÜRETİM onaycıları (panelden onay)
     await db.doc("apps/portal").set({data: {rota_portal_v1: JSON.stringify(P)}, updatedAt: new Date().toISOString()}, {merge: true});
 
     // 2) Auth hesapları + yetki rozetleri

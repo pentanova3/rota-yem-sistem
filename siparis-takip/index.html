@@ -1334,8 +1334,10 @@ function renderOrders(c,tb){
   // durum sekmeleri (sayılarla) — plasiyer yalnız kendi siparişlerini sayar
   const _vis=visibleOrders();
   const cnt=v=>_vis.filter(o=>!v||o.status===v).length;
+  // SİLİNMİŞ sekmesi bir DURUM değil, denetim izinden gelen ayrı bir görünüm — sayısı
+  // siparişlerden hesaplanamaz (kayıt blob'dan silinmiştir), o yüzden cnt() dışında tutulur.
   const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'onay',l:'Onaylı'},{v:'hazir',l:'Hazır'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
-  let h=subTabs+`<div class="order-tabs">${tabDefs.map(t=>`<button class="otab ${filt.status===t.v?'active':''}" onclick="setStatusTab('${t.v}')">${t.l} <span class="otab-n">${cnt(t.v)}</span></button>`).join('')}</div>
+  let h=subTabs+`<div class="order-tabs">${tabDefs.map(t=>`<button class="otab ${filt.status===t.v?'active':''}" onclick="setStatusTab('${t.v}')">${t.l} <span class="otab-n">${cnt(t.v)}</span></button>`).join('')}<button class="otab ${filt.status==='__silinmis'?'active':''}" onclick="setStatusTab('__silinmis')" title="Silinen siparişler — kim, ne zaman, neyi sildi">Silinmiş</button></div>
   <div class="filters">
     <input class="fsearch" placeholder="Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
     <select onchange="filt.firma=this.value;refreshOrders()"><option value="">Tüm Firmalar</option>${optFirma().map(f=>`<option value="${esc(f)}" ${filt.firma===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
@@ -1357,9 +1359,17 @@ function renderOrders(c,tb){
     <input type="date" value="${filt.to}" onchange="filt.to=this.value;refreshOrders()" title="Bitiş">
     ${(filt.q||filt.status||filt.firma||filt.from||filt.to||filt.kom||filt.plasiyer||filt.year||filt.month)?`<button class="btn btn-gray btn-sm" onclick="filt={q:'',status:'',firma:'',from:'',to:'',kom:'',plasiyer:'',year:'',month:''};refreshOrders()">✕ Temizle</button>`:''}
   </div>
-  <div id="komSummary">${komSummaryHTML()}</div>
+  <div id="komSummary">${filt.status==='__silinmis'?'':komSummaryHTML()}</div>
   <div class="card"><div class="card-hd"><h3 id="ordCount">${arr.length} Sipariş</h3>${canSeePrice()?`<span id="ordTotal" style="font-size:12px;color:var(--slate-500)">Toplam: <b style="color:var(--blue-900)">${fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))}</b></span>`:''}</div><div class="card-bd" id="ordersTable">${orderTable(arr)}</div></div>`;
   c.innerHTML=h;
+  // SİLİNMİŞ görünümü: normal tablo yerine denetim izinden gelen liste. İçerik sunucudan
+  // asenkron gelir; kart gövdesi önce "yükleniyor" yazar, sonra silinmisCiz() doldurur.
+  if(filt.status==='__silinmis'){
+    const kart=c.querySelector('.card');
+    if(kart)kart.innerHTML='<div class="card-hd"><h3>Silinmiş Siparişler</h3><span class="hint">kim, ne zaman, neyi sildi</span></div>'
+      +'<div id="silinmisGovde" style="padding:14px 16px;color:var(--slate-500)">Yükleniyor…</div>';
+    silinmisYukle();
+  }
 }
 function komSummaryHTML(){
   if(!filt.kom||filt.kom==='all-bayi'||filt.kom==='all-danisman')return '';
@@ -1541,7 +1551,7 @@ function sevkKilitUyariHTML(o){
   if(o._kilitAcik)return '<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:8px;padding:9px 13px;margin-bottom:12px;font-size:12px;font-weight:600">İçerik kilidi AÇIK — yönetici tarafından açıldı. Yapacağınız değişiklik Telegram\'a bildirilir.</div>';
   return '<div style="background:#F1F5F9;border:1px solid #E2E8F0;color:var(--slate-600);border-radius:8px;padding:9px 13px;margin-bottom:12px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
     +'<span><b>Sipariş sevk edilmiş</b> — ürün, miktar, fiyat ve alıcı kilitli. Sevkiyat bilgileri ve durum açık.</span>'
-    +(isAdmin()?'<button class="btn btn-gray btn-sm" onclick="sevkKilidiAc()">Kilidi Aç</button>':'')+'</div>';
+    +(isAdmin()?'<button class="btn btn-gray btn-sm" onclick="sevkKilidiAc()">Düzenle</button>':'')+'</div>';
 }
 function renderOrderModal(){
   const o=editOrder;const ro=!canEdit();
@@ -1624,12 +1634,15 @@ function renderOrderModal(){
       ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">Üretim Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">Üretim onayı bekleniyor — muhasebe onayı sonrası Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
       ${o.id?historyHTML(o):''}
     </div>
+    ${onayVerBlokHTML(o)}
     <div class="modal-ft">
       <div>${o.id&&canDelete()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna muhasebe onay mesajı (butonlu) gönder">Muhasebe Onayı İste</button>`:''}
         ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">Onay Linki Gönder</button>`:''}
         ${o.id?`<button id="stBtn" class="btn" ${(o.status==='sevk'||o.status==='teslim')?'':'disabled'} style="background:${(o.status==='sevk'||o.status==='teslim')?'#1D4ED8':'#94A3B8'};color:#fff${(o.status==='sevk'||o.status==='teslim')?'':';cursor:not-allowed'}" onclick="waOrderModal()" title="${(o.status==='sevk'||o.status==='teslim')?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın'}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
+        ${o.id&&sevkKilitli(o)&&isAdmin()?`<button class="btn" style="background:#B45309;color:#fff" onclick="sevkKilidiAc()" title="Sevk edilmiş siparişin ürün/miktar/fiyat alanlarını düzenlemeye açar. Değişiklik Telegram'a bildirilir, muhasebe onayı düşer.">Düzenle</button>`:''}
+        ${o.id&&o._kilitAcik?`<span style="align-self:center;font-size:11.5px;font-weight:700;color:var(--red-700);padding:0 4px">Düzenleme açık — kaydedince bildirilir</span>`:''}
         ${ro?'':`<button class="btn btn-grn" onclick="saveOrder()">Kaydet</button>`}
         <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
       </div>
@@ -2462,6 +2475,115 @@ function historyHTML(o){
   }).join('');
   return '<div class="sub-hd">Sipariş Geçmişi / Olay Akışı</div><div style="max-height:230px;overflow-y:auto;border:1px solid var(--slate-200);border-radius:8px;padding:2px 12px">'+rows+'</div>';
 }
+// ================= PANELDEN ONAY VERME (31.07) =================
+// Telegram'a ulaşamayan muhasebe/üretim personeli sipariş kartından onaylayabilsin diye.
+// KARAR SUNUCUDA: bu fonksiyon yalnız İSTER; onayı apps/muhasebeonay / apps/fabrikaonay'a
+// yazan tek yer onayVer ucudur. Onaylayanın adı JETONDAN çözülür — buradan gönderilmez.
+// imza = onaycının EKRANDA GÖRDÜĞÜ içeriğin damgası; sipariş sonradan değiştiyse sunucu reddeder.
+// ================= SİLİNMİŞ SİPARİŞLER =================
+// Kaynak: sunucudaki denetim izi (silinenler ucu). Sipariş blob'dan silindiği için
+// İÇERİK (kalemler/fiyatlar) YOKTUR — silme anında alınan özet gösterilir.
+// denetim koleksiyonu istemciye kapalı; uç yalnız 'siparis-silindi' kayıtlarını süzer.
+var SILINEN_URL='https://us-central1-rota-yem.cloudfunctions.net/silinenler';
+window.__SILINEN=null;
+async function silinmisYukle(force){
+  var g=document.getElementById('silinmisGovde');
+  if(window.__SILINEN&&!force){silinmisCiz();return;}
+  try{
+    var idt=window.PortalAuth?await PortalAuth.token():null;
+    if(!idt){if(g)g.textContent='Oturum doğrulanamadı — sayfayı yenileyin.';return;}
+    var r=await fetch(SILINEN_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},body:JSON.stringify({app:'siparis'})});
+    var j=null;try{j=await r.json();}catch(e){}
+    if(!r.ok){if(g)g.textContent=(j&&(j.mesaj||j.hata))||('Okunamadı ('+r.status+')');return;}
+    window.__SILENEN_TS=Date.now();window.__SILINEN=(j&&j.kayitlar)||[];
+    silinmisCiz();
+  }catch(e){console.warn('silinenler',e);if(g)g.textContent='Bağlantı hatası — tekrar deneyin.';}
+}
+function silinmisCiz(){
+  var g=document.getElementById('silinmisGovde');if(!g)return;
+  var K=window.__SILINEN||[];
+  if(!K.length){g.innerHTML='<div style="padding:8px 0;color:var(--slate-500)">Silinmiş sipariş kaydı yok.</div>';return;}
+  // Her denetim kaydı BİR SİLME İŞLEMİ; içinde birden çok sipariş olabilir (toplu silme).
+  var satir=[];
+  K.forEach(function(k){
+    var t=k.ts?new Date(k.ts):null;
+    var zaman=t&&!isNaN(t)?(('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear()+' '+('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)):'—';
+    (k.siparisler||[]).forEach(function(s,i){
+      satir.push('<tr>'
+        +'<td style="white-space:nowrap">'+(i===0?esc(zaman):'')+'</td>'
+        +'<td style="white-space:nowrap;font-weight:600">'+(i===0?esc(k.kim||'?'):'')+'</td>'
+        +'<td style="font-weight:700;color:var(--blue-900)">#'+esc(s.no||'?')+'</td>'
+        +'<td>'+esc(s.ad||'—')+'</td>'
+        +'<td class="num">'+(typeof s.tutar==='number'?fmtTL(s.tutar):'—')+'</td>'
+        +'<td style="white-space:nowrap;color:var(--slate-500)">'+esc(s.tarih?fmtDate(s.tarih):'—')+'</td></tr>');
+    });
+    if(!(k.siparisler||[]).length)satir.push('<tr><td>'+esc(zaman)+'</td><td style="font-weight:600">'+esc(k.kim||'?')+'</td><td colspan="4" style="color:var(--slate-400)">'+(k.adet||0)+' sipariş (ayrıntı kaydedilmemiş)</td></tr>');
+  });
+  g.innerHTML='<div style="padding:0 0 10px;font-size:12px;color:var(--slate-500)">Silinen siparişin <b>içeriği geri getirilemez</b> — burada silme anındaki özet görünür. Tam kayıt için gece yedeğine bakılır.</div>'
+    +'<div class="tbl-scroll"><table class="t"><thead><tr><th>Silme Zamanı</th><th>Silen</th><th>No</th><th>Müşteri</th><th class="num">Tutar</th><th>Sipariş Tarihi</th></tr></thead><tbody>'
+    +satir.join('')+'</tbody></table></div>'
+    +'<div style="padding:10px 0 0"><button class="btn btn-gray btn-sm" onclick="silinmisYukle(true)">Yenile</button></div>';
+}
+var ONAY_URL='https://us-central1-rota-yem.cloudfunctions.net/onayVer';
+async function onayVerTikla(tur){
+  var o=editOrder; if(!o||!o.id){toast('Önce siparişi kaydedin');return;}
+  var et=(tur==='muhasebe'?'Muhasebe':'Üretim');
+  if(!confirm(et+' onayı vermek üzeresiniz.\n\nSipariş #'+(o.no||'?')+' — '+(o.customer||o.aliciMusteri||'')+'\n\nOnayınız adınızla kaydedilecek. Devam edilsin mi?'))return;
+  var btn=document.getElementById('onayBtn_'+tur); if(btn){btn.disabled=true;btn.textContent='Gönderiliyor…';}
+  try{
+    var idt=window.PortalAuth?await PortalAuth.token():null;
+    if(!idt)throw new Error('oturum');
+    var r=await fetch(ONAY_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},
+      body:JSON.stringify({mod:'t',tur:tur,oid:o.id,imza:onayDamga(o)})});
+    var j=null; try{j=await r.json();}catch(e){}
+    if(!r.ok){ toast((j&&(j.mesaj||j.hata))||('Onay verilemedi ('+r.status+')')); renderOrderModal(); return; }
+    // Güvenilir haritayı YERELDE de tazele — onSnapshot gelene kadar rozet/kapı doğru görünsün.
+    var kayit={by:j.by||'?',ts:j.ts||new Date().toISOString(),kaynak:'panel'};
+    if(tur==='muhasebe'){window.__MUHASEBEONAY=window.__MUHASEBEONAY||{};window.__MUHASEBEONAY[o.id]=kayit;}
+    else{window.__FABRIKA=window.__FABRIKA||{};window.__FABRIKA[o.id]=kayit;}
+    pushHist(o,'onay',et+' onayı verildi: '+kayit.by+(j.zaten?' (daha önce onaylanmış)':''),'Panel');
+    saveDB(); toast(j.zaten?(et+' onayı zaten vardı — '+kayit.by):(et+' onayı kaydedildi'));
+    renderOrderModal(); try{render();}catch(e){}
+  }catch(e){ console.warn('onayVer',e); toast('Onay gönderilemedi — bağlantıyı kontrol edin'); renderOrderModal(); }
+}
+// ONAY YETKİM — açılışta BİR KEZ sorulur, oturum boyunca önbellekte.
+// GÖSTERİM AMAÇLI: düğmeyi gizlemek güvenlik değildir, gerçek kapı sunucudaki onayVer'dir.
+// Sorgu başarısız olursa (ağ/uç yok) yetkiler BİLİNMİYOR sayılır ve düğmeler GÖSTERİLİR —
+// sunucu yine reddeder; kullanıcıyı sebepsiz kilitlemektense hatayı tıklayınca görmesi iyidir.
+window.__ONAY_YETKIM=null;
+async function onayYetkimYukle(){
+  try{
+    var idt=window.PortalAuth?await PortalAuth.token():null; if(!idt)return;
+    var r=await fetch(ONAY_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},body:JSON.stringify({sorgu:true})});
+    if(!r.ok)return;
+    var j=await r.json();
+    if(j&&j.yetkiler){window.__ONAY_YETKIM=j.yetkiler;try{if(editOrder)renderOrderModal();}catch(e){}}
+  }catch(e){/* bilinmiyor kalır */}
+}
+function onayYetkiVar(tur){
+  var y=window.__ONAY_YETKIM;
+  if(!y)return true;              // bilinmiyor → göster, sunucu karar versin
+  return y['t:'+tur]===true;
+}
+// Modal alt bandındaki onay bloğu: durum + düğme. Onay VARSA düğme yerine kim/ne zaman yazar.
+function onayVerBlokHTML(o){
+  if(!o||!o.id)return '';
+  var mu=muhasebeOnayRec(o), ur=fabrikaOnayRec(o);
+  var kutu=function(tur,et,rec,pasif,neden){
+    // ONAYLANMIŞSA herkes görür — kimin onayladığı bilgisi yetkiden bağımsızdır.
+    if(rec&&rec.by)return '<span style="display:inline-flex;align-items:center;gap:5px;background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600">'
+      +et+' onayı ✓ '+esc(rec.by)+(rec.ts?' · '+fmtDate(String(rec.ts).slice(0,10)):'')+'</span>';
+    if(!onayYetkiVar(tur))return '';   // yetkisi yok → düğme HİÇ çizilmez
+    return '<button id="onayBtn_'+tur+'" class="btn btn-sm" '+(pasif?'disabled title="'+esc(neden)+'"':'')
+      +' style="background:'+(pasif?'#CBD5E1':'#0E7490')+';color:#fff" onclick="onayVerTikla(\''+tur+'\')">'+et+' Onayı Ver</button>';
+  };
+  // KATI SIRA arayüzde de görünür: muhasebe onayı yokken üretim düğmesi pasif (sunucu zaten reddeder).
+  var muVar=!!(mu&&mu.by);
+  var ic=kutu('muhasebe','Muhasebe',mu,false,'')+kutu('uretim','Üretim',ur,!muVar,'Önce muhasebe onayı gerekli');
+  if(!ic)return '';   // ne onay var ne yetki → boş şerit çizme
+  return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--slate-200)">'
+    +'<span style="font-size:11px;color:var(--slate-500);font-weight:700;letter-spacing:.04em">ONAY</span>'+ic+'</div>';
+}
 var TG_URL='https://us-central1-rota-yem.cloudfunctions.net/tgGonder';
 function tgProxy(text,buttons,chatId){/* GÜVENLİK: bot anahtarı artık istemcide yok; sunucu ucundan gönderilir */
   (async function(){try{var idt=window.PortalAuth?await PortalAuth.token():null;if(!idt)return;
@@ -2564,9 +2686,11 @@ function custBagHTML(x){
 // Arşiv: çalışmayı bırakan müşteri silinmez, arşive alınır (geçmişi korunur).
 function arsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Yetkiniz yok');return}
   if(!confirm(c.name+' arşive alınsın mı?\n\nSilinmez; sipariş geçmişi korunur, listeden ve sipariş formundan kalkar. Arşiv sekmesinden geri alınabilir.'))return;
-  c.arsiv=true;c.arsivTarih=todayISO();logAct('Müşteri arşive alındı: '+c.name);saveDB();closeModal();toast(c.name+' arşive alındı');render();}
+  // KİM ARŞİVLEDİ izi: arşiv listesinde gösterilir. Ad yoksa kullanıcı adına düşülür.
+  c.arsiv=true;c.arsivTarih=todayISO();c.arsivEden=(USER&&(USER.name||USER.username))||'?';c.arsivTs=new Date().toISOString();
+  logAct('Müşteri arşive alındı: '+c.name);saveDB();closeModal();toast(c.name+' arşive alındı');render();}
 function unarsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Yetkiniz yok');return}
-  c.arsiv=false;delete c.arsivTarih;logAct('Müşteri arşivden çıkarıldı: '+c.name);saveDB();closeModal();toast(c.name+' aktif listeye döndü');render();}
+  c.arsiv=false;delete c.arsivTarih;delete c.arsivEden;delete c.arsivTs;logAct('Müşteri arşivden çıkarıldı: '+c.name);saveDB();closeModal();toast(c.name+' aktif listeye döndü');render();}
 function custPlasHTML(x){
   const p=x.plasiyerId?plasById(x.plasiyerId):null;
   return p?'<span style="font-size:9px;font-weight:700;color:#0E7490">PLS.</span> <span style="font-size:11.5px;white-space:nowrap">'+esc(p.name)+'</span>':'<span style="color:var(--slate-300)">—</span>';
@@ -2579,7 +2703,7 @@ function custTableHTML(){
     const b=x.bayiId?komById(x.bayiId):null, d=x.danismanId?komById(x.danismanId):null;
     return trNorm(x.name).includes(q)||trNorm(x.city||'').includes(q)||trNorm(x.adres||'').includes(q)||(x.phone||'').includes(custQ)||(b&&trNorm(b.name).includes(q))||(d&&trNorm(d.name).includes(q));})}
   arr.sort((a,b)=>a.name.localeCompare(b.name,'tr'));   // alfabetik (İsmail)
-  if(arsivMode)return `<div class="card-hd"><h3>${arr.length} Arşivli Müşteri</h3><span style="font-size:11px;color:var(--slate-400)">geçmişi korunur · sipariş formunda görünmez</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>İl</th><th>Arşiv Tarihi</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr style="opacity:.75"><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b></td><td>${x.phone?esc(x.phone):'—'}</td><td>${esc(x.city||'—')}</td><td>${x.arsivTarih?fmtDate(x.arsivTarih):'—'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap">${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${x.id}')">Geri Al</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" style="color:var(--red-700)" onclick="delCust('${x.id}')">Kalıcı Sil</button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Arşivde müşteri yok</td></tr>`}</tbody></table></div>`;
+  if(arsivMode)return `<div class="card-hd"><h3>${arr.length} Arşivli Müşteri</h3><span style="font-size:11px;color:var(--slate-400)">geçmişi korunur · sipariş formunda görünmez</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>İl</th><th>Arşiv Tarihi</th><th>Arşivleyen</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr style="opacity:.75"><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b>${x.bayiId?` <span style="font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;border-radius:6px;padding:1px 6px;white-space:nowrap">BAYİ MÜŞTERİSİ</span>`:''}</td><td>${x.phone?esc(x.phone):'—'}</td><td>${esc(x.city||'—')}</td><td>${x.arsivTarih?fmtDate(x.arsivTarih):'—'}</td><td>${x.arsivEden?esc(x.arsivEden):'<span style="color:var(--slate-400)">—</span>'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap">${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${x.id}')">Geri Al</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" style="color:var(--red-700)" onclick="delCust('${x.id}')">Kalıcı Sil</button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Arşivde müşteri yok</td></tr>`}</tbody></table></div>`;
   return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>Adres</th><th>İl</th><th>Bayi / Danışman</th><th>Plasiyer</th><th>Firma</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b>${x.kaynak==='yem'?' <span class="tip-chip tip-cross" title="Yem tarafından çapraz siparişle eklendi">YEM</span>':''}${x.tip?'<div style="font-size:10px;color:var(--slate-400)">'+esc(x.tip)+'</div>':''}</td><td style="white-space:nowrap">${x.phone?`<a href="tel:${esc(String(x.phone).replace(/\\s/g,''))}" style="color:var(--blue-700);text-decoration:none;font-weight:600">${esc(x.phone)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px;max-width:180px">${x.adres?`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.adres+(x.city?' '+x.city:''))}" target="_blank" title="Google Haritalar'da aç" style="color:var(--slate-600);text-decoration:underline dotted">${esc(x.adres)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px"><span onclick="ilEdit(event,this,'${x.id}')" title="İl seç / düzelt" style="cursor:pointer;border-bottom:1px dashed var(--slate-300);color:${x.city?(ilMatch(x.city)?'var(--slate-600)':'#B45309'):'var(--slate-300)'}">${esc(x.city||'— il seç —')} ▾</span></td><td>${custBagHTML(x)}</td><td>${custPlasHTML(x)}</td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap"><button class="btn-ic" onclick="openCust('${x.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td></tr>`).join(''):`<tr><td colspan="9" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
 }
 function refreshCust(){const el=document.getElementById('custCard');if(el)el.innerHTML=custTableHTML()}
@@ -2707,7 +2831,11 @@ function saveBayiMus(){
   logAct('Bayi müşterisi kaydı: '+o.name+' ('+((komById(o.bayiId)||{}).name||'?')+')');
   saveDB();closeModal();toast('Kaydedildi');render();
 }
-function arsivBayiMus(id){const c=custById(id);if(!c)return;if(!confirm((c.name||'Müşteri')+' arşivlensin mi? (silinmez, geçmişi korunur)'))return;c.arsiv=true;c.arsivTarih=todayISO();logAct('Bayi müşterisi arşivlendi: '+c.name);saveDB();closeModal();toast('Arşivlendi');render();}
+function arsivBayiMus(id){const c=custById(id);if(!c)return;
+  if(!canEdit()){toast('Yetkiniz yok');return}   // görüntüleyici arşivleyemesin (önceden HİÇ kapı yoktu)
+  if(!confirm((c.name||'Müşteri')+' arşivlensin mi? (silinmez, geçmişi korunur)'))return;
+  c.arsiv=true;c.arsivTarih=todayISO();c.arsivEden=(USER&&(USER.name||USER.username))||'?';c.arsivTs=new Date().toISOString();
+  logAct('Bayi müşterisi arşivlendi: '+(c.name||''));saveDB();closeModal();toast((c.name||'Müşteri')+' arşive alındı');render();}
 
 function renderCustomers(c,tb){
   var _exp='<button class="btn btn-gray btn-sm" onclick="exportExcel()" title="Müşteri, bayi, danışman ve sipariş listelerini Excel indir">Excel İndir</button>';
@@ -2832,7 +2960,7 @@ function openCust(id){
         <div class="sub-hd">Sipariş Geçmişi (${orders.length})</div>
         <div style="max-height:260px;overflow:auto"><table class="tbl" style="font-size:12px"><thead><tr><th>Tarih</th><th>No</th><th>Ürünler</th><th class="num">Çuval</th>${canSeePrice()?'<th class="num">Tutar</th>':''}<th>Durum</th></tr></thead><tbody>${orders.map(x=>`<tr onclick="closeModal();openOrder('${x.id}')" style="cursor:pointer"><td style="white-space:nowrap">${fmtDate(x.date)}</td><td>#${esc(x.no||'')}</td><td style="font-size:11px">${esc((x.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', '))}</td><td class="num">${fmtN((x.lines||[]).reduce((s,l)=>s+(+l.qty||0),0))}</td>${canSeePrice()?`<td class="num">${fmtTL(orderTotal(x))}</td>`:''}<td>${statusBadge(x.status)}</td></tr>`).join('')||'<tr><td colspan="6" class="tbl-empty">Sipariş yok</td></tr>'}</tbody></table></div>`;})():''}
     </div>
-    <div class="modal-ft"><div>${(o.id&&!altKapaliSip('musteriler','arsiv'))?(o.arsiv
+    <div class="modal-ft"><div>${o.id?(o.arsiv
       ?`${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${o.id}')">Arşivden Çıkar</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" onclick="delCust('${o.id}')" style="color:var(--red-700)">Kalıcı Sil</button>`:''}`
       :(canEdit()?`<button class="btn btn-gray btn-sm" onclick="arsivCust('${o.id}')" title="Silinmez; geçmişi korunarak arşive alınır"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg> Arşive Al</button>`:'')):''}</div>
     <div style="display:flex;gap:8px">${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/${phoneClean(o.phone)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp</button>`:''}${ro?'':`<button class="btn btn-grn" onclick="saveCust()">Kaydet</button>`}<button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
@@ -3641,7 +3769,7 @@ function stokDevret(){
 }
 // ============ REPORTS ============
 let repView='aylik',repCharts=[],repFilt={year:'',month:''};
-let repTab='tonaj',tonajSel={year:'',month:''};
+let repTab='tonaj',tonajSel={year:'',month:'',taban:'sevk'};
 // ============================================================
 // HAMMADDE STOK & REÇETE & ÜRETİM  (ana omurga)
 // ============================================================
@@ -3778,10 +3906,17 @@ function raporOrders(){
   var canli=DB.orders.filter(function(o){return o.date&&o.date.slice(0,7)>YON_TARIHSEL_SON;});
   return canli.concat(tarihselSanalOrders());
 }
+// Tonaj tabanı — iki farklı soruyu ayırır:
+//   'sevk'    = fiilen çıkan mal (sevk + teslim). Firmanın elle tuttuğu satış kaydıyla AYNI şeyi ölçer. VARSAYILAN.
+//   'siparis' = alınan tüm siparişler, durumdan bağımsız. "Ne kadar sipariş aldık" sorusu.
+// Tarihsel arşiv sanal siparişleri status='teslim' taşır → her iki tabanda da sayılır, geçmiş kaymaz.
+function tonajCikti(o){return !!o&&(o.status==='sevk'||o.status==='teslim');}
 function tonajData(){
   const now=new Date();
-  const orders=raporOrders().filter(o=>o.status!=='iptal'&&o.date);
-  const years=[...new Set(orders.map(o=>o.date.slice(0,4)))].sort();
+  const tumu=raporOrders().filter(o=>o.status!=='iptal'&&o.date);
+  const tabanSevk=tonajSel.taban!=='siparis';
+  const orders=tabanSevk?tumu.filter(tonajCikti):tumu;
+  const years=[...new Set(tumu.map(o=>o.date.slice(0,4)))].sort();   // yıl seçeneği tabandan BAĞIMSIZ — taban değişince yıl listesi kaybolmasın
   if(!tonajSel.year||years.indexOf(tonajSel.year)<0)tonajSel.year=years.indexOf(String(now.getFullYear()))>=0?String(now.getFullYear()):(years[years.length-1]||String(now.getFullYear()));
   const Y=tonajSel.year;
   if(!tonajSel.month)tonajSel.month=(Y===String(now.getFullYear()))?String(now.getMonth()+1).padStart(2,'0'):'12';
@@ -3810,7 +3945,12 @@ function tonajData(){
   const kalanGun=Math.max(0,daysInM-dayOfM);
   const gerekliTempo=(hedefM>monthTot&&kalanGun)?(hedefM-monthTot)/kalanGun:0;
   let hedefYtoplam=0;for(let i=1;i<=12;i++){hedefYtoplam+=(+H[Y+'-'+String(i).padStart(2,'0')]||0);}
-  return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam};
+  // Seçili ayın iki tabanı yan yana — bekleyen sipariş KPI'da görünsün (taban seçiminden BAĞIMSIZ hesaplanır)
+  const _ayda=(o)=>o.date.slice(0,4)===Y&&o.date.slice(5,7)===M;
+  const _ton=(a)=>a.reduce((s,o)=>s+(o.lines||[]).reduce((x,l)=>x+(l&&l.code?tonOf(l.code,l.qty):0),0),0);
+  const aySiparis=_ton(tumu.filter(_ayda)),ayCikan=_ton(tumu.filter(o=>_ayda(o)&&tonajCikti(o)));
+  const ayBekleyen=aySiparis-ayCikan;
+  return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam,tabanSevk,aySiparis,ayCikan,ayBekleyen};
 }
 function tonajBar(pct,col){const w=Math.max(0,Math.min(100,pct));return `<div style="background:var(--slate-200);height:7px;border-radius:4px;min-width:70px"><div style="width:${w}%;background:${col};height:7px;border-radius:4px"></div></div>`;}
 function tonajCols(prodTot,max){const arr=Object.entries(prodTot).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);return arr.length>max?{cols:arr.slice(0,max),other:arr.slice(max)}:{cols:arr,other:[]};}
@@ -3833,10 +3973,16 @@ function tonajRaporuHTML(){
     <span class="rf-lbl">Tonaj Dönemi</span>
     <select onchange="tonajSel.year=this.value;tonajSel.month='';render()">${D.years.map(y=>`<option value="${y}" ${D.Y===y?'selected':''}>${y}</option>`).join('')}</select>
     <select onchange="tonajSel.month=this.value;render()">${AYLAR_TR.map((m,i)=>{const mv=String(i+1).padStart(2,'0');return `<option value="${mv}" ${D.M===mv?'selected':''}>${m}</option>`}).join('')}</select>
-    <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">1 çuval = 25 kg · İptal siparişler hariç · tüm değerler TON</span>
+    <span class="rf-lbl" style="margin-left:14px">Taban</span>
+    <select onchange="tonajSel.taban=this.value;render()" title="Sevk Edilen: fabrikadan fiilen çıkan mal. Sipariş Alınan: durumu ne olursa olsun kaydedilen tüm siparişler.">
+      <option value="sevk" ${D.tabanSevk?'selected':''}>Sevk Edilen</option>
+      <option value="siparis" ${D.tabanSevk?'':'selected'}>Sipariş Alınan</option>
+    </select>
+    <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">${D.tabanSevk?'Yalnız sevk edilen + teslim edilen siparişler':'Durumdan bağımsız tüm siparişler'} · iptaller hariç · tüm değerler TON</span>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} Tonaj</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
+    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} ${D.tabanSevk?'Sevk Edilen':'Sipariş Alınan'}</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
+    ${D.ayBekleyen>0.05?`<div class="kpi a"><div class="kl">${AYLAR_TR[+D.M-1]} Bekleyen</div><div class="kv" style="font-size:18px">${fmtTon(D.ayBekleyen)} t</div><div class="ks">sipariş alındı, henüz sevk edilmedi</div></div>`:''}
     <div class="kpi ${D.hedefM?(pctM>=100?'g':(pctM>=70?'a':'r')):''}"><div class="kl">${AYLAR_TR[+D.M-1]} Hedef</div><div class="kv" style="font-size:18px">${D.hedefM?fmtTon(D.hedefM)+' t':'—'}</div><div class="ks">${D.hedefM?'Gerçekleşme %'+fmtN(Math.round(pctM)):'hedef girilmedi'}</div></div>
     ${D.isCurMonth?`<div class="kpi p"><div class="kl">Ay Sonu Projeksiyon</div><div class="kv" style="font-size:18px">${fmtTon(D.proj)} t</div><div class="ks">günlük ort. ${fmtTon(D.takvimOrt)} t × ${D.daysInM} gün</div></div>`:''}
     ${(D.isCurMonth&&D.hedefM)?`<div class="kpi ${D.gerekliTempo>D.takvimOrt?'r':'g'}"><div class="kl">Hedef İçin Gerekli Tempo</div><div class="kv" style="font-size:18px">${D.gerekliTempo?fmtTon(D.gerekliTempo)+' t/gün':'Tamamlandı'}</div><div class="ks">kalan ${D.kalanGun} gün</div></div>`:''}
@@ -3940,7 +4086,9 @@ function yonVeri(){
   });
   const buAy=todayISO().slice(0,7);
   let gelecekAtlanan=0;
-  DB.orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,7)>YON_TARIHSEL_SON).forEach(o=>{
+  // Tarihsel arşiv FİİLEN SATILAN malı taşır. Canlı aylarda da yalnız sevk/teslim sayılır —
+  // yoksa geçmiş "satılan", bugün "sipariş alınan" olur ve yıllık kıyas sahte artış gösterir.
+  DB.orders.filter(o=>o.status!=='iptal'&&o.date&&tonajCikti(o)&&o.date.slice(0,7)>YON_TARIHSEL_SON).forEach(o=>{
     const k=o.date.slice(0,7);
     if(k>buAy){gelecekAtlanan++;return;}         // ileri tarihli kayıt raporu kaydırmasın
     const s=seri[k]=seri[k]||{urunKg:{},toplamKg:0,kaynak:'canli',tamam:k<buAy};
@@ -4741,6 +4889,10 @@ function exportData(){const blob=new Blob([JSON.stringify(DB)],{type:'applicatio
 function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.orders||!d.customers)throw 0;if(!confirm('Mevcut veriler bu yedekle değiştirilecek. Emin misiniz?'))return;yedekFarkiniSil(DB,d);DB=d;DB.users=DB.users||[{username:'admin',role:'admin',name:'Yönetici'}];saveDB();toast('Yedek yüklendi');render()}catch(err){toast('Geçersiz yedek dosyası')}};r.readAsText(f);inp.value=''}
 // ============ INIT ============
 loadDB();
+// ONAY YETKİM: portal oturumu oturduktan sonra bir kez sorulur (sorgu modu hiçbir şey yazmaz).
+// Gecikmeli: PortalAuth.token() henüz hazır değilse sessizce boşa düşer, düğmeler görünür kalır
+// ve sunucu karar verir — kullanıcı sebepsiz kilitlenmez.
+setTimeout(function(){try{onayYetkimYukle();}catch(e){}},1500);
 // Yerel şifre kutusunu gizle (kimlik yalnız Portal SSO) + kontrol sürerken sade mesaj göster; form asla "parlamaz".
 (function(){var lf=document.getElementById('loginForm');if(lf)lf.style.display='none';document.getElementById('lhint').innerHTML='Portal hesabıyla giriş kontrol ediliyor…';})();
 tryAutoLogin();
@@ -4897,7 +5049,7 @@ async function push(force){   // Faz 0.4: yazma doğrudan setDoc yerine yaz() uc
       // reddedilen değişiklik yerel blobda kalıp sonraki HER kaydı da 403'e düşürür (sekme kilitlenir).
       if(r.status===403&&ht==='sevk_sonrasi_kilit'){
         fbDot('#EF4444','Reddedildi');
-        try{alert('SEVK EDİLMİŞ SİPARİŞ DEĞİŞTİRİLEMEZ\n\nSunucu bu kaydı reddetti; hiçbir değişiklik yazılmadı.\nİçeriği yalnız YÖNETİCİ, sipariş ekranındaki "Kilidi Aç" düğmesiyle değiştirebilir.\n\nSayfayı yenileyin — yerel değişiklikleriniz geri alınacak.');}catch(e2){}
+        try{alert('SEVK EDİLMİŞ SİPARİŞ DEĞİŞTİRİLEMEZ\n\nSunucu bu kaydı reddetti; hiçbir değişiklik yazılmadı.\nİçeriği yalnız YÖNETİCİ, sipariş kartının altındaki "Düzenle" düğmesiyle değiştirebilir.\n\nSayfayı yenileyin — yerel değişiklikleriniz geri alınacak.');}catch(e2){}
         throw new Error('yaz 403 · sevk_sonrasi_kilit');
       }
       // KALICI hata (yetki yok / geçersiz veri) → silme kuyruğunu boşalt; yoksa aynı istek sonsuza dek

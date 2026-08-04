@@ -1128,16 +1128,20 @@ baslik('21) AYLIK RAPOR — DANIŞMAN SATIŞLARI (tonaj + toplamdaki pay + önce
   global.YON_TARIHSEL_SON_FN = /const YON_TARIHSEL_SON_FN='([\d-]+)'/.exec(fn)[1];
   const al = (nm) => { const m = fn.match(new RegExp('^function ' + nm + '\\([\\s\\S]*?^}', 'm')); return m ? eval('(' + m[0] + ')') : null; };
   global.prodKgOf = al('prodKgOf');
+  global.cikanSiparisFN = al('cikanSiparisFN');   // tonaj tabanı: sevk+teslim — ayTonajOf ve danismanTonajOf bunu çağırır
   const danismanTonajOf = al('danismanTonajOf'), danismanAdi = al('danismanAdi');
   dogru('danismanTonajOf / danismanAdi tanımlı', !!(danismanTonajOf && danismanAdi));
+  dogru('cikanSiparisFN tanımlı (çağrılıyor — kayitSayisi vakası tekrarlanmasın)', typeof global.cikanSiparisFN === 'function');
   const DB = {products: [{code: 'P', pkg: '50 kg'}],
     komisyoncular: [{id: 'd1', name: 'Ahmet Yılmaz', type: 'danisman'}, {id: 'd2', name: 'Mehmet Kaya', type: 'danisman'},
       {id: 'b1', name: 'BAREM', type: 'bayi', danismanId: 'd1'}],
     orders: [
-      {date: '2026-08-05', status: 'teslim', danismanId: 'd1', lines: [{code: 'P', qty: 2000}]},                  // 100 t
-      {date: '2026-08-12', status: 'sevk', aliciBayi: true, bayiId: 'b1', danismanId: 'd1', lines: [{code: 'P', qty: 400}]},  // 20 t (BAYİ üzerinden)
-      {date: '2026-08-20', status: 'onay', danismanId: 'd2', lines: [{code: 'P', qty: 900}]},                     // 45 t
-      {date: '2026-08-21', status: 'onay', lines: [{code: 'P', qty: 200}]},                                       // danışmansız
+      {date: '2026-08-05', status: 'teslim', danismanId: 'd1', lines: [{code: 'P', qty: 2000}]},                  // 100 t  ÇIKTI
+      {date: '2026-08-12', status: 'sevk', aliciBayi: true, bayiId: 'b1', danismanId: 'd1', lines: [{code: 'P', qty: 400}]},  // 20 t ÇIKTI (BAYİ üzerinden)
+      {date: '2026-08-20', status: 'teslim', danismanId: 'd2', lines: [{code: 'P', qty: 900}]},                   // 45 t  ÇIKTI
+      {date: '2026-08-25', status: 'onay', danismanId: 'd2', lines: [{code: 'P', qty: 600}]},                     // 30 t  BEKLEYEN → sayılmaz
+      {date: '2026-08-26', status: 'beklemede', danismanId: 'd1', lines: [{code: 'P', qty: 800}]},                // 40 t  BEKLEYEN → sayılmaz
+      {date: '2026-08-21', status: 'teslim', lines: [{code: 'P', qty: 200}]},                                     // danışmansız
       {date: '2026-08-22', status: 'iptal', danismanId: 'd1', lines: [{code: 'P', qty: 9999}]},                   // iptal
       {date: '2026-07-10', status: 'teslim', danismanId: 'd1', lines: [{code: 'P', qty: 1960}]},                  // 98 t
     ]};
@@ -1146,6 +1150,8 @@ baslik('21) AYLIK RAPOR — DANIŞMAN SATIŞLARI (tonaj + toplamdaki pay + önce
   esit('d2 tonajı', bu.d2, 45);
   dogru('danışmansız sipariş sayılmıyor', Object.keys(bu).length === 2);
   dogru('iptal sipariş sayılmıyor', bu.d1 === 120);
+  // 31.07 kararı: tonaj tabanı = fiilen çıkan mal. Beklemede/onaylandı sipariş danışman payını ŞİŞİRMEZ.
+  dogru('BEKLEYEN sipariş danışman tonajına girmiyor (d1 40 t, d2 30 t hariç)', bu.d1 === 120 && bu.d2 === 45);
   esit('önceki ay (canlı) hesaplanıyor', danismanTonajOf(DB, '2026-07').d1, 98);
   // ARŞİV AYI: danışman kaydı YOK → null (kıyas gösterilmez). Temmuz raporunda Haziran böyledir.
   esit('arşiv ayı null döner (kıyas yok)', danismanTonajOf(DB, '2026-06'), null);
@@ -1265,6 +1271,17 @@ baslik('23) SEVK SONRASI İÇERİK KİLİDİ — arayüz + sunucu (firma kararı
     dogru(ad + ': kullanıcıya durum şeridi gösteriliyor', /sevkKilitUyariHTML\(o\)/.test(src));
     // Kilit açması OTURUMLUK olmalı: bloba yazılsaydı kilit herkes için KALICI açılırdı.
     dogru(ad + ': _kilitAcik bloba yazılmıyor', /delete o\._kilitAcik;/.test(src));
+    // 03.08: düğme yalnız üstteki şeritteydi, modal kaydırılınca görünmüyordu → kullanıcı bulamadı.
+    // Kaydet'in yanına ikinci giriş noktası kondu. Koşullar aynı kalmalı: KAYITLI + KİLİTLİ + YÖNETİCİ.
+    dogru(ad + ': alt düğme kaydedilmiş+kilitli+yönetici şartına bağlı',
+      /\$\{o\.id&&sevkKilitli\(o\)&&isAdmin\(\)\?`<button[^`]*onclick="sevkKilidiAc\(\)"/.test(src));
+    dogru(ad + ': alt düğme Kaydet’in HEMEN yanında',
+      /onclick="sevkKilidiAc\(\)"[\s\S]{0,700}?onclick="saveOrder\(\)">Kaydet/.test(src));
+    dogru(ad + ': kilit açıkken ekranda uyarı duruyor', /Düzenleme açık — kaydedince bildirilir/.test(src));
+    dogru(ad + ': iki giriş noktası da aynı adı taşıyor (Kilidi Aç ↔ Düzenle karışmasın)',
+      !/Kilidi Aç/.test(src) && (src.match(/>Düzenle<\/button>/g) || []).length === 2);
+    dogru(ad + ': 403 uyarısı kullanıcıyı DOĞRU düğmeye yönlendiriyor',
+      /sipariş kartının altındaki "Düzenle" düğmesiyle değiştirebilir/.test(src));
   }
   // TMR: kilitlenen içerik alanları
   dogru('TMR: müşteri seçici kilitli', /pick:'pickOrderCustomer',ro:icRO\}/.test(tmr));
@@ -1781,6 +1798,178 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         !/^[A-Z_]+$/.test(n) && n.length > 2);
       dogru('çağrılan her yerel fonksiyon TANIMLI', eksik.length === 0,
         eksik.length ? 'TANIMSIZ: ' + eksik.join(', ') : 'eksik yok');
+    }
+  }
+
+  // ==========================================================================
+  baslik('29) TONAJ TABANI — "sevk edilen" ile "sipariş alınan" ayrımı (koşturularak)');
+  // ==========================================================================
+  // 31.07: rapor 431,4 t derken firmanın elle tuttuğu kayıt 338,8 t diyordu. Kök neden:
+  // tonaj raporu iptal DIŞINDAKİ her siparişi sayıyordu — beklemede/onaylandı dahil.
+  // Yani "ne sattık" değil "ne sipariş aldık" ölçülüyordu. 92,6 t fark = Temmuz'da alınıp
+  // Temmuz'da çıkmayan mal. FİRMA KARARI: taban = sevk edilen (sevk + teslim).
+  // Tarihsel arşiv sanal siparişleri status='teslim' taşır → geçmiş aylar KAYMAZ.
+  {
+    const H = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    // gövdeyi karakter tarayıcıyla çıkar (tonajData çok satırlı, iç içe süslü parantez var)
+    const govde = (ad) => {
+      const i = H.indexOf('function ' + ad + '(');
+      if (i < 0) throw new Error(ad + ' bulunamadı');
+      let d = 0, basladi = false;
+      for (let k = i; k < H.length; k++) {
+        if (H[k] === '{') { d++; basladi = true; } else if (H[k] === '}') { d--; if (basladi && !d) return H.slice(i, k + 1); }
+      }
+      throw new Error(ad + ' kapanmadı');
+    };
+    const URUN = { A25: 25, B50: 50 };
+    const kur = (orders, taban) => {
+      const ort = {
+        tonajSel: { year: '2026', month: '07', taban },
+        raporOrders: () => orders,
+        tonOf: (c, q) => (+q || 0) * (URUN[c] || 25) / 1000,
+        tonajHedefMap: () => ({}),
+      };
+      return new Function(...Object.keys(ort),
+        govde('tonajCikti') + '\n' + govde('tonajData') + '\nreturn tonajData();')(...Object.values(ort));
+    };
+    const S = (no, gun, durum, kod, adet) =>
+      ({ no, date: '2026-07-' + gun, status: durum, lines: [{ code: kod, qty: adet }] });
+    const VERI = [
+      S(1, '05', 'teslim', 'A25', 8000),      // 200,0 t  çıktı
+      S(2, '10', 'sevk', 'A25', 4168),        // 104,2 t  çıktı
+      S(3, '28', 'beklemede', 'A25', 2404),   //  60,1 t  bekliyor
+      S(4, '29', 'onay', 'A25', 2684),        //  67,1 t  bekliyor
+      S(5, '30', 'iptal', 'A25', 9999),       //          hiç sayılmaz
+      S(6, '06', 'teslim', 'B50', 0),         //   0,0 t  sıfır kalem çökertmesin
+    ];
+    const yak = (a, b) => Math.abs(a - b) < 0.05;
+
+    let d = kur(VERI, 'sevk');
+    dogru('SEVK tabanı: yalnız sevk+teslim sayılıyor', yak(d.monthTot, 304.2), d.monthTot.toFixed(1) + ' t');
+    dogru('SEVK tabanı: tabanSevk bayrağı true', d.tabanSevk === true);
+    dogru('SEVK tabanı: günlük dökümde bekleyen gün YOK', !d.byDayTot['28'] && !d.byDayTot['29']);
+    dogru('SEVK tabanı: sevk günleri yerinde', yak(d.byDayTot['05'], 200) && yak(d.byDayTot['10'], 104.2));
+    dogru('SEVK tabanı: yıllık toplam da süzülüyor', yak(d.yearTot, 304.2));
+    dogru('bekleyen tonaj doğru', yak(d.ayBekleyen, 127.2), d.ayBekleyen.toFixed(1) + ' t');
+    dogru('aySiparis TABANDAN BAĞIMSIZ', yak(d.aySiparis, 431.4));
+    dogru('ayCikan TABANDAN BAĞIMSIZ', yak(d.ayCikan, 304.2));
+    dogru('iptal her iki tabanda da HARİÇ', yak(d.aySiparis, 431.4) && yak(d.ayCikan, 304.2));
+
+    d = kur(VERI, 'siparis');
+    dogru('SİPARİŞ tabanı: durumdan bağımsız tümü', yak(d.monthTot, 431.4), d.monthTot.toFixed(1) + ' t');
+    dogru('SİPARİŞ tabanı: tabanSevk bayrağı false', d.tabanSevk === false);
+    dogru('SİPARİŞ tabanı: bekleyen günler görünüyor', yak(d.byDayTot['28'], 60.1));
+    dogru('SİPARİŞ tabanında bekleyen rakamı DEĞİŞMİYOR', yak(d.ayBekleyen, 127.2));
+
+    // TUZAK: yıl listesi süzülmüş kümeden üretilirse, hiç sevk olmayan yılda dönem seçici boşalır
+    d = kur([S(9, '15', 'beklemede', 'A25', 400)], 'sevk');
+    dogru('hiç sevk yokken YIL LİSTESİ kaybolmuyor', d.years.length === 1 && d.years[0] === '2026');
+    dogru('hiç sevk yokken tonaj 0 — çökme yok', d.monthTot === 0);
+    dogru('hiç sevk yokken bekleyen görünüyor', yak(d.ayBekleyen, 10));
+
+    // TUZAK: arşiv status taşımasaydı sevk tabanında geçmiş aylar sıfırlanırdı
+    d = kur([{ no: 0, date: '2026-03-15', status: 'teslim', tarihsel: true, lines: [{ code: 'A25', qty: 4000 }] }].concat(VERI), 'sevk');
+    dogru('tarihsel arşiv SEVK tabanında sayılıyor (geçmiş kaymaz)', yak(d.yearTot, 404.2));
+
+    // Yönetici Raporu aynı tabanı kullanmalı — yoksa geçmiş "satılan", bugün "sipariş alınan" olur
+    dogru('yonVeri de sevk tabanlı', /tonajCikti\(o\)&&o\.date\.slice\(0,7\)>YON_TARIHSEL_SON/.test(H));
+    dogru('taban seçici arayüzde var', /tonajSel\.taban=this\.value;render\(\)/.test(H));
+    dogru('varsayılan taban SEVK', /tonajSel=\{year:'',month:'',taban:'sevk'\}/.test(H));
+    dogru('yanıltıcı "1 çuval = 25 kg" ibaresi kaldırıldı', !/1 çuval = 25 kg/.test(H));
+
+    // ── SUNUCU: Telegram raporları ekranla AYNI tabanı kullanmalı.
+    // Yoksa Telegram "431,4 t" derken site "304,2 t" der ve tam da düzelttiğimiz sorun geri gelir.
+    const FN = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+    const ciktiFN = eval('(' + FN.match(/^function cikanSiparisFN\([\s\S]*?^}/m)[0] + ')');
+    dogru('SUNUCU: cikanSiparisFN tanımlı', typeof ciktiFN === 'function');
+    dogru('SUNUCU: sevk sayılıyor', ciktiFN({status: 'sevk'}) === true);
+    dogru('SUNUCU: teslim sayılıyor', ciktiFN({status: 'teslim'}) === true);
+    dogru('SUNUCU: beklemede SAYILMIYOR', ciktiFN({status: 'beklemede'}) === false);
+    dogru('SUNUCU: onaylandı SAYILMIYOR', ciktiFN({status: 'onay'}) === false);
+    dogru('SUNUCU: hazır SAYILMIYOR', ciktiFN({status: 'hazir'}) === false);
+    dogru('SUNUCU: iptal SAYILMIYOR', ciktiFN({status: 'iptal'}) === false);
+    dogru('SUNUCU: null/undefined çökertmiyor', ciktiFN(null) === false && ciktiFN(undefined) === false);
+    dogru('SUNUCU: istemci kuralıyla BİREBİR aynı durum kümesi',
+      /o\.status === "sevk" \|\| o\.status === "teslim"/.test(FN) &&
+      /o\.status==='sevk'\|\|o\.status==='teslim'/.test(H));
+    // dört tonaj toplayıcının dördü de yeni tabana bağlı olmalı
+    [['ayTonajOf', 'aylık tonaj'], ['danismanTonajOf', 'danışman payı'],
+      ['tmrTonajHesap', 'günlük/aylık Telegram tonajı'], ['aylikRaporHesap', 'aylık rapor']].forEach(([nm, ad]) => {
+      const g = FN.match(new RegExp('^function ' + nm + '\\([\\s\\S]*?^}', 'm'));
+      dogru('SUNUCU: ' + ad + ' (' + nm + ') sevk tabanlı', !!g && /cikanSiparisFN\(o\)/.test(g[0]));
+    });
+    dogru('SUNUCU: haftalık rapor da sevk tabanlı',
+      /const list = \(DB\.orders \|\| \[\]\)\.filter\(\(o\) => o && o\.date && cikanSiparisFN\(o\) && o\.date >= a/.test(FN));
+
+    // ── BEKLEYEN SATIRI (04.08.2026 vakası) ────────────────────────────────────
+    // Sevk tabanına geçince ayın başında rapor "0,0 t · 0 sipariş" dedi; oysa 4 sipariş vardı.
+    // Bekleyen gizlenirse rapor doğru ama YANILTICI olur. Üç raporda da görünmeli.
+    const fgovde = (nm) => (FN.match(new RegExp('^function ' + nm + '\\([\\s\\S]*?^}', 'm')) || [''])[0];
+    for (const nm of ['tmrTonajHesap', 'aylikRaporHesap']) {
+      const g = fgovde(nm);
+      dogru('SUNUCU: ' + nm + ' bekleyeni hesaplıyor', /bekTon/.test(g) && /bekAdet/.test(g));
+      dogru('SUNUCU: ' + nm + ' bekleyeni DÖNDÜRÜYOR (kayitSayisi vakası)', /return \{[\s\S]*?bekTon[\s\S]*?bekAdet/.test(g));
+      dogru('SUNUCU: ' + nm + ' iptali bekleyene saymıyor', /o\.status === "iptal" \|\| cikanSiparisFN\(o\)/.test(g));
+    }
+    // Bekleyen satırı SABİT (04.08 kararı): koşulsuz her mesajda yazılır — 0,0 t olsa da
+    dogru('SUNUCU: günlük mesajda bekleyen satırı var', /sat\("Bekleyen", fmtTonFN\(D\.bekTon\)/.test(fgovde('tmrTonajMesaj')));
+    dogru('SUNUCU: haftalık mesajda bekleyen satırı var', /Dmonth\.bekAdet > 0/.test(fgovde('haftaOzetMesaj')));
+    dogru('SUNUCU: aylık mesajda bekleyen satırı var', /sat\("Bekleyen", fmtTonFN\(A\.bekTon\)/.test(fgovde('aylikRaporMesaj')));
+    // Etiket ne ölçtüğünü söylemeli: "Tonaj"/"Aylık Toplam" artık yalnız SEVK EDİLENİ gösteriyor.
+    dogru('SUNUCU: yanıltıcı "Aylık Toplam" etiketi kalmadı', !/sat\("Aylık Toplam"/.test(FN));
+    dogru('SUNUCU: günlük etiket "Sevk Edilen"', /sat\("Sevk Edilen"/.test(fgovde('tmrTonajMesaj')));
+    dogru('SUNUCU: haftalık etiket "Sevk edilen"', /sat\("Sevk edilen"/.test(fgovde('haftaOzetMesaj')));
+    dogru('SUNUCU: aylık etiket "Sevk edilen"', /sat\("Sevk edilen"/.test(fgovde('aylikRaporMesaj')));
+    // SIRA FİRMA KARARI (04.08): sevk · bekleyen · toplam sipariş · satış günü · günlük ort. — günlük + aylık aynı
+    dogru('SUNUCU: günlük özet sırası firma kararına uygun',
+      /sat\("Sevk Edilen"[\s\S]{0,120}?sat\("Bekleyen"[\s\S]{0,120}?sat\("Toplam Sipariş"[\s\S]{0,120}?sat\("Satış Günü"[\s\S]{0,120}?sat\("Günlük Ort\."/.test(fgovde('tmrTonajMesaj')));
+    dogru('SUNUCU: aylık özet sırası günlükle aynı',
+      /sat\("Sevk edilen"[\s\S]{0,160}?sat\("Bekleyen"[\s\S]{0,160}?sat\("Toplam sipariş"[\s\S]{0,160}?sat\("Satış günü"[\s\S]{0,160}?sat\("Günlük ort\."/.test(fgovde('aylikRaporMesaj')));
+    dogru('SUNUCU: haftalık ay bloğunda ay toplamı', /sat\("Ay toplamı", fmtTonFN\(Dmonth\.toplam \+ Dmonth\.bekTon\)/.test(fgovde('haftaOzetMesaj')));
+    // KIRILIM AY TOPLAMI: yalnız sevk'ten beslenirse ay başında bomboş çıkar, bekleyen ürünler görünmez
+    dogru('SUNUCU: günlük kırılım ay toplamından (prodTotAy)', /Object\.entries\(D\.prodTotAy\)/.test(fgovde('tmrTonajMesaj')));
+    dogru('SUNUCU: aylık kırılım ay toplamından (prodTonAy)', /Object\.entries\(A\.prodTonAy/.test(fgovde('aylikRaporMesaj')));
+    dogru('SUNUCU: kırılım başlığı tabanını söylüyor', /Ürün Kırılımı<\/b> — ay toplamı/.test(FN));
+    dogru('SUNUCU: hedef takibi HÂLÂ sevk edilen üzerinden (toplam değil)',
+      /const yuzde = D\.toplam \/ D\.hedef \* 100;/.test(fgovde('tmrTonajMesaj')));
+
+    // ── GÜNLÜK MESAJ GERÇEKTEN KOŞTURULUR (metin testi çalışma-zamanı hatasını görmez) ──
+    {
+      const sbt = (nm) => {
+        const m = FN.match(new RegExp('^const ' + nm + ' ?= ?([\\s\\S]*?);$', 'm'));
+        return 'const ' + nm + ' = ' + m[1] + ';';
+      };
+      const M = new Function([sbt('AYLAR_TR_FN'), sbt('GUN_TR_FN'), sbt('fmtTonFN'), sbt('escHTML'),
+        fgovde('prodKgOf'), fgovde('cikanSiparisFN'), fgovde('tmrTonajHesap'), fgovde('tmrTonajMesaj'),
+        'return {tmrTonajHesap, tmrTonajMesaj};'].join('\n'))();
+      const U = [{code: 'A', pkg: '25 kg'}];
+      const S = (gun, durum, adet) => ({date: '2026-08-' + gun, status: durum, lines: [{code: 'A', qty: adet}]});
+      const now = new Date(2026, 7, 4, 10, 0, 0);
+      // 04.08.2026 gerçek hâli: 3 sipariş bekliyor, hiçbiri sevk edilmemiş
+      let D = M.tmrTonajHesap({products: U, meta: {}, orders: [
+        S('03', 'beklemede', 372), S('03', 'onay', 132), S('03', 'hazir', 72), S('02', 'iptal', 9999)]}, now);
+      esit('KOŞTU: sevk edilen 0 t', D.toplam, 0);
+      esit('KOŞTU: bekleyen 3 sipariş', D.bekAdet, 3);
+      dogru('KOŞTU: bekleyen 14,4 t (iptal hariç)', Math.abs(D.bekTon - 14.4) < 0.05, D.bekTon.toFixed(2) + ' t');
+      let msg = M.tmrTonajMesaj(D, now);
+      dogru('KOŞTU: mesaj bekleyeni gösteriyor', /Bekleyen/.test(msg) && /14,4/.test(msg));
+      dogru('KOŞTU: mesaj bekleyeni açıklıyor', /henüz sevk edilmedi/.test(msg));
+      // SIRA FİRMA KARARI (04.08): sevk → bekleyen → toplam sipariş → satış günü → günlük ort.
+      dogru('KOŞTU: özet satırları firma sırasında',
+        /Sevk Edilen[\s\S]*?Bekleyen[\s\S]*?Toplam Sipariş[\s\S]*?Satış Günü[\s\S]*?Günlük Ort\./.test(msg));
+      dogru('KOŞTU: toplam sipariş = sevk + bekleyen adet', /Toplam Sipariş\s+3 adet/.test(msg));   // 0 sevk + 3 bekleyen
+      // KIRILIM AY TOPLAMI: sevk 0 iken bile bekleyen ürünler kırılımda görünmeli (04.08 vakası)
+      dogru('KOŞTU: sevk 0 iken kırılım BOŞ DEĞİL (bekleyen ürünler var)', /Ürün Kırılımı<\/b> — ay toplamı/.test(msg) && /A\s+14,4 t/.test(msg));
+      // Karşı durum: her şey sevk edilmiş — beş satır SABİT, bekleyen 0,0 olarak durur
+      D = M.tmrTonajHesap({products: U, meta: {}, orders: [S('03', 'teslim', 400), S('04', 'sevk', 200)]}, now);
+      msg = M.tmrTonajMesaj(D, now);
+      dogru('KOŞTU: bekleyen 0 iken satır 0,0 t olarak DURUYOR (sabit biçim)', /Bekleyen\s+0,0 t/.test(msg));
+      dogru('KOŞTU: bekleyen yokken toplam = sevk', /Toplam Sipariş\s+2 adet/.test(msg));
+      esit('KOŞTU: sevk edilen 15 t', Math.round(D.toplam), 15);
+      dogru('KOŞTU: boş ayda çökmüyor',
+        typeof M.tmrTonajMesaj(M.tmrTonajHesap({products: U, meta: {}, orders: []}, now), now) === 'string');
     }
   }
 

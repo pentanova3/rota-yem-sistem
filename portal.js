@@ -248,10 +248,17 @@ function closeModals(){document.querySelectorAll('.pa-bg').forEach(x=>x.remove()
 
 // ---------- erişim yönetim paneli (çark) ----------
 function openPanel(){
+  // KAYDIRMA KORUMASI: panel her işaretlemede (15 çağrı noktası) baştan çiziliyor; konum
+  // korunmazsa kullanıcı her tıkta en üste fırlıyordu. Sil-ve-yeniden-kur mimarisi korunuyor,
+  // yalnız scrollTop taşınıyor.
+  const _kaydirma=(function(){const b=document.querySelector('#pa-modal .pa-box');return b?b.scrollTop:0;})();
   closeModals();
   const M=PDATA.muhasebeOnay||(PDATA.muhasebeOnay={alicilar:[],gerekli:1});
   const YM=PDATA.yemOnay||(PDATA.yemOnay={alicilar:[]});   // yem üretim onaycıları [{username,chatId,ad}]
-  const MSO=PDATA.muhasebeSiparisOnay||(PDATA.muhasebeSiparisOnay={alicilar:[]});   // muhasebe SİPARİŞ onaycıları [{username,chatId,ad}] — sipariş akışının 1. kapısı
+  const MSO=PDATA.muhasebeSiparisOnay||(PDATA.muhasebeSiparisOnay={alicilar:[]});
+  // TMR ÜRETİM onaycıları — PANELDEN onay için (Telegram'daki confirm: akışında liste yoktu).
+  // Telegram adayı ZORUNLU DEĞİL: bu onay panelden veriliyor, Telegram'ı olmayan da onaycı olabilir.
+  const FBO=PDATA.fabrikaOnay||(PDATA.fabrikaOnay={alicilar:[]});   // [{username,ad,chatId?}]   // muhasebe SİPARİŞ onaycıları [{username,chatId,ad}] — sipariş akışının 1. kapısı
   const userRows=PDATA.users.map((u,i)=>`<tr>
     <td><input value="${esc(u.name||'')}" onchange="PA.set(${i},'name',this.value)" style="width:130px"></td>
     <td><input value="${esc(u.username)}" onchange="PA.set(${i},'username',this.value)" style="width:90px"></td>
@@ -314,7 +321,7 @@ function openPanel(){
         </div>
       </div>
       <div class="pa-t" style="margin-top:22px;font-size:14px">Muhasebe Sipariş Onayı</div>
-      <div class="pa-s">Her yeni sipariş (TMR ve Yem, çapraz siparişler dahil) önce <b>muhasebe onayına</b> düşer; <b>yalnız aşağıdaki onaycılar</b> Telegram'dan onaylayabilir. Muhasebe onaylayınca üretim onay mesajı gider (katı sıra). Kim onayladığı sipariş kartında/kolonunda görünür. Onaycı önce bota <b>/start</b> yazıp aday olmalı; sonra kullanıcı + aday eşleştirilir. <b>Liste boşsa geçici olarak gruptaki herkes onaylayabilir — açılıştan önce doldurun.</b></div>
+      <div class="pa-s">Her yeni sipariş (TMR ve Yem, çapraz siparişler dahil) önce <b>muhasebe onayına</b> düşer; <b>yalnız aşağıdaki onaycılar</b> onaylayabilir — Telegram'dan ya da sipariş kartındaki <b>Muhasebe Onayı Ver</b> düğmesinden. <b>Telegram adayı isteğe bağlıdır</b>: boş bırakılırsa kişi yalnız site üzerinden onaylar. Muhasebe onaylayınca üretim onay mesajı gider (katı sıra). Kim onayladığı sipariş kartında/kolonunda görünür. Onaycı önce bota <b>/start</b> yazıp aday olmalı; sonra kullanıcı + aday eşleştirilir. <b>Liste boşsa geçici olarak gruptaki herkes onaylayabilir — açılıştan önce doldurun.</b></div>
       <div class="pa-onay">
         <div><b>Onaycılar:</b> <span id="pa-msonaycilar">${(MSO.alicilar||[]).map(a=>esc((a.ad||a.chatId)+(a.username?' ('+a.username+')':''))).join(' · ')||'— tanımlı değil (şimdilik herkes onaylayabilir)'}</span></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
@@ -324,12 +331,23 @@ function openPanel(){
           <button class="pa-btn pa-sm pa-out" onclick="PA.clearMuhSipOnay()">Temizle</button>
         </div>
       </div>
+      <div class="pa-t" style="margin-top:22px;font-size:14px">TMR Üretim Onayı</div>
+      <div class="pa-s">Sipariş kartındaki <b>Üretim Onayı Ver</b> düğmesini yalnız aşağıdaki kişiler görür ve kullanabilir. Muhasebe onayı verilmeden üretim onayı yazılamaz. <b>Liste boşken kimse panelden üretim onayı veremez</b> — en az bir kişi ekleyin.</div>
+      <div class="pa-onay">
+        <div><b>Onaycılar:</b> <span id="pa-fbonaycilar">${(FBO.alicilar||[]).map(a=>esc((a.ad||a.username)+(a.username?' ('+a.username+')':''))).join(' · ')||'— tanımlı değil (panelden üretim onayı KAPALI)'}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+          <select id="pa-fbo-user"><option value="">— kullanıcı —</option>${PDATA.users.map(u=>`<option value="${esc(u.username)}">${esc(u.name||u.username)} (${esc(u.username)})</option>`).join('')}</select>
+          <button class="pa-btn pa-sm" onclick="PA.addFabOnayci()">Onaycı Ekle</button>
+          <button class="pa-btn pa-sm pa-out" onclick="PA.clearFabOnay()">Temizle</button>
+        </div>
+      </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
         <button class="pa-btn pa-out" onclick="document.querySelector('.pa-bg').remove()">Vazgeç</button>
         <button class="pa-btn pa-go" style="width:auto;padding:11px 26px" onclick="PA.save()">Kaydet</button>
       </div>
       <button class="pa-x" onclick="document.querySelector('.pa-bg').remove()">✕</button>
     </div></div>`);
+  if(_kaydirma){const _b=document.querySelector('#pa-modal .pa-box');if(_b)_b.scrollTop=_kaydirma;}
 }
 function bolumKapali(u,mod,b){return !!(u.bolum&&u.bolum[mod+'.'+b]===false);}
 function altKapali(u,key){return !!(u.bolum&&u.bolum[key]===false);}
@@ -401,8 +419,32 @@ window.PA={
   gerekli(v){PDATA.muhasebeOnay.gerekli=+v||1;},
   addYemOnayci(){var u=document.getElementById('pa-yem-user').value;var c=document.getElementById('pa-yem-aday').value;if(!u||!c){alert('Kullanıcı ve Telegram adayını (bota /start yazan) seçin.');return;}var a=(PDATA.adaylar||[]).find(x=>String(x.chatId)===String(c));var YM=PDATA.yemOnay=PDATA.yemOnay||{alicilar:[]};YM.alicilar=YM.alicilar||[];if(YM.alicilar.length>=2){alert('En fazla 2 üretim onaycısı (asıl + yedek yönetici).');return;}if(!YM.alicilar.some(x=>x.username===u||String(x.chatId)===String(c)))YM.alicilar.push({username:u,chatId:c,ad:a?a.ad:c});openPanel();},
   clearYemOnay(){PDATA.yemOnay={alicilar:[]};openPanel();},
-  addMuhSipOnayci(){var u=document.getElementById('pa-mso-user').value;var c=document.getElementById('pa-mso-aday').value;if(!u||!c){alert('Kullanıcı ve Telegram adayını (bota /start yazan) seçin.');return;}var a=(PDATA.adaylar||[]).find(x=>String(x.chatId)===String(c));var MSO=PDATA.muhasebeSiparisOnay=PDATA.muhasebeSiparisOnay||{alicilar:[]};MSO.alicilar=MSO.alicilar||[];if(MSO.alicilar.length>=4){alert('En fazla 4 muhasebe onaycısı.');return;}if(!MSO.alicilar.some(x=>x.username===u||String(x.chatId)===String(c)))MSO.alicilar.push({username:u,chatId:c,ad:a?a.ad:c});openPanel();},
+  // TELEGRAM ADAYI İSTEĞE BAĞLI (31.07): muhasebe onayı artık sipariş kartından da verilebiliyor.
+  // Panel yolu username'e, Telegram yolu chatId'ye bakar. Adayı zorunlu tutmak, Telegram'ı
+  // olmayan muhasebeciyi onaycı yapılamaz hâle getiriyordu — siteden de onaylayamıyordu.
+  // chatId boş kalırsa: Telegram eşleşmesi olmaz (String(undefined) hiçbir id'ye eşit değil),
+  // alıcı beyaz-listesi de chatId!=null süzdüğü için etkilenmez. Site onayı çalışır.
+  addMuhSipOnayci(){
+    var u=document.getElementById('pa-mso-user').value;
+    var c=document.getElementById('pa-mso-aday').value;
+    if(!u){alert('Kullanıcı seçin. (Telegram adayı isteğe bağlıdır — boş bırakılırsa yalnız site üzerinden onay verir.)');return;}
+    var a=(PDATA.adaylar||[]).find(function(x){return String(x.chatId)===String(c);});
+    var MSO=PDATA.muhasebeSiparisOnay=PDATA.muhasebeSiparisOnay||{alicilar:[]};MSO.alicilar=MSO.alicilar||[];
+    if(MSO.alicilar.length>=6){alert('En fazla 6 muhasebe onaycısı.');return;}
+    if(MSO.alicilar.some(function(x){return String(x.username||'').toLowerCase()===String(u).toLowerCase();})){alert('Bu kullanıcı zaten onaycı.');return;}
+    var uy=(PDATA.users||[]).find(function(x){return x.username===u;});
+    var kayit={username:u,ad:(a&&a.ad)||(uy&&(uy.name||uy.username))||u};
+    if(c)kayit.chatId=c;   // yalnız seçildiyse yaz — boş dize chatId'yi 'tanımlı' göstermesin
+    MSO.alicilar.push(kayit);openPanel();},
   clearMuhSipOnay(){PDATA.muhasebeSiparisOnay={alicilar:[]};openPanel();},
+  addFabOnayci(){var u=document.getElementById('pa-fbo-user').value;if(!u){alert('Kullanıcı seçin.');return;}
+    var F=PDATA.fabrikaOnay=PDATA.fabrikaOnay||{alicilar:[]};F.alicilar=F.alicilar||[];
+    if(F.alicilar.length>=6){alert('En fazla 6 TMR üretim onaycısı.');return;}
+    if(F.alicilar.some(function(x){return String(x.username||'').toLowerCase()===String(u).toLowerCase();})){alert('Bu kullanıcı zaten onaycı.');return;}
+    var uy=(PDATA.users||[]).find(function(x){return x.username===u;});
+    F.alicilar.push({username:u,ad:(uy&&(uy.name||uy.username))||u});openPanel();},
+  clearFabOnay(){PDATA.fabrikaOnay={alicilar:[]};openPanel();},
+
   async denetim(){
     let list=[];
     try{
@@ -512,7 +554,7 @@ window.PA={
       const users=PDATA.users.map(u=>({id:u.id,username:u.username,name:u.name||'',perms:u.perms||{},fiyatGor:!!u.fiyatGor,siparisSil:!!u.siparisSil,portalYonetici:!!u.portalYonetici,arama:!!u.arama,bolum:u.bolum||{}}));
       const sifreler={};PDATA.users.forEach(u=>{const p=String(u._yeniSifre||'').trim();if(u.username&&p)sifreler[u.username]=p;});
       const r=await fetch(YONETIM_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
-        body:JSON.stringify({islem:'sync',users,sifreler,muhasebeOnay:PDATA.muhasebeOnay,yemOnay:PDATA.yemOnay,muhasebeSiparisOnay:PDATA.muhasebeSiparisOnay})});
+        body:JSON.stringify({islem:'sync',users,sifreler,muhasebeOnay:PDATA.muhasebeOnay,yemOnay:PDATA.yemOnay,muhasebeSiparisOnay:PDATA.muhasebeSiparisOnay,fabrikaOnay:PDATA.fabrikaOnay})});
       const j=await r.json();
       if(!r.ok||!j.ok){alert('Kaydedilemedi: '+(j.hata||r.status));return;}
       PDATA.users.forEach(u=>{delete u._yeniSifre;});

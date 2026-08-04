@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#6e0a16">
+<meta name="theme-color" content="#0C2340">
 <!-- PWA + peynir ikonu (31 Tem 2026): sekme/masaüstü/telefon ikonları icons/ altında -->
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
@@ -27,11 +27,11 @@
      Excel içe aktarmayla geldi, metropolSeedV1=true). Yeni veri her zaman Metropol > Excel İçe Aktar ile. -->
 <style>
 :root{
-  --blue-900:#6e0a16;--blue-800:#82101e;--blue-700:#9c0f22;--blue-600:#b51228;--blue-500:#c91730;--blue-400:#e04a5f;--blue-300:#f0a3ad;--blue-200:#f7cdd3;--blue-100:#fbe9ec;--blue-50:#fdf4f5;
-  --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#334155;--slate-600:#475569;--slate-500:#64748B;--slate-400:#94A3B8;--slate-300:#CBD5E1;--slate-200:#E2E8F0;--slate-100:#F1F5F9;--slate-50:#F8FAFC;
-  --green-600:#16A34A;--green-100:#DCFCE7;--green-700:#15803D;--green-50:#F0FDF4;
-  --amber-500:#F59E0B;--amber-100:#FEF3C7;--amber-700:#B45309;--amber-50:#FFFBEB;
-  --red-500:#EF4444;--red-100:#FEE2E2;--red-700:#B91C1C;--red-50:#FEF2F2;
+  --blue-900:#0C2340;--blue-800:#14295C;--blue-700:#182F73;--blue-600:#1E3E90;--blue-500:#3D5CB8;--blue-400:#7189D1;--blue-300:#A6B5E4;--blue-200:#CBD5F0;--blue-100:#E6EDFB;--blue-50:#F4F7FB;
+  --slate-900:#0F172A;--slate-800:#1E293B;--slate-700:#3D4450;--slate-600:#535A65;--slate-500:#6E757F;--slate-400:#9CA2AA;--slate-300:#D0D5DA;--slate-200:#E5E8EC;--slate-100:#F3F5F7;--slate-50:#FAFBFD;
+  --green-600:#16A34A;--green-100:#DCFCE7;--green-700:#166534;--green-50:#F0FDF4;
+  --amber-500:#D97706;--amber-100:#FEF3C7;--amber-700:#92400E;--amber-50:#FFFBEB;
+  --red-200:#FECACA;--red-500:#DC2626;--red-600:#B91C1C;--red-100:#FEE2E2;--red-700:#991B1B;--red-50:#FEF2F2;
   --purple:#7C3AED;--wa:#25D366;--wa-d:#128C7E;
   --sb:236px;--font:'Inter',system-ui,-apple-system,sans-serif;
 }
@@ -42,26 +42,26 @@ body{font-family:var(--font);background:var(--slate-100);color:var(--slate-800);
 button,input,select,textarea{font-family:inherit}
 .num{font-variant-numeric:tabular-nums}
 /* sidebar */
-.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sb);background:#fff;color:var(--blue-700);display:flex;flex-direction:column;z-index:30;transition:transform .25s;border-right:1px solid #f0d4d8}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sb);background:linear-gradient(180deg,#0E2A4C 0%,#0C2340 45%,#0A1D36 100%);color:#B6BECB;display:flex;flex-direction:column;z-index:30;transition:transform .25s;box-shadow:inset -1px 0 0 rgba(255,255,255,.05);-webkit-font-smoothing:antialiased}
 /* Marka bloğu — logo ÜSTTE sola dayalı, kurum adı ALTINDA. Tek bir bütün olarak durur, taşma yapmaz. */
-.sb-brand{padding:20px 18px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;border-bottom:1px solid #f5e2e5;overflow:hidden}
-.sb-brand .plate{background:transparent;border-radius:0;padding:0;display:inline-flex;max-width:100%}
+.sb-brand{padding:20px 18px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:11px;border-bottom:1px solid rgba(255,255,255,.08);overflow:hidden}
+.sb-brand .plate{background:#F7F9FD;border-radius:6px;padding:9px 13px;display:inline-flex;max-width:100%}
 .sb-brand .plate img{height:46px;width:auto;max-width:100%;display:block}
-.sb-brand .bt{font-size:14.5px;font-weight:800;color:var(--blue-700);line-height:1.2;letter-spacing:-.01em}
-.sb-brand .bs{font-size:10.5px;color:#b8838a;margin-top:2px}
+.sb-brand .bt{font-size:14.5px;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.01em}
+.sb-brand .bs{font-size:10.5px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#7B8799;margin-top:2px}
 .sb-nav{flex:1;overflow-y:auto;padding:10px 10px 20px}
 .sb-sec{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#c98e96;padding:13px 12px 5px;text-align:left}
-.sb-sec:hover{color:#a86a72}
+.sb-sec:hover{color:#D8DFE8}
 .sb-chev{transition:transform .15s;opacity:.7;transform:rotate(-90deg)}
 .sb-chev.on{transform:rotate(0deg)}
-.sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:13.5px;font-weight:500;color:var(--blue-600);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:.12s}
-.sb-item:hover{background:var(--blue-50);color:var(--blue-800)}
-.sb-item.active{background:var(--blue-600);color:#fff;font-weight:600}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:6px;font-size:13.5px;font-weight:500;color:#B6BECB;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:.12s}
+.sb-item:hover{background:rgba(182,190,203,.08);color:#D8DFE8}
+.sb-item.active{background:rgba(182,190,203,.14);color:#EEF2F7;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .sb-item svg{width:17px;height:17px;flex:none;opacity:.9}
-.sb-item .badge{margin-left:auto;font-size:10px;font-weight:700;background:var(--blue-100);color:var(--blue-700);padding:1px 7px;border-radius:20px}
+.sb-item .badge{margin-left:auto;font-size:10px;font-weight:700;background:var(--amber-500);color:#fff;padding:1px 7px;border-radius:20px;font-variant-numeric:tabular-nums}
 .sb-item.active .badge{background:rgba(255,255,255,.2);color:#fff}
-.sb-back{padding:12px 18px;border-top:1px solid #f5e2e5;font-size:12px;color:#b8838a;text-decoration:none;display:flex;align-items:center;gap:6px}
-.sb-back:hover{color:var(--blue-700)}
+.sb-back{padding:12px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#7B8799;text-decoration:none;display:flex;align-items:center;gap:6px}
+.sb-back:hover{color:#D8DFE8}
 /* ——— DAR (rail) MENÜ — yalnız ikonlar ———
    --sb tek değişkeni hem .sidebar genişliğini hem .main margin'ini besliyor, başka yere dokunmaya gerek yok.
    DİKKAT: .main'e veya atalarına transform/will-change EKLENMEYECEK — yeni stacking context yaratır ve
@@ -81,9 +81,9 @@ body.nav-dar .sb-item svg{width:19px;height:19px}
 body.nav-dar .sb-item .badge{display:none}
 /* Grup başlıkları gizlendiği için grupları ince çizgi ayırsın */
 .sb-sep{display:none}
-body.nav-dar .sb-sep{display:block;height:1px;background:#f5e2e5;margin:5px 8px}
+body.nav-dar .sb-sep{display:block;height:1px;background:#E5E8EC;margin:5px 8px}
 /* Başlıksız grup (Akıllı Arama) ile ilk başlık arasında geniş modda ince ayraç */
-.sb-sep-w{height:1px;background:#f5e2e5;margin:8px 10px 2px}
+.sb-sep-w{height:1px;background:rgba(255,255,255,.08);margin:8px 10px 2px}
 body.nav-dar .sb-sep-w{display:none}
 body.nav-dar .sb-back{padding:12px 0;justify-content:center}
 body.nav-dar .sb-back span{display:none}
@@ -518,9 +518,9 @@ details.fld-katla>div:first-of-type{margin-top:12px}
 @keyframes bilgiAc{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 /* Çıkış: düz bağlantı olarak Şifre Değiştir'den ayırt edilemiyordu — belirgin buton (şablondan). */
 .sb-cikis{display:flex;align-items:center;justify-content:center;gap:7px;margin:8px 10px 46px;padding:10px 12px;
-  border:1px solid #E5B4B9;background:#FDF4F4;color:#8B1F28;border-radius:10px;font-size:12.5px;font-weight:700;
+  border:1px solid rgba(255,255,255,.14);background:rgba(182,190,203,.10);color:#D8DFE8;border-radius:10px;font-size:12.5px;font-weight:700;
   text-decoration:none;cursor:pointer}
-.sb-cikis:hover{background:#F9E6E7;border-color:#D99AA1}
+.sb-cikis:hover{background:rgba(182,190,203,.18);border-color:rgba(255,255,255,.24)}
 .sb-cikis svg{flex:none}
 body.nav-dar .sb-cikis span{display:none} body.nav-dar .sb-cikis{padding:10px 0;margin:8px 6px 46px}
 /* ============ ANASAYFA "MESAİ" KOKPİTİ (.hm- öneki — 31 Tem 2026, jüri sentezi) ============
@@ -533,13 +533,13 @@ body.nav-dar .sb-cikis span{display:none} body.nav-dar .sb-cikis{padding:10px 0;
   display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
   animation:hmGiris .3s ease both}
 .hm-hero-selam{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.25}
-.hm-hero-tarih{font-size:12.5px;color:#f0a3ad;margin-top:3px;font-weight:500}
+.hm-hero-tarih{font-size:12.5px;color:#A6B5E4;margin-top:3px;font-weight:500}
 .hm-hero-statlar{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch}
 .hm-hstat{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);
   border-radius:10px;padding:8px 14px;min-width:86px;transition:background .12s}
-.hm-hstat .hl{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#f0a3ad}
+.hm-hstat .hl{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#A6B5E4}
 .hm-hstat .hv{font-size:20px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums}
-.hm-hstat .hv small{font-size:11px;font-weight:600;color:#f7cdd3}
+.hm-hstat .hv small{font-size:11px;font-weight:600;color:#CBD5F0}
 .hm-hstat.hm-hstat-acil{background:#FEE2E2;border-color:#FCA5A5;cursor:pointer}
 .hm-hstat.hm-hstat-acil .hl,.hm-hstat.hm-hstat-acil .hv{color:#991B1B}
 .hm-hstat.hm-hstat-acil:hover{background:#FECACA}
@@ -3560,7 +3560,7 @@ function ozlukImhaTutanak(pid){
   const f=fb();const ex=s=>esc(s==null?'':s);
   const sat=(k,v)=>`<tr><td class="k">${k}</td><td class="s">:</td><td>${v}</td></tr>`;
   const css=`  body{font-size:11pt;line-height:1.45}
-  h1{text-align:center;font-size:14pt;font-weight:700;color:#6e0a16;letter-spacing:.02em;margin:0 0 2mm}
+  h1{text-align:center;font-size:14pt;font-weight:700;color:#0C2340;letter-spacing:.02em;margin:0 0 2mm}
   .sub{text-align:center;font-size:10pt;color:#444;margin:0 0 6mm}
   table.kv{border-collapse:collapse;width:100%;margin:0 0 4mm}
   table.kv td{padding:1.4mm 0;font-size:11pt;vertical-align:top}
@@ -3790,7 +3790,7 @@ function renderDetay(){
       <div class="psearch" style="flex:1;min-width:200px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="detayQ" placeholder="Ara… (örn. dolap 044, güzergah KOCAAVŞAR, ayakkabı 42)" value="${esc(detayQ)}" oninput="detayQ=this.value;renderDetayList()"></div>
     </div>
-    <div class="colchips"><span class="colchips-l">Sütunlar:</span>${detayPcols().map(c=>`<button class="colchip${detayCols.includes(c.k)?' on':''}" onclick="detayColAcKapa('${c.k}')">${c.l}</button>`).join('')}<button class="colchip" style="border-style:dashed;color:var(--brand-700,#6e0a16)" onclick="openDetaySutunYonet()" title="Sütun listesini sadeleştir / geri getir">Sütunları Yönet</button></div>
+    <div class="colchips"><span class="colchips-l">Sütunlar:</span>${detayPcols().map(c=>`<button class="colchip${detayCols.includes(c.k)?' on':''}" onclick="detayColAcKapa('${c.k}')">${c.l}</button>`).join('')}<button class="colchip" style="border-style:dashed;color:var(--brand-700,#0C2340)" onclick="openDetaySutunYonet()" title="Sütun listesini sadeleştir / geri getir">Sütunları Yönet</button></div>
   </div><div id="detayTableWrap"></div></div>`;
   document.getElementById('content').innerHTML=h;
   renderDetayList();
@@ -5359,7 +5359,7 @@ function printFilled(pairs){
     .sheet.compact table.sig{margin-top:8mm}
     .sheet.compact table.sig tr.rol td{padding-bottom:9mm}
     .sheet.compact .antet-h{margin-bottom:2.5mm}
-    .noprint{position:fixed;top:10px;right:10px;z-index:9}.noprint button{padding:8px 16px;font:600 13px sans-serif;background:#b51228;color:#fff;border:none;border-radius:7px;cursor:pointer}
+    .noprint{position:fixed;top:10px;right:10px;z-index:9}.noprint button{padding:8px 16px;font:600 13px sans-serif;background:#1E3E90;color:#fff;border:none;border-radius:7px;cursor:pointer}
   `,sayfalar:sheets});
 }
 
@@ -6594,7 +6594,7 @@ function yillikIzinFormu(pid,zid,opt){
   const sigbox=(ad,lbl)=>`<div class="sigbox">${ad?`<div class="signame">${ex(ad)}</div>`:''}<div class="siglbl">${lbl}</div></div>`;
   // Düzen ortak antet iskeletinden (antetBelge); buradaki CSS yalnız belgeye özel tipografi.
   const css=`  body{font-size:11pt;line-height:1.4}
-  h1{text-align:center;font-size:14pt;font-weight:700;color:#6e0a16;letter-spacing:.02em;margin:0 0 3mm}
+  h1{text-align:center;font-size:14pt;font-weight:700;color:#0C2340;letter-spacing:.02em;margin:0 0 3mm}
   .to{margin:0 0 3mm;line-height:1.35}.to b{font-size:11.5pt}
   p.body{text-align:justify;line-height:1.45;margin:0 0 2mm}
   .tarih{text-align:right;margin:0;font-size:10.5pt}
@@ -6603,11 +6603,11 @@ function yillikIzinFormu(pid,zid,opt){
   .signame{font-weight:700;font-size:10.5pt}.siglbl{font-size:8.5pt;color:#555}
   td.dt{font-size:10pt;color:#333}
   .sec{border:1px solid #e0c4c9;border-radius:7px;padding:1.8mm 4mm 1.3mm;margin:2mm 0}
-  .sech{font-weight:700;font-size:10.5pt;color:#6e0a16;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #f0e2e4;padding-bottom:1mm;margin-bottom:1.5mm}
+  .sech{font-weight:700;font-size:10.5pt;color:#0C2340;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #f0e2e4;padding-bottom:1mm;margin-bottom:1.5mm}
   table.kv{border-collapse:collapse;margin:0.4mm 0 0.8mm}table.kv td{padding:0.7mm 0;font-size:11pt;vertical-align:top}
   table.kv td.k{white-space:nowrap;font-weight:600;padding-right:2mm}table.kv td.s{padding-right:3mm}
   .note{font-size:9.5pt;color:#444;margin:1mm 0 0}
-  .kalan{font-size:10.5pt;font-weight:600;color:#6e0a16;background:#fbf5f6;border:1px solid #e0c4c9;border-radius:6px;padding:1.8mm 4mm;margin:2mm 0 0}
+  .kalan{font-size:10.5pt;font-weight:600;color:#0C2340;background:#fbf5f6;border:1px solid #e0c4c9;border-radius:6px;padding:1.8mm 4mm;margin:2mm 0 0}
   /* Sayılmayan günler bölümü — bilgilendirme niteliğinde, küçük punto (kullanıcı isteği) */
   .sec-s{padding:1.5mm 4mm 1mm;margin:2mm 0}
   .sec-s .sech{font-size:9pt;margin-bottom:1mm;padding-bottom:0.8mm}
@@ -7321,7 +7321,7 @@ function trafikTutanak(tid){
   const kv=(k,v)=>`<tr><td class="k">${k}</td><td class="s">:</td><td class="v">${v}</td></tr>`;
   // Düzen ortak antet iskeletinden (antetBelge); buradaki CSS yalnız belgeye özel tipografi.
   const css=`  body{font-size:11pt;line-height:1.5}
-  h1{text-align:center;font-size:14pt;font-weight:700;color:#6e0a16;letter-spacing:.02em;margin:0 0 1mm}
+  h1{text-align:center;font-size:14pt;font-weight:700;color:#0C2340;letter-spacing:.02em;margin:0 0 1mm}
   .sub{text-align:center;font-size:10pt;color:#444;margin:0 0 6mm}
   table.kv{border-collapse:collapse;margin:0 0 6mm;width:100%}table.kv td{padding:2mm 0;font-size:11.5pt;vertical-align:top;border-bottom:1px solid #eee}
   table.kv td.k{white-space:nowrap;font-weight:600;width:1%;padding-right:2mm}table.kv td.s{width:5mm}
@@ -7684,26 +7684,26 @@ function raporAc(m){const ust=m.ust,baslik=m.baslik,govde=m.govde;
   // alt bant her sayfanın dibine oturur. Buradaki CSS yalnız BELGEYE ÖZEL tipografidir.
   const css=`  body{font-size:10.5pt;line-height:1.4}
   .ust{text-align:center;font-size:11pt;color:#444;margin:1mm 0 0}
-  h1{text-align:center;font-size:15pt;font-weight:700;color:#6e0a16;letter-spacing:.02em;margin:1mm 0 5mm}
-  h3.rsec{font-size:11.5pt;color:#6e0a16;margin:6mm 0 1.5mm;border-bottom:1px solid #f0e2e4;padding-bottom:1mm}
+  h1{text-align:center;font-size:15pt;font-weight:700;color:#0C2340;letter-spacing:.02em;margin:1mm 0 5mm}
+  h3.rsec{font-size:11.5pt;color:#0C2340;margin:6mm 0 1.5mm;border-bottom:1px solid #f0e2e4;padding-bottom:1mm}
   table{border-collapse:collapse;width:100%;margin:1mm 0 2mm}
   th,td{border:1px solid #d9d9d9;padding:3px 7px;font-size:10pt;text-align:left;vertical-align:top}
-  th{background:#f6eef0;color:#6e0a16;font-weight:700}
+  th{background:#f6eef0;color:#0C2340;font-weight:700}
   td.num{text-align:right;white-space:nowrap}
   .bos{color:#999;font-size:10pt;padding:3px 0}
   .kv2{border:none}.kv2 td{border:none;padding:2px 6px 2px 0;font-size:11pt}.kv2 td.k{font-weight:700;white-space:nowrap;color:#444}
   .rkpi{display:flex;gap:14px;margin:6mm 0 0}.rkpi>div{flex:1;border:1px solid #e0c4c9;border-radius:8px;padding:8px 12px;text-align:center;background:#fbf5f6}
-  .rkpi .n{font-size:20pt;font-weight:800;color:#6e0a16}.rkpi .l{font-size:9pt;color:#666}
+  .rkpi .n{font-size:20pt;font-weight:800;color:#0C2340}.rkpi .l{font-size:9pt;color:#666}
   .bar{display:flex;gap:8px;justify-content:flex-end;margin:10px 0;padding:0 2px}
   .bar button{font-family:inherit;font-size:11pt;padding:7px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
-  .bar button.pri{background:#6e0a16;color:#fff;border-color:#6e0a16}
+  .bar button.pri{background:#0C2340;color:#fff;border-color:#0C2340}
   @media print{.antet-h{break-inside:avoid}}
   @media (max-width:640px){h1{font-size:16pt}.rkpi{flex-direction:column;gap:10px}
     table:not(.kv2){border:0}table:not(.kv2) thead{display:none}
     table:not(.kv2) tr{display:block;border:1px solid #e6d2d6;border-radius:9px;padding:6px 11px;margin-bottom:9px}
     table:not(.kv2) td{display:flex;justify-content:space-between;gap:14px;border:0;padding:4px 0;font-size:11pt;text-align:right;border-bottom:1px solid #f3f3f3}
     table:not(.kv2) tr td:last-child{border-bottom:0}
-    table:not(.kv2) td::before{content:attr(data-label);font-weight:700;color:#6e0a16;text-align:left;flex:0 0 42%}}`;
+    table:not(.kv2) td::before{content:attr(data-label);font-weight:700;color:#0C2340;text-align:left;flex:0 0 42%}}`;
   antetAc({baslik:baslik+(ust?' — '+ust:''),css,pad:'1mm 14mm 3mm',
     bar:`<div class="bar"><button onclick="window.print()">Yazdır / PDF Kaydet</button></div>`,
     icerik:`${ust?`<div class="ust">${esc(ust)}</div>`:''}<h1>${esc(baslik)}</h1>${govde}`});
@@ -7884,7 +7884,7 @@ function anlzRaporMeta(){const p=DB.personeller.find(x=>x.id===analizPid);if(!p)
   g+=`<div class="rkpi"><div><div class="n">${asSaat(t.fm1)}</div><div class="l">FM1 fazla mesai${p.fmYok?' (FM verilmez)':' — yasal sınır '+FM_YASAL+' saat · '+(t.fm1>=FM_YASAL?asSaat(t.fm1-FM_YASAL)+' AŞIM':'kalan '+asSaat(FM_YASAL-t.fm1))}</div></div><div><div class="n">${asSaat(t.fm2)}</div><div class="l">FM2 genel tatil mesaisi</div></div><div><div class="n">${t.d}</div><div class="l">devamsızlık (gün)</div></div><div><div class="n">${t.r+t.rk}</div><div class="l">rapor (gün)${t.rk?' — '+t.rk+' iş kazası':''}</div></div></div>`;
   g+=`<div class="rkpi"><div><div class="n">${fmtTL(t.prim)}</div><div class="l">devam primi ödenen</div></div><div><div class="n">${fmtTL(verilen)}</div><div class="l">avans verilen — kesilen ${fmtTL(t.avans)}</div></div><div><div class="n">${fmtTL(ceza)}</div><div class="l">trafik cezası — kesinti ${fmtTL(t.trafik)}</div></div><div><div class="n">${asSaat(t.cs)}</div><div class="l">fiili çalışma — gereken ${asSaat(t.gs)}</div></div></div>`;
   // Aylık döküm — 14 sütun A4'e ancak sıkışık stille sığar; raporAc'ın 10pt genel tablosu yerine inline 8pt
-  const thS='padding:2px 4px;border:1px solid #d9d9d9;font-size:8pt;background:#f6eef0;color:#6e0a16;text-align:left',
+  const thS='padding:2px 4px;border:1px solid #d9d9d9;font-size:8pt;background:#f6eef0;color:#0C2340;text-align:left',
         tdS='padding:2px 4px;border:1px solid #d9d9d9;font-size:8pt';
   const bas=['Ay','Gereken','Çalışılan','FM1','FM2','D','R','RK','Yİ','Üİ','M','Prim','Avans','Ceza'];
   const sat=aylik.filter(k=>!k.gelecek).map(k=>{if(!k.iste)return [k.info.adi,'—','—','','','','','','','','','','',''];
@@ -7965,7 +7965,7 @@ function svgBars(cats,series,opts){opts=opts||{};const W=opts.w||760,H=opts.h||2
   return `<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:340px;display:block">${grid}${bars}</svg></div>${leg?`<div style="display:flex;flex-wrap:wrap;padding:6px 2px 0">${leg}</div>`:''}`;}
 // Alan/çizgi grafik (personel gibi tek seri).
 function svgArea(cats,vals,opts){opts=opts||{};const W=opts.w||760,H=opts.h||190,pl=opts.l||44,pad={l:pl,r:14,t:12,b:26};
-  const iw=W-pad.l-pad.r,ih=H-pad.t-pad.b,col=opts.color||'#b51228';const pos=vals.filter(v=>+v>0);
+  const iw=W-pad.l-pad.r,ih=H-pad.t-pad.b,col=opts.color||'#1E3E90';const pos=vals.filter(v=>+v>0);
   const maxV=Math.max(1,...vals.map(v=>+v||0)),lo=opts.zero||!pos.length?0:Math.max(0,Math.min(...pos)-(maxV-Math.min(...pos))*0.25),rng=Math.max(1,maxV-lo);
   const fx=opts.fmt||(v=>Math.round(v));const N=cats.length;
   const pts=cats.map((c,i)=>({x:pad.l+(N===1?iw/2:i*iw/(N-1)),y:pad.t+ih-(((+vals[i]||0)-lo)/rng)*ih,v:+vals[i]||0,c}));
@@ -8013,11 +8013,11 @@ function anlzMaliHtml(){
   // Grafikler
   const money=v=>fmtKisa(v);
   const g1=svgBars(cats,[
-    {name:'Net Maaş',color:'#b51228',vals:gec.map(a=>a.o?+a.o.netMaas||0:0)},
+    {name:'Net Maaş',color:'#1E3E90',vals:gec.map(a=>a.o?+a.o.netMaas||0:0)},
     {name:'Ödenen SGK (net)',color:'#F59E0B',vals:gec.map(a=>a.o?(+a.o.sgkOdenecek||0)-(+a.o.tesvik||0):0)},
     {name:'Teşvik',color:'#16A34A',vals:gec.map(a=>a.o?+a.o.tesvik||0:0)}],{fmt:money,h:214});
   const g2=svgBars(cats,[
-    {name:'Brüt Maaş',color:'#9c0f22',vals:gec.map(a=>a.o?+a.o.brutMaas||0:0)},
+    {name:'Brüt Maaş',color:'#182F73',vals:gec.map(a=>a.o?+a.o.brutMaas||0:0)},
     {name:'SGK İşveren Payı',color:'#7C3AED',vals:gec.map(a=>a.o?+a.o.sgkIsverenPay||0:0)}],{stacked:true,fmt:money,h:214});
   const g3=svgArea(cats,gec.map(a=>a.b?a.b.personel:0),{color:'#2563eb',fmt:v=>Math.round(v)});
   const g4=svgBars(cats,[{name:'Fazla Mesai (saat)',color:'#dc2626',vals:gec.map(a=>a.b?a.b.fm1:0)}],{fmt:v=>Math.round(v),h:190});
@@ -8136,7 +8136,7 @@ function asDonem(qn){const ym4=qn.match(/\b(20\d\d)\b/);const yil=ym4?+ym4[1]:ne
   return null;}
 function asDep(qn){const map={'üretim':'Üretim','idari':'İdari','pazarlama':'Pazarlama','şoför':'Şoför','sofor':'Şoför','diğer':'Diğer'};for(const k in map)if(qn.includes(k))return map[k];const d=depAdlar().find(a=>qn.includes(a.toLocaleLowerCase('tr')));return d||null;}
 // cevap kartı yardımcıları
-function asKart(tip,ic){const renk=tip==='evet'?'#16a34a':tip==='hayir'?'#dc2626':tip==='uyari'?'#b45309':'#6e0a16';const bg=tip==='evet'?'#f0fdf4':tip==='hayir'?'#fef2f2':tip==='uyari'?'#fffbeb':'#fff';return `<div style="border:1px solid ${renk}33;border-left:4px solid ${renk};background:${bg};border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55">${ic}</div>`;}
+function asKart(tip,ic){const renk=tip==='evet'?'#16a34a':tip==='hayir'?'#dc2626':tip==='uyari'?'#b45309':'#0C2340';const bg=tip==='evet'?'#f0fdf4':tip==='hayir'?'#fef2f2':tip==='uyari'?'#fffbeb':'#fff';return `<div style="border:1px solid ${renk}33;border-left:4px solid ${renk};background:${bg};border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.55">${ic}</div>`;}
 function asListe(bas,sat){if(!sat.length)return '';return `<div style="margin-top:8px"><div class="tbl-scroll"><table class="t"><thead><tr>${bas.map(b=>`<th>${b}</th>`).join('')}</tr></thead><tbody>${sat.map(r=>`<tr>${r.map((c,i)=>`<td${typeof c==='number'?' class="num"':''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;}
 function asKisiIzinleri(pid,wS,wE){return DB.izinler.filter(z=>z.personelId===pid&&z.baslangic&&z.baslangic<=wE&&(z.bitis||z.baslangic)>=wS);}
 // Puantaj tabanlı sorular için AY çözümü (asDonem aralık verir, puantaj YM ister)
@@ -10293,7 +10293,7 @@ window.addEventListener('appinstalled',function(){
 (function(){
   var css="\n.xscroll-host{position:relative}\n"+
     ".xscroll-fade{position:absolute;top:1px;right:1px;bottom:14px;width:58px;border-radius:0 10px 10px 0;background:linear-gradient(to right,rgba(255,255,255,0),#fff 82%);pointer-events:none;opacity:1;transition:opacity .25s}\n"+
-    ".xscroll-pill{position:absolute;bottom:20px;right:14px;display:inline-flex;align-items:center;gap:5px;background:var(--red-700,#8B1F28);color:#fff;font-size:11px;font-weight:800;padding:5px 11px;border-radius:20px;pointer-events:none;opacity:.95;transition:opacity .25s;box-shadow:0 3px 10px -2px rgba(0,0,0,.35)}\n"+
+    ".xscroll-pill{position:absolute;bottom:20px;right:14px;display:inline-flex;align-items:center;gap:5px;background:var(--red-700,#14295C);color:#fff;font-size:11px;font-weight:800;padding:5px 11px;border-radius:20px;pointer-events:none;opacity:.95;transition:opacity .25s;box-shadow:0 3px 10px -2px rgba(0,0,0,.35)}\n"+
     ".xscroll-pill svg{animation:xspulse 1.3s ease-in-out infinite}\n"+
     "@keyframes xspulse{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}\n"+
     ".xscroll-host.xs-end .xscroll-fade,.xscroll-host.xs-end .xscroll-pill{opacity:0}\n"+
