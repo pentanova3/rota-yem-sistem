@@ -1973,5 +1973,197 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     }
   }
 
+  // ==========================================================================
+  baslik('30) EXCEL’DEN FİYAT YÜKLEME — firma dosyası doğrudan okunur');
+  // ==========================================================================
+  // Firma iki dosya kullanıyor: "BAYİ SATIŞLARI" (Fabrika/Yakın/Uzak) + "danışmanlar için" (Torbalı).
+  // Kredi Kartı ikisinde de yok → FİRMA KURALI: Kredi Kartı = Fabrika Teslim.
+  // Aşağıdaki sayfa, gerçek dosyaların YERLEŞİMİNİ birebir taklit eder (tuzaklar dahil):
+  //   • sütunlar harf sabitiyle değil BAŞLIK metniyle bulunur
+  //   • "UZAK İLLER SAYILAN ŞEHİRLER" yan tablosu "Uzak Bayi" sütunu sanılmamalı
+  //   • SheetJS tarihi gece yarısına saniyeler kala düşürür (06.08 → 05.08T20:59:04Z)
+  //   • "TMR ÖNKARIŞIM" başlık hücresi ÜRÜN sayılmamalı
+  {
+    const H = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    const govde = (ad) => {
+      const i = H.indexOf('function ' + ad + '(');
+      if (i < 0) throw new Error(ad + ' yok');
+      let d = 0, b = false;
+      for (let k = i; k < H.length; k++) {
+        if (H[k] === '{') { d++; b = true; } else if (H[k] === '}') { d--; if (b && !d) return H.slice(i, k + 1); }
+      }
+      throw new Error(ad + ' kapanmadı');
+    };
+    const sbt = (nm) => (H.match(new RegExp('^const ' + nm + '=([\\s\\S]*?);$', 'm')) || [])[0];
+    const P = new Function([sbt('FIY_ALAN'), govde('fiyatNormHam'), govde('fiyatNorm'),
+      govde('fiyatSayi'), govde('fiyatTabloCoz'),
+      'return {fiyatNorm, fiyatNormHam, fiyatSayi, fiyatTabloCoz};'].join('\n'))();
+
+    // ── TR sayı ──
+    esit('sayı "1.005" (binlik) → 1005', P.fiyatSayi('1.005'), 1005);
+    esit('sayı "1.234,56" → 1234.56', P.fiyatSayi('1.234,56'), 1234.56);
+    esit('sayı "32,2" → 32.2', P.fiyatSayi('32,2'), 32.2);
+    esit('kayan nokta artığı yuvarlanıyor', P.fiyatSayi(805.0000000000001), 805);
+    dogru('boş/bozuk değer null döner', P.fiyatSayi('') === null && P.fiyatSayi('abc') === null && P.fiyatSayi(null) === null);
+
+    // ── Ad eşleştirme: BK 300+ ile BK 300 Plus AYRI ürün, fiyatları karışmamalı ──
+    dogru('"BK 300+" → sistem "BK-300"', P.fiyatNorm('TMR Önkarışım BK 300+') === P.fiyatNorm('BK-300'));
+    dogru('"BK 300 Plus" → sistem "BK-300 PLUS"', P.fiyatNorm('TMR Önkarışım BK 300 Plus') === P.fiyatNorm('BK-300 PLUS'));
+    dogru('İKİSİ AYRI normalize oluyor (fiyat takası olmaz)',
+      P.fiyatNorm('TMR Önkarışım BK 300+') !== P.fiyatNorm('TMR Önkarışım BK 300 Plus'));
+    dogru('"BK 100+" → "BK-100"', P.fiyatNorm('TMR Önkarışım BK 100+') === P.fiyatNorm('BK-100'));
+    dogru('"RK-30 E" → "RK-30E"', P.fiyatNorm('TMR Önkarışım RK-30 E') === P.fiyatNorm('RK-30E'));
+    dogru('"FLUSHING" → "Flushing" (Türkçe i tuzağı)', P.fiyatNorm('TMR Önkarışım FLUSHING') === P.fiyatNorm('Flushing'));
+    dogru('önek olmadan da çalışır (ad zaten temizse)', P.fiyatNorm('DG-10') === P.fiyatNorm('TMR Önkarışım DG-10'));
+
+    // ── Gerçek dosya yerleşimini taklit eden sayfa ──
+    const TARIH = new Date(Date.UTC(2026, 7, 5, 20, 59, 4));   // SheetJS artığı: aslında 06.08
+    const BAYI = [
+      [], [], [], [null, null, null, 'ZİVE  YEM  FİYAT  LİSTESİ'],
+      [null, null, null, null, null, null, null, null, 'TMR  ÖNKARIŞIM'],
+      [null, null, null, null, null, null, null, null, 'FİYAT LİSTESİ'],
+      [TARIH],
+      [null, null, null, null, null, null, null, null, 'Fabrika Teslim', 'Yakın Bayi Satış', 'Uzak Bayi Satış',
+        null, 'UZAK İLLER SAYILAN ŞEHİRLER'],
+      [], [], [],
+      ['TMR Önkarışım DG-10', null, null, null, '25 kg', null, null, null, 855, 970, 1010, null, 'ADANA'],
+      ['TMR Önkarışım BK 300+', null, null, null, '25 kg', null, null, null, 850, 965, 1005, null, 'AĞRI'],
+      ['TMR Önkarışım BK 300 Plus', null, null, null, '25 kg', null, null, null, 920, 1035, 1070, null, 'ANKARA'],
+    ];
+    const DAN = [
+      [], [], [], [null, null, null, 'ZİRVE  YEM'],
+      [null, null, null, null, null, null, 'TMR  ÖNKARIŞIM'],
+      [], [new Date(Date.UTC(2026, 7, 2, 20, 59, 4))],
+      [null, null, null, null, null, null, 'TL / kg', null, 'Torbalı'],
+      [], [], [],
+      ['TMR Önkarışım DG-10', null, null, null, '25 kg', null, 32.2, null, 805.0000000000001],
+      ['TMR Önkarışım BK 300+', null, null, null, '25 kg', null, 31.6, null, 790],
+      ['TMR Önkarışım PG-04', null, null, null, '10 kg', null, 572, null, 5720],
+    ];
+    const B = P.fiyatTabloCoz(BAYI), A = P.fiyatTabloCoz(DAN);
+
+    esit('bayi: tarih EN YAKIN GÜNE yuvarlanıyor (06.08)', B.tarih, '2026-08-06');
+    esit('danışman: tarih yuvarlanıyor (03.08)', A.tarih, '2026-08-03');
+    esit('bayi: 3 ürün satırı', B.satirlar.length, 3);
+    dogru('bayi: "TMR ÖNKARIŞIM" BAŞLIĞI ürün sayılmadı', !B.satirlar.some((s) => !s.ad));
+    dogru('bayi: sütunlar başlıkla bulundu', B.sutun.fabrika === 8 && B.sutun.yakin === 9 && B.sutun.uzak === 10,
+      JSON.stringify(B.sutun));
+    dogru('bayi: "UZAK İLLER" yan tablosu Uzak sütunu SANILMADI', B.sutun.uzak !== 12);
+    dogru('bayi: Torbalı sütunu yok', B.sutun.danismanListe == null);
+    dogru('danışman: Torbalı bulundu, fabrika/yakın/uzak YOK',
+      A.sutun.danismanListe === 8 && A.sutun.fabrika == null && A.sutun.uzak == null);
+    dogru('danışman: "TL / kg" fiyat sütunu sanılmadı', !A.satirlar[0].fiyat.fabrika);
+    const bDG = B.satirlar.find((s) => s.ad === 'DG-10');
+    dogru('bayi DG-10 = 855/970/1010', bDG.fiyat.fabrika === 855 && bDG.fiyat.yakin === 970 && bDG.fiyat.uzak === 1010);
+    esit('bayi: ambalaj okundu', bDG.pkg, '25 kg');
+    esit('danışman DG-10 torbalı = 805', A.satirlar.find((s) => s.ad === 'DG-10').fiyat.danismanListe, 805);
+    dogru('boş sayfa çökertmiyor', P.fiyatTabloCoz([]).satirlar.length === 0);
+
+    // ── YAZMA YOLU GERÇEKTEN KOŞTURULUR (metin testi çalışma-zamanı hatasını görmez) ──
+    const kurWrite = (opts) => {
+      const DB = {
+        meta: {},
+        products: [
+          {code: 'DG-10', pkg: '25 kg', fabrika: 610, yakin: 710, uzak: 750, danismanListe: 0, krediKarti: 0},
+          {code: 'BK-300', pkg: '25 kg', fabrika: 600, yakin: 700, uzak: 740, danismanListe: 0, krediKarti: 0},
+          {code: 'BK-300 PLUS', pkg: '25 kg', fabrika: 640, yakin: 740, uzak: 780, danismanListe: 0, krediKarti: 0},
+          {code: 'PG-04', pkg: '25 kg', fabrika: 1000, yakin: 1100, uzak: 1200, danismanListe: 0, krediKarti: 0},
+          {code: 'SODA', pkg: '25 kg', fabrika: 111, yakin: 222, uzak: 333, danismanListe: 44, krediKarti: 55},
+        ],
+      };
+      const durum = {yayin: null, uyari: '', log: ''};
+      const ort = {
+        DB, FY: Object.assign({bayi: opts.bayi, dan: opts.dan, esle: opts.esle || {}, hata: '', tarih: '', not: ''}),
+        isAdmin: () => true, todayISO: () => '2026-08-04',
+        fmtN: (n) => String(n), fmtDate: (d) => String(d), esc: (x) => String(x == null ? '' : x),
+        confirm: () => opts.onay !== false, toast: (t) => { durum.uyari = t; },
+        saveDB: () => {}, closeModal: () => {}, render: () => {}, tariffPDF: () => {},
+        logAct: (t) => { durum.log = t; }, publishSnapshot: (d, n) => { durum.yayin = {d, n}; },
+        document: {getElementById: (id) => ({value: id === 'fyDate' ? '2026-08-06' : 'Ağustos zammı'})},
+      };
+      new Function(...Object.keys(ort), [
+        sbt('FIY_ALAN'), govde('fiyatNormHam'), govde('fiyatNorm'), govde('fiyatSayi'),
+        govde('fiyatAliasMap'), govde('fiyatSatirlari'), govde('fiyatEslesme'), govde('fiyatPlanCikar'),
+        govde('fiyatUygulaYayinla'), 'fiyatUygulaYayinla();',
+      ].join('\n'))(...Object.values(ort));
+      return {DB, ...durum, bul: (c) => DB.products.find((p) => p.code === c)};
+    };
+
+    {
+      const R = kurWrite({bayi: B, dan: A});
+      dogru('KOŞTU: DG-10 fiyatları yazıldı', R.bul('DG-10').fabrika === 855 && R.bul('DG-10').yakin === 970 && R.bul('DG-10').uzak === 1010);
+      esit('KOŞTU: DG-10 danışman fiyatı (2. dosyadan)', R.bul('DG-10').danismanListe, 805);
+      esit('KOŞTU: Kredi Kartı = Fabrika (firma kuralı)', R.bul('DG-10').krediKarti, 855);
+      // EN KRİTİK: "BK 300+" ile "BK 300 Plus" birbirinin fiyatını ALMAMALI
+      esit('KOŞTU: BK-300 ← "BK 300+" (850)', R.bul('BK-300').fabrika, 850);
+      esit('KOŞTU: BK-300 PLUS ← "BK 300 Plus" (920)', R.bul('BK-300 PLUS').fabrika, 920);
+      dogru('KOŞTU: iki ürünün fiyatı TAKAS OLMADI', R.bul('BK-300').fabrika !== R.bul('BK-300 PLUS').fabrika);
+      esit('KOŞTU: BK-300 danışman fiyatı 790', R.bul('BK-300').danismanListe, 790);
+      dogru('KOŞTU: dosyada olmayan SODA hiç değişmedi',
+        R.bul('SODA').fabrika === 111 && R.bul('SODA').danismanListe === 44 && R.bul('SODA').krediKarti === 55);
+      esit('KOŞTU: eşleşmeyen satır ürün YARATMADI', R.DB.products.length, 5);
+      dogru('KOŞTU: tarife yayınlandı (arşiv)', !!R.yayin && R.yayin.d === '2026-08-06', R.yayin && R.yayin.d);
+      // AMBALAJ KAPISI: danışman dosyasındaki PG-04 10 kg, sistemdeki PG-04 25 kg'a OTOMATİK yazılmamalı
+      dogru('KOŞTU: 10 kg satırı 25 kg ürüne yazılmadı', R.bul('PG-04').fabrika === 1000 && R.bul('PG-04').danismanListe === 0);
+      // ALIAS: yalnız BİLEREK yapılan seçim kalıcı olmalı — otomatik eşleşme/eşleşmeme yazılmaz,
+      // yoksa ürün adı değişince sistem kendini bir daha asla toparlayamaz.
+      dogru('KOŞTU: otomatik eşleşme alias’a YAZILMADI', !Object.keys(R.DB.meta.fiyatAlias || {}).length,
+        JSON.stringify(R.DB.meta.fiyatAlias || {}));
+    }
+    {
+      // ONAY İPTALİ: hiçbir şey yazılmamalı (eskiden fiyatlar confirm’den ÖNCE yazılıyordu)
+      const R = kurWrite({bayi: B, dan: A, onay: false});
+      dogru('KOŞTU: "Vazgeç" → DG-10 fiyatı DEĞİŞMEDİ', R.bul('DG-10').fabrika === 610 && R.bul('DG-10').krediKarti === 0);
+      dogru('KOŞTU: "Vazgeç" → BK-300 fiyatı DEĞİŞMEDİ', R.bul('BK-300').fabrika === 600);
+      dogru('KOŞTU: "Vazgeç" → tarife YAYINLANMADI', R.yayin === null);
+      dogru('KOŞTU: "Vazgeç" → alias haritası KİRLENMEDİ', !Object.keys(R.DB.meta.fiyatAlias || {}).length);
+    }
+    {
+      // ÇAKIŞMA: Excel'de hem "BK 300" hem "BK 300+" varsa ikisi aynı anahtara düşer → HİÇBİR ŞEY yazılmamalı
+      const CAK = P.fiyatTabloCoz(BAYI.concat([
+        ['TMR Önkarışım BK 300', null, null, null, '25 kg', null, null, null, 780, 895, 935],
+      ]));
+      const R = kurWrite({bayi: CAK, dan: null});
+      dogru('KOŞTU: çakışma → BK-300 fiyatı DEĞİŞMEDİ', R.bul('BK-300').fabrika === 600);
+      dogru('KOŞTU: çakışma → tarife YAYINLANMADI', R.yayin === null);
+      dogru('KOŞTU: çakışma kullanıcıya bildirildi', /aynı ada düşen/i.test(R.uyari), R.uyari);
+      dogru('KOŞTU: çakışma diğer ürünleri de YAZDIRMADI (bütün yükleme durur)',
+        R.bul('DG-10').fabrika === 610);
+    }
+    {
+      // ELLE SEÇİM: kullanıcı eşleştirmeyi seçerse hem yazılır hem KALICI olur
+      const anahtar = P.fiyatNorm('PG-04') + '|10KG';
+      const R = kurWrite({bayi: null, dan: A, esle: {[anahtar]: 'PG-04'}});
+      esit('KOŞTU: elle seçilen eşleştirme yazıldı', R.bul('PG-04').danismanListe, 5720);
+      esit('KOŞTU: elle seçim alias’a KALICI yazıldı', (R.DB.meta.fiyatAlias || {})[anahtar], 'PG-04');
+    }
+    // Sütun tespiti: serbest metindeki "…fabrika teslim…" notu sütunu KAPMAMALI (ilk-eşleşen-kazanır tuzağı)
+    {
+      const TUZAK = [
+        ['Bu liste fabrika teslim fiyatlarını içerir, uzak bayi satış için nakliye ekleyiniz'],
+        [null, null, null, null, null, null, null, null, 'Fabrika Teslim', 'Yakın Bayi Satış', 'Uzak Bayi Satış'],
+        [], ['TMR Önkarışım DG-10', null, null, null, '25 kg', null, null, null, 855, 970, 1010],
+      ];
+      const R = P.fiyatTabloCoz(TUZAK);
+      dogru('serbest metin notu fiyat sütunu SANILMADI', R.sutun.fabrika === 8 && R.sutun.uzak === 10,
+        JSON.stringify(R.sutun));
+      esit('tuzak sayfada fiyat doğru okundu', R.satirlar[0].fiyat.fabrika, 855);
+    }
+    // Eski tarifeye dönünce krediKarti (İMECE tabanı) da geri gelmeli — arşivde var ama atlanıyordu
+    dogru('setActiveTariff krediKarti’yi geri yüklüyor',
+      /if\(it\.krediKarti!=null\)prod\.krediKarti=it\.krediKarti;/.test(H));
+    dogru('çakışan satır yazmayı DURDURUYOR (sunucu doğrulaması yok)',
+      /if\(P\.cakisan\)\{toast\(/.test(H));
+    dogru('plan DB’ye dokunmadan çıkarılıyor (onay öncesi yazma yok)',
+      /function fiyatPlanCikar\(\)[\s\S]{0,1200}?return \{rows,plan,deg,atlanan,cakisan\}/.test(H));
+    dogru('alias YALNIZ elle seçimde kalıcı', /if\(FY\.esle\[x\.key\]!==undefined\)A\[x\.key\]=FY\.esle\[x\.key\];/.test(H));
+    // Arayüz kancaları
+    dogru('düğme yalnız yöneticide', /if\(isAdmin\(\)\)tb\.innerHTML=[\s\S]{0,80}openFiyatYukle\(\)/.test(H));
+    dogru('yükleme yöneticiye kilitli', /function openFiyatYukle\(\)\{\s*if\(!isAdmin\(\)\)\{toast\('Sadece yönetici'\)/.test(H));
+    dogru('0/boş fiyat YAZILMIYOR', /if\(v==null\|\|!\(v>0\)\)return;/.test(H));
+    dogru('uygulamadan önce onay isteniyor', /if\(!confirm\([\s\S]{0,200}?Yeni tarife yayınlanacak/.test(H));
+  }
+
   sonuc();
 })();
