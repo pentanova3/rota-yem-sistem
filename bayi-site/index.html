@@ -504,14 +504,18 @@ $('ap-musteriler').addEventListener('click',async e=>{
 let _takipYil=null;
 function ceyrekIndex(iso){const m=+String(iso||'').slice(5,7)||1;return m<=3?0:m<=6?1:m<=9?2:3;}
 function renderIskonto(){
-  const sip=(DATA.siparisler||[]).filter(o=>o.date);
-  const yillar=[...new Set(sip.map(o=>String(o.date).slice(0,4)))].sort().reverse();
-  if(!yillar.length){$('ap-yil').innerHTML='';$('ap-iskonto').innerHTML='<div class="empty">Henüz sipariş verisi yok.</div>';return;}
+  // SATIŞ KURALI (07.08.2026): iskonto YALNIZ teslim edilen siparişten doğar ve fiilen teslim
+  // edildiği çeyreğe yazılır. Sunucu her siparişe teslimEdildi/satisTarih damgası koyar.
+  // Sipariş TAKİP listesi tüm durumları göstermeye devam eder — burası para ekranı.
+  const _st=o=>String(o&&(o.satisTarih||''))||'';
+  const sip=(DATA.siparisler||[]).filter(o=>o&&o.teslimEdildi&&_st(o));
+  const yillar=[...new Set(sip.map(o=>_st(o).slice(0,4)))].sort().reverse();
+  if(!yillar.length){$('ap-yil').innerHTML='';$('ap-iskonto').innerHTML='<div class="empty">Henüz teslim edilmiş sipariş yok — iskonto teslimatta doğar.</div>';return;}
   if(!_takipYil||!yillar.includes(_takipYil))_takipYil=yillar[0];
   $('ap-yil').innerHTML=yillar.map(y=>`<option value="${y}" ${y===_takipYil?'selected':''}>${y}</option>`).join('');
   const q=[['1. Çeyrek','Oca–Mar'],['2. Çeyrek','Nis–Haz'],['3. Çeyrek','Tem–Eyl'],['4. Çeyrek','Eki–Ara']].map(([ad,alt])=>({ad,alt,adet:0,mik:0,tutar:0,isk:0}));
-  sip.filter(o=>String(o.date).slice(0,4)===_takipYil).forEach(o=>{
-    const c=q[ceyrekIndex(o.date)];c.adet++;c.tutar+=(+o.total||0);c.isk+=(+o.iskonto||0);
+  sip.filter(o=>_st(o).slice(0,4)===_takipYil).forEach(o=>{
+    const c=q[ceyrekIndex(_st(o))];c.adet++;c.tutar+=(+o.total||0);c.isk+=(+o.iskonto||0);
     (o.lines||[]).forEach(l=>{c.mik+=(+l.qty||0);});
   });
   const t=q.reduce((a,c)=>({adet:a.adet+c.adet,mik:a.mik+c.mik,tutar:a.tutar+c.tutar,isk:a.isk+c.isk}),{adet:0,mik:0,tutar:0,isk:0});

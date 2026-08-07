@@ -662,7 +662,9 @@ function ayarOzet(ay){if(!ay||!ay.mode)return '';return (ay.mode==='yok'?'Verilm
 // Tüm sipariş bazlı ayarlamalar (yalnız site — dökümlerde gösterilmez): kim, hangi sipariş, ne kadar düşürüldü
 function tumAyarlamalar(){
   var list=[];
-  (DB.orders||[]).forEach(function(o){
+  // SATIŞ KURALI: ayarlama denetimi de prim/iskonto tablolarıyla aynı kümeden okunmalı, yoksa
+  // "yapılan ayarlamalar" listesi tablolarla mutabık olmaz.
+  (DB.orders||[]).filter(satisMi).forEach(function(o){
     if(o.primAyar&&o.primAyar.mode){var dan=ordDanisman(o);var raw=(orderKomisyon(o).tutar)||0;var net=effAyarVal(raw,o.primAyar);list.push({tip:'Prim',kisi:dan?dan.name:'—',no:o.no,tarih:o.date,ham:raw,net:net,dusen:raw-net,ay:o.primAyar});}
     if(o.iskAyar&&o.iskAyar.mode){var bayi=ordBayi(o);var raw2=bayiIskHam(o);var net2=effAyarVal(raw2,o.iskAyar);list.push({tip:'İskonto',kisi:bayi?bayi.name:'—',no:o.no,tarih:o.date,ham:raw2,net:net2,dusen:raw2-net2,ay:o.iskAyar});}
   });
@@ -1137,8 +1139,10 @@ function brutListeDamga(o){
 // Bayi iskontosu FATURA ANINDA uygulanır: bayi alım yaparken fabrika fiyatından iskontolu öder.
 // Birikme / alacak / mahsup YOKTUR. Yararlanılan iskonto raporlanır (çeyrek bazında).
 function bayiAlimData(bayiId,yil){
-  const os=DB.orders.filter(o=>o.aliciBayi&&o.status!=='iptal'&&(ordBayi(o)||{}).id===bayiId&&(!yil||(o.date||'').slice(0,4)===String(yil)))
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  // SATIŞ KURALI: teslim edilmemiş siparişe bayi iskontosu İŞLENMEZ. Yıl/çeyrek ayrımı da
+  // fiilen teslim edildiği güne göre yapılır (söz verilen tarihe göre değil).
+  const os=DB.orders.filter(o=>o.aliciBayi&&satisMi(o)&&(ordBayi(o)||{}).id===bayiId&&(!yil||satisTarihi(o).slice(0,4)===String(yil)))
+    .sort((a,b)=>satisTarihi(a).localeCompare(satisTarihi(b)));
   const rows=[];let totB=0,totI=0,totF=0,totIham=0,totIlv=0,totDbs=0,ayarSay=0;const ceyrek=[0,0,0,0];
   os.forEach(o=>{
     // BRÜT TEK KAYNAK: orderListTotal (bayide fabrika kademesi + liste bulunamayan satırda net yedeği).
@@ -1146,11 +1150,11 @@ function bayiAlimData(bayiId,yil){
     // bayi portalı ayrışır (Brüt sütunu Fatura'dan küçük çıkabiliyordu).
     const brut=orderListTotal(o);
     const fat=orderTotal(o);const iskHam=Math.max(0,brut-fat);const isk=effIsk(o,iskHam);   // ayar sonrası efektif iskonto
-    const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
+    const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
     if(o.iskAyar&&o.iskAyar.mode)ayarSay++;
     const ilave=ilaveIskonto(o);   // firmayla anlaşılan ek indirim (isk zaten bunu içerir; ayrı göster)
     const dbsT=dbsIskonto(o);      // DBS ek indirimi (isk zaten bunu İÇERİR; ayrı raporlanır)
-    rows.push({o,tarih:o.date,no:o.no,urun:(o.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', '),brut,isk,iskHam,fatura:fat,ilave});
+    rows.push({o,tarih:satisTarihi(o),no:o.no,urun:(o.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', '),brut,isk,iskHam,fatura:fat,ilave});
     totB+=brut;totI+=isk;totIham+=iskHam;totF+=fat;totIlv+=ilave;totDbs+=dbsT;
   });
   return {rows,totBrut:totB,totIsk:totI,totIskHam:totIham,totFatura:totF,totIlave:totIlv,totDbs:round2(totDbs),ceyrek,adet:os.length,ayarSay};
@@ -1278,16 +1282,20 @@ function renderPanel(c,tb){
   const monday=new Date(panelWeekStart);
   const days=[];for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);days.push(d)}
   const weekStart=isoOf(days[0]),weekEnd=isoOf(days[6]);
-  const weekOrders=DB.orders.filter(o=>{const d=kanbanDate(o);return d>=weekStart&&d<=weekEnd});
-  const weekTotal=weekOrders.reduce((s,o)=>s+orderTotal(o),0);
+  const weekOrders=DB.orders.filter(o=>{const d=kanbanDate(o);return d>=weekStart&&d<=weekEnd});   // PLANLAMA tahtası: söz verilen teslim günü
+  // SATIŞ KURALI: ciro ve tonaj yalnız TESLİM EDİLENDEN, fiilen teslim edildiği güne göre.
+  // Gün kutuları planlama olduğu için ayrı küme; bu ikisi karıştırılmamalı.
+  const haftaTeslim=DB.orders.filter(o=>{const t=satisTarihi(o);return t&&t>=weekStart&&t<=weekEnd;});
+  const weekTotal=haftaTeslim.reduce((s2,o)=>s2+orderTotal(o),0);
   const pending=weekOrders.filter(o=>o.status==='beklemede').length;
   const ready=weekOrders.filter(o=>o.status==='hazir').length;
   const shipped=weekOrders.filter(o=>o.status==='sevk').length;
   // TONAJ: iptaller HARİÇ. Ana rakam alınan siparişin tonajı, alt satır fiilen çıkan mal —
   // firma her ikisini de görmek istiyor ve rapor tabanı (sevk edilen) ile karışmasın.
-  const haftaAktif=weekOrders.filter(o=>o.status!=='iptal');
-  const haftaTon=haftaAktif.reduce((s2,o)=>s2+orderTon(o),0);
-  const haftaSevkTon=haftaAktif.filter(o=>o.status==='sevk'||o.status==='teslim').reduce((s2,o)=>s2+orderTon(o),0);
+  const haftaTon=haftaTeslim.reduce((s2,o)=>s2+orderTon(o),0);
+  // Bekleyen: bu haftaya PLANLANMIŞ ama teslim edilmemiş (planlama tahtasından okunur)
+  const haftaBekle=weekOrders.filter(o=>o.status!=='iptal'&&!satisMi(o));
+  const haftaBekleTon=haftaBekle.reduce((s2,o)=>s2+orderTon(o),0);
   const sameMonth=days[0].getMonth()===days[6].getMonth();
   const rangeLabel=sameMonth?`${days[0].getDate()} - ${days[6].getDate()} ${AYLAR_TR[days[6].getMonth()]} ${days[6].getFullYear()}`:`${days[0].getDate()} ${AYLAR_TR[days[0].getMonth()]} - ${days[6].getDate()} ${AYLAR_TR[days[6].getMonth()]} ${days[6].getFullYear()}`;
   const isThisWeek=weekStart===isoOf(mondayOf(todayISO()));
@@ -1301,8 +1309,8 @@ function renderPanel(c,tb){
   // haftalık KPI
   h+=`<div class="kpis">
     <div class="kpi"><div class="kl">Bu Hafta Sipariş</div><div class="kv">${weekOrders.length}</div><div class="ks">${weekStart===weekEnd?'':rangeLabel}</div></div>
-    ${canSeePrice()?`<div class="kpi g"><div class="kl">Bu Hafta Ciro</div><div class="kv" style="font-size:19px">${fmtTL(weekTotal)}</div></div>`:''}
-    <div class="kpi"><div class="kl">Bu Hafta Tonaj</div><div class="kv" style="font-size:19px">${fmtTon(haftaTon)} t</div><div class="ks">${fmtTon(haftaSevkTon)} t sevk edildi</div></div>
+    ${canSeePrice()?`<div class="kpi g"><div class="kl">Bu Hafta Ciro</div><div class="kv" style="font-size:19px">${fmtTL(weekTotal)}</div><div class="ks">teslim edilen</div></div>`:''}
+    <div class="kpi"><div class="kl">Bu Hafta Tonaj</div><div class="kv" style="font-size:19px">${fmtTon(haftaTon)} t</div><div class="ks">teslim edilen${haftaBekleTon>0?` · ${fmtTon(haftaBekleTon)} t bekliyor`:''}</div></div>
     <div class="kpi a"><div class="kl">Bekleyen</div><div class="kv">${pending}</div><div class="ks">işlem bekliyor</div></div>
     <div class="kpi p"><div class="kl">Hazır</div><div class="kv">${ready}</div><div class="ks">sevke hazır</div></div>
     <div class="kpi s"><div class="kl">Sevk Edildi</div><div class="kv">${shipped}</div><div class="ks">yola çıktı</div></div>
@@ -1345,6 +1353,41 @@ function renderPanel(c,tb){
     </div>`;
   });
   h+=`</div>`;
+  // ══ TESLİM EDİLMEYEN SİPARİŞ UYARISI ══════════════════════════════════════════════════════
+  // Firma isteği: her hafta cuma günü teslim edilmeyenler panelde görünsün. Ama gecikmiş teslimatı
+  // haftanın diğer günlerinde GİZLEMEK yanlış olur — kart, geciken varsa HER GÜN çıkar; cuma günü
+  // ayrıca bu haftanın kalan teslimatlarını da kapsar (haftalık kontrol).
+  (function(){
+    const _bugun=todayISO(), _cuma=new Date().getDay()===5;
+    const _acik=(o)=>o&&o.status!=='iptal'&&!satisMi(o);
+    // teslimTarihi GİRİLMEMİŞ siparişte kanbanDate sipariş gününe düşer → "N gün geç" sahte olurdu.
+    // Yalnız gerçekten teslim tarihi olanlar "geciken" sayılır.
+    const _gec=DB.orders.filter(o=>_acik(o)&&o.teslimTarihi&&o.teslimTarihi<_bugun);
+    // Kapsam DAİMA bugüne göre: gelecek haftalara bakarken kart 14/21 güne açılmasın (denetim bulgusu).
+    const _cumaSon=(function(){const d=new Date(_bugun);d.setDate(d.getDate()+(7-(d.getDay()||7)));return isoOf(d);})();
+    const _buHafta=_cuma?DB.orders.filter(o=>_acik(o)&&kanbanDate(o)>=_bugun&&kanbanDate(o)<=_cumaSon):[];
+    const _hep=_gec.concat(_buHafta);
+    if(!_hep.length)return;
+    const _ton=_hep.reduce((s2,o)=>s2+orderTon(o),0);
+    const _sat=(o,gecikti)=>{
+      const g=o.teslimTarihi||'',fark=(gecikti&&g)?Math.round((new Date(_bugun)-new Date(g))/86400000):0;
+      return `<tr onclick="openOrder('${esc(o.id)}')" style="cursor:pointer">
+        <td><b>#${esc(o.no||'?')}</b></td>
+        <td>${esc(o.customer||'—')}</td>
+        <td style="white-space:nowrap">${g?fmtDate(g):'—'}${fark>0?` <span style="color:var(--red-700);font-weight:700">${fark} gün geç</span>`:''}</td>
+        <td class="num">${orderTon(o)>0?fmtTon(orderTon(o))+' t':'—'}</td>
+        <td>${statusBadge(o.status)}</td></tr>`;
+    };
+    h+=`<div class="card" style="margin-top:12px;border-color:#FECACA">
+      <div class="card-hd" style="background:#FEF2F2"><h3 style="color:#991B1B">Teslim Edilmeyen Sipariş (${_hep.length})</h3>
+        <span style="font-size:11px;color:#B91C1C">${fmtTon(_ton)} t · ${_cuma?'haftalık kontrol — geciken + bu haftanın kalanı':'teslim tarihi geçmiş'} · tonaja ve ciroya SAYILMAZ</span></div>
+      <div class="card-bd" style="overflow-x:auto;max-height:280px"><table class="tbl" style="font-size:12px"><thead><tr>
+        <th>No</th><th>Müşteri</th><th>Teslim Tarihi</th><th class="num">Tonaj</th><th>Durum</th>
+      </tr></thead><tbody>${_gec.map(o=>_sat(o,true)).join('')}${_buHafta.map(o=>_sat(o,false)).join('')}</tbody></table></div>
+      <div class="card-bd" style="padding:8px 14px;font-size:11.5px;color:var(--slate-600);border-top:1px solid var(--slate-100)">
+        Bu siparişler <b>satış sayılmaz</b>: tonaja, ciroya, danışman komisyonuna ve bayi iskontosuna girmezler.
+        Mal çıktıysa siparişi <b>Teslim Edildi</b>’ye çekin.</div></div>`;
+  })();
   // TARİHİ BELİRSİZ ÖN SİPARİŞLER: hiçbir güne düşmedikleri için gün kutularında görünmezler.
   // Ayrı şeritte gösterilmezse üretim planlamasında tamamen gözden kaçarlar.
   (function(){
@@ -1362,10 +1405,10 @@ function renderPanel(c,tb){
   if(typeof Chart!=='undefined')setTimeout(()=>{
     if(panelChart){try{panelChart.destroy()}catch(e){}}
     const el=document.getElementById('panelDayChart');if(!el)return;
-    const _gunTon=(ds)=>haftaAktif.filter(o=>kanbanDate(o)===ds).reduce((s2,o)=>s2+orderTon(o),0);
+    const _gunTon=(ds)=>haftaTeslim.filter(o=>satisTarihi(o)===ds).reduce((s2,o)=>s2+orderTon(o),0);   // teslim edilen
     const _gunOn=(ds)=>preOrdersVisible().filter(p=>p.durum==='acik'&&preDemirGun(p,weekStart)===ds).reduce((s2,p)=>s2+preOrderTon(p),0);
     const _veri=days.map(d=>{const ds=isoOf(d);
-      return panelGrafik==='ciro'?weekOrders.filter(o=>kanbanDate(o)===ds).reduce((s2,o)=>s2+orderTotal(o),0)
+      return panelGrafik==='ciro'?haftaTeslim.filter(o=>satisTarihi(o)===ds).reduce((s2,o)=>s2+orderTotal(o),0)
         :(panelGrafik==='tonaj'?_gunTon(ds):_gunOn(ds));});
     const _renk={ciro:['#8DC2F2','#1D62A8'],tonaj:['#7DD3C0','#0F766E'],onsip:['#FCD9A0','#B45309']}[panelGrafik];
     const _etiket={ciro:'Ciro ₺',tonaj:'Tonaj (t)',onsip:'Ön sipariş (t)'}[panelGrafik];
@@ -1821,6 +1864,9 @@ function renderOrderModal(){
       </div>
       <div class="fgrid c3">
         <div class="fld"><label>Teslim Noktası</label>${isPlasiyer()?'<select disabled title="Plasiyer siparişleri fabrika fiyat listesiyle alınır"><option>Fabrika Teslim</option></select>':(o.aliciBayi?'<select disabled title="Bayiye satışta teslim noktası otomatik Bayi Satış olur"><option>Bayi Satış</option></select>':`<select ${icRO?'disabled':''} onchange="onChangeKademe(this.value)">${KADEME.map(k=>`<option value="${k.v}" ${o.fiyatKademe===k.v?'selected':''}>${k.l}</option>`).join('')}</select>`)}</div>
+        ${o.status==='teslim'?`<div class="fld"><label>Teslim Edildi Tarihi <span style="font-weight:600;font-size:10px;color:var(--green-700);text-transform:none;letter-spacing:0">— tonaj/ciro/komisyon bu tarihe yazılır</span></label>
+          <input type="date" value="${esc(o.teslimEdildiTarih||'')}" ${ro?'disabled':''} onchange="editOrder.teslimEdildiTarih=this.value">
+          <div class="fld-hint">Boşsa kaydederken bugün damgalanır. Mal daha önce/sonra teslim edildiyse <b>gerçek günü</b> yazın — raporlar ve komisyon bu tarihe göre hesaplanır.</div></div>`:''}
         <div class="fld"><label>Ödeme Tarihi</label>${odemeFieldHTML(o,icRO)}</div>
         <div class="fld"><label>Sipariş Alan</label>${alanFieldHTML(o,ro)}</div>
       </div>
@@ -2470,7 +2516,20 @@ function saveOrder(){
     }}
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim')&&!o.gecmisKayit;   // geçmiş kayıtta müşteriye WA sorulmaz (olmuş bitmiş sipariş)
   if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();if(!o.hareketTarihi)o.hareketTarihi=todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
-  if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
+  if(_yeniSt==='teslim'&&_origSt!=='teslim'){
+    // TESLİM DAMGASI — tüm satış/tonaj/komisyon raporlarının tarihi buradan gelir, isabetli olmalı.
+    // Geçmiş kayıtta BUGÜN damgalamak satışı yanlış aya taşırdı (Temmuz teslimi Ağustos'a yazılırdı);
+    // o yüzden geçmiş girişte planlanan teslim tarihine, yoksa sipariş gününe düşülür.
+    // Kullanıcı zaten modaldaki "Teslim Edildi Tarihi" alanından elle düzeltebilir.
+    if(!o.teslimEdildiTarih)o.teslimEdildiTarih=gecmisKayitMi(o)?(o.teslimTarihi||o.date||todayISO()):todayISO();
+    pushHist(o,'teslim','Sipariş teslim edildi · '+fmtDate(o.teslimEdildiTarih));
+  }
+  // TESLİMDEN GERİ ALINDI: damga SİLİNİR. Kalsaydı sipariş yeniden teslim edildiğinde ESKİ tarih
+  // kullanılır ve satış yanlış aya yazılırdı (denetimde bulunan tuzak).
+  if(_origSt==='teslim'&&_yeniSt!=='teslim'&&o.teslimEdildiTarih){
+    pushHist(o,'teslim','Teslim geri alındı — teslim tarihi damgası silindi ('+fmtDate(o.teslimEdildiTarih)+')');
+    delete o.teslimEdildiTarih;
+  }
   // ÖN SİPARİŞ KAPANIŞI: yalnız sipariş GERÇEKTEN kaydedildiyse. Modal kapatılıp vazgeçilirse
   // ön sipariş AÇIK kalır — aksi halde talep hem listeden düşer hem sipariş olmaz, izi kaybolurdu.
   if(_onSip){
@@ -3106,8 +3165,9 @@ function renderCustomers(c,tb){
 // ============ MÜŞTERİ RAPORU — ay/yıl/ürün bazlı karşılaştırma ============
 function custRaporHTML(){
   if(!canSeePrice()||isPlasiyer())return '<div class="card tbl-empty" style="padding:50px">Müşteri raporunu görüntüleme yetkiniz yok.</div>';
-  const orders=DB.orders.filter(o=>o.status!=='iptal'&&o.date&&o.customerId);
-  const years=[...new Set(orders.map(o=>o.date.slice(0,4)))].sort();
+  // SATIŞ KURALI: yalnız teslim edilen, fiilen teslim edildiği tarihe göre
+  const orders=DB.orders.filter(o=>satisMi(o)&&satisTarihi(o)&&o.customerId);
+  const years=[...new Set(orders.map(o=>satisTarihi(o).slice(0,4)))].sort();
   if(!custRepYil||years.indexOf(custRepYil)<0)custRepYil=years[years.length-1]||String(new Date().getFullYear());
   const Y=custRepYil;
   const q=trNorm(custRepQ);
@@ -3117,7 +3177,7 @@ function custRaporHTML(){
     const c=custById(o.customerId);if(!c)return;
     if(q&&!trNorm(c.name).includes(q))return;
     const e=M[c.id]||(M[c.id]={id:c.id,ad:c.name,ay:{},urun:{},yil:{},toplam:0,ton:0});
-    const yil=o.date.slice(0,4), ay=o.date.slice(5,7);
+    const yil=satisTarihi(o).slice(0,4), ay=satisTarihi(o).slice(5,7);
     (o.lines||[]).forEach(l=>{if(!l.code)return;const qy=+l.qty||0;
       e.yil[yil]=(e.yil[yil]||0)+qy;
       if(yil===Y){e.ay[ay]=(e.ay[ay]||0)+qy;e.urun[l.code]=(e.urun[l.code]||0)+qy;e.toplam+=qy;e.ton+=tonOf(l.code,qy);}
@@ -3395,9 +3455,9 @@ async function delKom(id){
 let komRepFrom='',komRepTo='';
 // MÜŞTERİ İSKONTO RAPORU: normal müşteri (bayi DEĞİL) siparişlerinde müşteri iskontosu (liste−net) + ilave iskonto (net−manuel).
 function musteriIskontoData(from,to){
-  var orders=DB.orders.filter(function(o){return o.customerId&&!o.aliciBayi&&o.status!=='iptal'&&!o.tarihsel;});
-  if(from)orders=orders.filter(function(o){return o.date>=from;});
-  if(to)orders=orders.filter(function(o){return o.date<=to;});
+  var orders=DB.orders.filter(function(o){return o.customerId&&!o.aliciBayi&&satisMi(o)&&!o.tarihsel;});   // yalnız teslim edilen
+  if(from)orders=orders.filter(function(o){return satisTarihi(o)>=from;});
+  if(to)orders=orders.filter(function(o){return satisTarihi(o)<=to;});
   var byCust={},totMus=0,totIlave=0,totDbs=0,totFat=0;
   orders.forEach(function(o){
     var c=custById(o.customerId);if(!c)return;
@@ -3406,7 +3466,7 @@ function musteriIskontoData(from,to){
     if(musIsk<=0&&ilave<=0&&dbsT<=0)return;   // yalnız-DBS'li sipariş de rapora girer (yoksa fatura toplamı tutmaz)
     var e=byCust[c.id]||(byCust[c.id]={cust:c,musIsk:0,ilave:0,dbs:0,fatura:0,adet:0,satirlar:[]});
     e.musIsk=round2(e.musIsk+musIsk);e.ilave=round2(e.ilave+ilave);e.dbs=round2(e.dbs+dbsT);e.fatura=round2(e.fatura+orderTotal(o));e.adet++;
-    e.satirlar.push({tarih:o.date,no:o.no,urun:(o.lines||[]).map(function(l){return l.code+'×'+fmtN(l.qty)}).join(', '),musIsk:musIsk,ilave:ilave,dbs:dbsT,fatura:orderTotal(o)});
+    e.satirlar.push({tarih:satisTarihi(o),no:o.no,urun:(o.lines||[]).map(function(l){return l.code+'×'+fmtN(l.qty)}).join(', '),musIsk:musIsk,ilave:ilave,dbs:dbsT,fatura:orderTotal(o)});
     totMus+=musIsk;totIlave+=ilave;totDbs+=dbsT;totFat+=orderTotal(o);
   });
   var rows=Object.values(byCust).sort(function(a,b){return (b.musIsk+b.ilave)-(a.musIsk+a.ilave);});
@@ -3415,9 +3475,9 @@ function musteriIskontoData(from,to){
 // İMECE FARK FATURALARI: 2. fatura ayrı kesildiği için muhasebenin hangi siparişe, ne kadar fark
 // faturası keseceğini görebileceği liste. İskonto değil ek fatura olduğu için ayrı karttadır.
 function imeceFarkData(from,to){
-  var arr=DB.orders.filter(function(o){return o.status!=='iptal'&&!o.tarihsel&&imeceFark(o)>0;});
-  if(from)arr=arr.filter(function(o){return o.date>=from;});
-  if(to)arr=arr.filter(function(o){return o.date<=to;});
+  var arr=DB.orders.filter(function(o){return satisMi(o)&&!o.tarihsel&&imeceFark(o)>0;});   // teslim edilmeyen fatura değildir
+  if(from)arr=arr.filter(function(o){return satisTarihi(o)>=from;});
+  if(to)arr=arr.filter(function(o){return satisTarihi(o)<=to;});
   arr.sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''));});
   var top=arr.reduce(function(s,o){return round2(s+imeceFark(o));},0);
   return {rows:arr,toplam:top};
@@ -3470,9 +3530,11 @@ function musteriIskontoKartHTML(){
 function renderKomisyon(c,tb){
   if(!canSeePrice()){c.innerHTML='<div class="card tbl-empty" style="padding:50px">Komisyon bilgilerini görme yetkiniz yok.</div>';return}
   // filter orders by date
-  let orders=DB.orders.filter(o=>o.komisyoncuId||o.bayiId||o.danismanId);
-  if(komRepFrom)orders=orders.filter(o=>o.date>=komRepFrom);
-  if(komRepTo)orders=orders.filter(o=>o.date<=komRepTo);
+  // SATIŞ KURALI: komisyon YALNIZ teslim edilen siparişten doğar. (Eskiden burada durum kontrolü
+  // hiç yoktu — iptal ve teslim edilmemiş siparişler de prim/iskonto tablolarına giriyordu.)
+  let orders=DB.orders.filter(o=>(o.komisyoncuId||o.bayiId||o.danismanId)&&satisMi(o));
+  if(komRepFrom)orders=orders.filter(o=>satisTarihi(o)>=komRepFrom);
+  if(komRepTo)orders=orders.filter(o=>satisTarihi(o)<=komRepTo);
   // Danışman primi: dönem filtresine göre toplanır (ikili siparişte de sayılır)
   const agg={};
   orders.forEach(o=>{
@@ -3485,7 +3547,9 @@ function renderKomisyon(c,tb){
   const totPaid=danRows.reduce((s,r)=>s+(paid[r.kom.id]||0),0);
   const _donemEt=(komRepFrom||komRepTo)?((komRepFrom?fmtDate(komRepFrom):'başlangıç')+' – '+(komRepTo?fmtDate(komRepTo):'bugün')):'Tüm zamanlar';
   // Bayi iskonto raporu: bayinin ALIMLARINDA fatura anında yararlandığı iskonto (çeyrek bazında, seçili yıl).
-  const _yillar=[...new Set(DB.orders.filter(o=>o.aliciBayi&&o.date).map(o=>o.date.slice(0,4)))].sort();
+  // Yıl listesi de SATIŞ tarihinden — veri satisTarihi'ne göre süzülüyor, liste o.date'ten üretilseydi
+  // yıl sınırındaki bayi iskontosu hiçbir yılda görünmezdi (denetimde bulunan tuzak).
+  const _yillar=[...new Set(DB.orders.filter(o=>o.aliciBayi&&satisMi(o)).map(o=>satisTarihi(o).slice(0,4)))].sort();
   if(!window.bayiRepYil||( _yillar.length&&_yillar.indexOf(window.bayiRepYil)<0))window.bayiRepYil=_yillar[_yillar.length-1]||String(new Date().getFullYear());
   const bayiIds=[];DB.orders.forEach(o=>{if(!o.aliciBayi)return;const b=ordBayi(o);if(b&&bayiIds.indexOf(b.id)<0)bayiIds.push(b.id);});
   const bayiRows=bayiIds.map(id=>{const k=komById(id);if(!k)return null;const A=bayiAlimData(id,window.bayiRepYil);if(!A.adet)return null;return {kom:k,A};}).filter(Boolean).sort((a,b)=>b.A.totIsk-a.A.totIsk);
@@ -3537,10 +3601,10 @@ function komDetayData(komId,from,to){
     return {kom,bayiAlim:true,yil,A,from,to};
   }
   // TEKNİK DANIŞMAN
-  let orders=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId;});
-  if(from)orders=orders.filter(o=>o.date>=from);
-  if(to)orders=orders.filter(o=>o.date<=to);
-  orders.sort((a,b)=>a.date.localeCompare(b.date));
+  let orders=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);});   // yalnız teslim edilen
+  if(from)orders=orders.filter(o=>satisTarihi(o)>=from);
+  if(to)orders=orders.filter(o=>satisTarihi(o)<=to);
+  orders.sort((a,b)=>satisTarihi(a).localeCompare(satisTarihi(b)));
   const rows=[];let totTutar=0,totPrim=0,totKargo=0,netHam=0,netEff=0,ayarSay=0;const aylik={};const ayarlar=[];
   orders.forEach(o=>{
     const cust=custById(o.customerId);const adres=cust?(cust.city||''):'';
@@ -3550,10 +3614,10 @@ function komDetayData(komId,from,to){
     // DÖKÜM: satır primini net'e ölçekle — böylece satırlar toplamı net'e eşittir ve ayarlama görünmez.
     const kargo=r.kargo||0;const rawSum=(r.det||[]).reduce((s,d)=>s+(d.prim||0),0);
     const factor=rawSum>0?((effNet+kargo)/rawSum):0;
-    (r.det||[]).forEach((d,i)=>{const tutar=d.satis*d.qty;const primEff=(d.prim||0)*factor;rows.push({tarih:o.date,musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?kargo:0,prim:primEff});totTutar+=tutar;totPrim+=primEff;});
+    (r.det||[]).forEach((d,i)=>{const tutar=d.satis*d.qty;const primEff=(d.prim||0)*factor;rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?kargo:0,prim:primEff});totTutar+=tutar;totPrim+=primEff;});
     totKargo+=kargo;netHam+=(r.tutar||0);netEff+=effNet;
-    if(o.primAyar&&o.primAyar.mode){ayarSay++;ayarlar.push({no:o.no,tarih:o.date,ham:r.tutar||0,net:effNet,ay:o.primAyar});}
-    const ayKey=(o.date||'').slice(0,7);                       // YYYY-MM
+    if(o.primAyar&&o.primAyar.mode){ayarSay++;ayarlar.push({no:o.no,tarih:satisTarihi(o),ham:r.tutar||0,net:effNet,ay:o.primAyar});}
+    const ayKey=satisTarihi(o).slice(0,7);                      // YYYY-MM — fiilen teslim edilen ay
     if(ayKey){const a=aylik[ayKey]||(aylik[ayKey]={siparis:0,prim:0});a.siparis++;a.prim+=effNet;}  // net prim (ayar sonrası)
   });
   const netPrim=netEff;   // ödeme bakiyesi ayar sonrası net üzerinden
@@ -3671,15 +3735,16 @@ function komAyarOrders(){
   if(!komAyarCtx)return [];
   var komId=komAyarCtx.komId;
   if(komAyarCtx.type==='danisman'){
-    var os=DB.orders.filter(function(o){var e=ordDanisman(o);return e&&e.id===komId;});
-    if(komRepFrom)os=os.filter(function(o){return o.date>=komRepFrom;});
-    if(komRepTo)os=os.filter(function(o){return o.date<=komRepTo;});
+    // SATIŞ KURALI + satış tarihi: ayarlama ekranı prim tablosuyla AYNI kümeyi göstermeli
+    var os=DB.orders.filter(function(o){var e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);});
+    if(komRepFrom)os=os.filter(function(o){return satisTarihi(o)>=komRepFrom;});
+    if(komRepTo)os=os.filter(function(o){return satisTarihi(o)<=komRepTo;});
     return os.map(function(o){var raw=orderKomisyon(o).tutar||0;return {o:o,kind:'prim',raw:raw,eff:effAyarVal(raw,o.primAyar),ay:o.primAyar};})
-      .sort(function(a,b){return (b.o.date||'').localeCompare(a.o.date||'');});
+      .sort(function(a,b){return satisTarihi(b.o).localeCompare(satisTarihi(a.o));});
   }
   var A=bayiAlimData(komId,window.bayiRepYil);
   return A.rows.map(function(r){return {o:r.o,kind:'isk',raw:r.iskHam,eff:r.isk,ay:r.o.iskAyar};})
-    .sort(function(a,b){return (b.o.date||'').localeCompare(a.o.date||'');});
+    .sort(function(a,b){return satisTarihi(b.o).localeCompare(satisTarihi(a.o));});
 }
 function renderKomAyar(){
   var kom=komById(komAyarCtx.komId);if(!kom){document.getElementById('modalRoot').innerHTML='';return}
@@ -3759,7 +3824,9 @@ function openKomOdeme(komId){
   const kom=komById(komId);
   const ods=(DB.komisyonOdemeler||[]).filter(p=>p.komisyoncuId===komId).sort((a,b)=>(b.donem||'').localeCompare(a.donem||''));
   // total earned (all time)
-  const earned=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId;}).reduce((s,o)=>s+effAyarVal(orderKomisyon(o).tutar,o.primAyar),0);
+  // SATIŞ KURALI: hakediş yalnız TESLİM edilen siparişten doğar (İskonto&Komisyon tablosuyla BİREBİR).
+  // Kural yoksa ödeme ekranı tablodan farklı rakam gösterir → fazla ödeme riski.
+  const earned=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);}).reduce((s,o)=>s+effAyarVal(orderKomisyon(o).tutar,o.primAyar),0);
   const paidT=ods.reduce((s,p)=>s+(+p.odenenTutar||0),0);
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><h2>${esc(kom.name)} · Hakediş & Ödeme</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
@@ -4448,37 +4515,54 @@ function tarihselSanalOrders(){
 // Rapor kaynağı: canlı siparişler (YON_TARIHSEL_SON SONRASI) + tarihsel arşiv (öncesi).
 // Çakışma yok: tarihsel ≤2026-06, canlı >2026-06 — yonVeri() ile AYNI sınır (çift sayım engellenir).
 function raporOrders(){
-  var canli=DB.orders.filter(function(o){return o.date&&o.date.slice(0,7)>YON_TARIHSEL_SON;});
+  // ÇİFT SAYIM YOK: YON_TARIHSEL bir SATIŞ (fiilen teslim edilen mal) arşividir, sipariş arşivi değil.
+  // Haziran'da alınıp Temmuz'da teslim edilen mal Haziran arşivine GİRMEMİŞTİR; burada Temmuz'a
+  // yazılır ve bir kez sayılır. Sınırı o.date'e bağlarsak bu sipariş tamamen kaybolurdu.
+  var canli=DB.orders.filter(function(o){var t=raporTarihi(o);return t&&t.slice(0,7)>YON_TARIHSEL_SON;});
   return canli.concat(tarihselSanalOrders());
 }
 // Tonaj tabanı — iki farklı soruyu ayırır:
 //   'sevk'    = fiilen çıkan mal (sevk + teslim). Firmanın elle tuttuğu satış kaydıyla AYNI şeyi ölçer. VARSAYILAN.
 //   'siparis' = alınan tüm siparişler, durumdan bağımsız. "Ne kadar sipariş aldık" sorusu.
 // Tarihsel arşiv sanal siparişleri status='teslim' taşır → her iki tabanda da sayılır, geçmiş kaymaz.
-function tonajCikti(o){return !!o&&(o.status==='sevk'||o.status==='teslim');}
+// ══ SATIŞ KURALI (firma kararı 07.08.2026) ══════════════════════════════════════════════════
+// TESLİM EDİLMEYEN HİÇBİR SİPARİŞ SATIŞ DEĞİLDİR. Tonaj, ciro, komisyon, iskonto ve TÜM raporlar
+// (günlük/haftalık/aylık/yönetim) yalnız status==='teslim' olanı sayar. 'sevk' de sayılmaz —
+// mal yolda, teslim edilmiş değil.
+// TARİH: söz verilen teslim tarihi DEĞİL, FİİLEN teslim edilen gün. Erken de geç de teslim
+// edilebiliyor; ölçü "Teslim Edildi"ye çekildiği andır (teslimEdildiTarih).
+// GERİYE DÖNÜK: alanı olmayan eski kayıtlarda teslimTarihi → date sırasıyla düşülür. Bu sayede
+// hiçbir veri YAZILMADAN geçmiş de doğru tarihe oturur (göç yok → veri kaybı riski yok).
+function satisMi(o){return !!o&&o.status==='teslim';}
+function satisTarihi(o){return satisMi(o)?String((o.teslimEdildiTarih||o.teslimTarihi||o.date)||''):'';}
+// Raporlarda bir siparişin ait olduğu gün: teslim edildiyse fiilen teslim günü,
+// edilmediyse PLANLANAN teslim günü (bekleyen kalemler doğru haftada/ayda görünsün).
+function raporTarihi(o){return satisMi(o)?satisTarihi(o):(kanbanDate(o)||'');}
+function tonajCikti(o){return satisMi(o);}   // ESKİ AD — geriye dönük çağrılar satış kuralına düşer
 function tonajData(){
   const now=new Date();
-  const tumu=raporOrders().filter(o=>o.status!=='iptal'&&o.date);
+  const tumu=raporOrders().filter(o=>o.status!=='iptal'&&raporTarihi(o));
   const tabanSevk=tonajSel.taban!=='siparis';
-  const orders=tabanSevk?tumu.filter(tonajCikti):tumu;
-  const years=[...new Set(tumu.map(o=>o.date.slice(0,4)))].sort();   // yıl seçeneği tabandan BAĞIMSIZ — taban değişince yıl listesi kaybolmasın
+  const orders=tabanSevk?tumu.filter(satisMi):tumu;
+  const _t=(o)=>raporTarihi(o);   // teslim edilmişse FİİLEN teslim günü, edilmemişse planlanan gün
+  const years=[...new Set(tumu.map(o=>_t(o).slice(0,4)))].sort();   // yıl seçeneği tabandan BAĞIMSIZ — taban değişince yıl listesi kaybolmasın
   if(!tonajSel.year||years.indexOf(tonajSel.year)<0)tonajSel.year=years.indexOf(String(now.getFullYear()))>=0?String(now.getFullYear()):(years[years.length-1]||String(now.getFullYear()));
   const Y=tonajSel.year;
   if(!tonajSel.month)tonajSel.month=(Y===String(now.getFullYear()))?String(now.getMonth()+1).padStart(2,'0'):'12';
   const M=tonajSel.month;
-  const yearOrders=orders.filter(o=>o.date.slice(0,4)===Y);
+  const yearOrders=orders.filter(o=>_t(o).slice(0,4)===Y);
   // aylık: ay → ürün → ton
   const byMonthProd={},byMonthTot={},prodTotY={};
-  yearOrders.forEach(o=>{const m=o.date.slice(5,7);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byMonthProd[m]=byMonthProd[m]||{})[l.code]=(byMonthProd[m][l.code]||0)+t;byMonthTot[m]=(byMonthTot[m]||0)+t;prodTotY[l.code]=(prodTotY[l.code]||0)+t;});});
+  yearOrders.forEach(o=>{const m=_t(o).slice(5,7);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byMonthProd[m]=byMonthProd[m]||{})[l.code]=(byMonthProd[m][l.code]||0)+t;byMonthTot[m]=(byMonthTot[m]||0)+t;prodTotY[l.code]=(prodTotY[l.code]||0)+t;});});
   const yearTot=Object.values(byMonthTot).reduce((a,b)=>a+b,0);
   // günlük (seçili ay): gün → ürün → ton
   const daysInM=new Date(+Y,+M,0).getDate();
   const byDayProd={},byDayTot={},prodTotM={};
-  yearOrders.filter(o=>o.date.slice(5,7)===M).forEach(o=>{const d=o.date.slice(8,10);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byDayProd[d]=byDayProd[d]||{})[l.code]=(byDayProd[d][l.code]||0)+t;byDayTot[d]=(byDayTot[d]||0)+t;prodTotM[l.code]=(prodTotM[l.code]||0)+t;});});
+  yearOrders.filter(o=>_t(o).slice(5,7)===M).forEach(o=>{const d=_t(o).slice(8,10);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byDayProd[d]=byDayProd[d]||{})[l.code]=(byDayProd[d][l.code]||0)+t;byDayTot[d]=(byDayTot[d]||0)+t;prodTotM[l.code]=(prodTotM[l.code]||0)+t;});});
   const monthTot=Object.values(byDayTot).reduce((a,b)=>a+b,0);
   // yıllık: yıl → ürün → ton
   const byYearProd={},byYearTot={},prodAll={};
-  orders.forEach(o=>{const y=o.date.slice(0,4);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byYearProd[y]=byYearProd[y]||{})[l.code]=(byYearProd[y][l.code]||0)+t;byYearTot[y]=(byYearTot[y]||0)+t;prodAll[l.code]=(prodAll[l.code]||0)+t;});});
+  orders.forEach(o=>{const y=_t(o).slice(0,4);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byYearProd[y]=byYearProd[y]||{})[l.code]=(byYearProd[y][l.code]||0)+t;byYearTot[y]=(byYearTot[y]||0)+t;prodAll[l.code]=(prodAll[l.code]||0)+t;});});
   // hedef & tempo
   const H=tonajHedefMap();
   const isCurMonth=(Y===String(now.getFullYear())&&M===String(now.getMonth()+1).padStart(2,'0'));
@@ -4491,9 +4575,9 @@ function tonajData(){
   const gerekliTempo=(hedefM>monthTot&&kalanGun)?(hedefM-monthTot)/kalanGun:0;
   let hedefYtoplam=0;for(let i=1;i<=12;i++){hedefYtoplam+=(+H[Y+'-'+String(i).padStart(2,'0')]||0);}
   // Seçili ayın iki tabanı yan yana — bekleyen sipariş KPI'da görünsün (taban seçiminden BAĞIMSIZ hesaplanır)
-  const _ayda=(o)=>o.date.slice(0,4)===Y&&o.date.slice(5,7)===M;
+  const _ayda=(o)=>_t(o).slice(0,4)===Y&&_t(o).slice(5,7)===M;
   const _ton=(a)=>a.reduce((s,o)=>s+(o.lines||[]).reduce((x,l)=>x+(l&&l.code?tonOf(l.code,l.qty):0),0),0);
-  const aySiparis=_ton(tumu.filter(_ayda)),ayCikan=_ton(tumu.filter(o=>_ayda(o)&&tonajCikti(o)));
+  const aySiparis=_ton(tumu.filter(_ayda)),ayCikan=_ton(tumu.filter(o=>_ayda(o)&&satisMi(o)));
   const ayBekleyen=aySiparis-ayCikan;
   return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam,tabanSevk,aySiparis,ayCikan,ayBekleyen};
 }
@@ -4520,14 +4604,14 @@ function tonajRaporuHTML(){
     <select onchange="tonajSel.month=this.value;render()">${AYLAR_TR.map((m,i)=>{const mv=String(i+1).padStart(2,'0');return `<option value="${mv}" ${D.M===mv?'selected':''}>${m}</option>`}).join('')}</select>
     <span class="rf-lbl" style="margin-left:14px">Taban</span>
     <select onchange="tonajSel.taban=this.value;render()" title="Sevk Edilen: fabrikadan fiilen çıkan mal. Sipariş Alınan: durumu ne olursa olsun kaydedilen tüm siparişler.">
-      <option value="sevk" ${D.tabanSevk?'selected':''}>Sevk Edilen</option>
+      <option value="sevk" ${D.tabanSevk?'selected':''}>Teslim Edilen</option>
       <option value="siparis" ${D.tabanSevk?'':'selected'}>Sipariş Alınan</option>
     </select>
-    <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">${D.tabanSevk?'Yalnız sevk edilen + teslim edilen siparişler':'Durumdan bağımsız tüm siparişler'} · iptaller hariç · tüm değerler TON</span>
+    <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">${D.tabanSevk?'Yalnız TESLİM EDİLEN siparişler (satış kuralı)':'Durumdan bağımsız tüm siparişler'} · iptaller hariç · tüm değerler TON</span>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} ${D.tabanSevk?'Sevk Edilen':'Sipariş Alınan'}</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
-    ${D.ayBekleyen>0.05?`<div class="kpi a"><div class="kl">${AYLAR_TR[+D.M-1]} Bekleyen</div><div class="kv" style="font-size:18px">${fmtTon(D.ayBekleyen)} t</div><div class="ks">sipariş alındı, henüz sevk edilmedi</div></div>`:''}
+    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} ${D.tabanSevk?'Teslim Edilen':'Sipariş Alınan'}</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
+    ${D.ayBekleyen>0.05?`<div class="kpi a"><div class="kl">${AYLAR_TR[+D.M-1]} Bekleyen</div><div class="kv" style="font-size:18px">${fmtTon(D.ayBekleyen)} t</div><div class="ks">sipariş alındı, henüz teslim edilmedi</div></div>`:''}
     <div class="kpi ${D.hedefM?(pctM>=100?'g':(pctM>=70?'a':'r')):''}"><div class="kl">${AYLAR_TR[+D.M-1]} Hedef</div><div class="kv" style="font-size:18px">${D.hedefM?fmtTon(D.hedefM)+' t':'—'}</div><div class="ks">${D.hedefM?'Gerçekleşme %'+fmtN(Math.round(pctM)):'hedef girilmedi'}</div></div>
     ${D.isCurMonth?`<div class="kpi p"><div class="kl">Ay Sonu Projeksiyon</div><div class="kv" style="font-size:18px">${fmtTon(D.proj)} t</div><div class="ks">günlük ort. ${fmtTon(D.takvimOrt)} t × ${D.daysInM} gün</div></div>`:''}
     ${(D.isCurMonth&&D.hedefM)?`<div class="kpi ${D.gerekliTempo>D.takvimOrt?'r':'g'}"><div class="kl">Hedef İçin Gerekli Tempo</div><div class="kv" style="font-size:18px">${D.gerekliTempo?fmtTon(D.gerekliTempo)+' t/gün':'Tamamlandı'}</div><div class="ks">kalan ${D.kalanGun} gün</div></div>`:''}
@@ -4633,8 +4717,8 @@ function yonVeri(){
   let gelecekAtlanan=0;
   // Tarihsel arşiv FİİLEN SATILAN malı taşır. Canlı aylarda da yalnız sevk/teslim sayılır —
   // yoksa geçmiş "satılan", bugün "sipariş alınan" olur ve yıllık kıyas sahte artış gösterir.
-  DB.orders.filter(o=>o.status!=='iptal'&&o.date&&tonajCikti(o)&&o.date.slice(0,7)>YON_TARIHSEL_SON).forEach(o=>{
-    const k=o.date.slice(0,7);
+  DB.orders.filter(o=>satisMi(o)&&satisTarihi(o)&&satisTarihi(o).slice(0,7)>YON_TARIHSEL_SON).forEach(o=>{
+    const k=satisTarihi(o).slice(0,7);
     if(k>buAy){gelecekAtlanan++;return;}         // ileri tarihli kayıt raporu kaydırmasın
     const s=seri[k]=seri[k]||{urunKg:{},toplamKg:0,kaynak:'canli',tamam:k<buAy};
     (o.lines||[]).forEach(l=>{
@@ -5006,12 +5090,13 @@ function renderReports(c,tb){
   if(repTab==='tonaj'){c.innerHTML=_tabs+tonajRaporuHTML();repCharts.forEach(x=>{try{x.destroy()}catch(e){}});repCharts=[];setTimeout(()=>drawTonajChart(),30);return;}
   if(repTab==='yonetici'){c.innerHTML=_tabs+yoneticiRaporuHTML();repCharts.forEach(x=>{try{x.destroy()}catch(e){}});repCharts=[];setTimeout(()=>drawYonCharts(),30);return;}
   // ---- dönem filtresi ----
-  let orders=raporOrders();
-  if(repFilt.year)orders=orders.filter(o=>(o.date||'').slice(0,4)===repFilt.year);
-  if(repFilt.month)orders=orders.filter(o=>(o.date||'').slice(5,7)===repFilt.month);
-  const years=[...new Set(raporOrders().map(o=>(o.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  // SATIŞ KURALI: genel rapor yalnız TESLİM EDİLEN siparişi, fiilen teslim edildiği tarihe göre sayar
+  let orders=raporOrders().filter(satisMi);
+  if(repFilt.year)orders=orders.filter(o=>satisTarihi(o).slice(0,4)===repFilt.year);
+  if(repFilt.month)orders=orders.filter(o=>satisTarihi(o).slice(5,7)===repFilt.month);
+  const years=[...new Set(raporOrders().filter(satisMi).map(o=>satisTarihi(o).slice(0,4)).filter(Boolean))].sort().reverse();
   const byDay=!!repFilt.month;                         // tek ay seçiliyse günlük kır
-  const gkey=o=>byDay?(o.date||''):(o.date||'').slice(0,7);
+  const gkey=o=>byDay?satisTarihi(o):satisTarihi(o).slice(0,7);
   const periodLbl=g=>byDay?g.slice(8,10)+'.'+g.slice(5,7):(AY_KISA[+g.slice(5,7)-1]+' '+g.slice(2,4));
   // ---- agregasyon ----
   const byProductQty={},byCustomer={},byFirma={},byTrend={},byTrendCnt={},byNakliye={},byKademe={},byStatus={},byKom={},byPP={};

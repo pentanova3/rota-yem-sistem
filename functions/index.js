@@ -1386,7 +1386,7 @@ const escHTML = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace
 function tmrTonajHesap(DB, now) {
   const Y = now.getFullYear(), M = String(now.getMonth() + 1).padStart(2, "0");
   const curYM = Y + "-" + M;
-  const orders = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && String(o.date).slice(0, 7) === curYM);
+  const orders = (DB.orders || []).filter((o) => satisMiFN(o) && satisTarihiFN(o).slice(0, 7) === curYM);
   // İSTEMCİ tonajData() İLE BİREBİR: kodu olan HER satır sayılır (0 ton olsa da gün/ürün oluşur);
   // aktifGun = kodu olan satırı bulunan farklı gün sayısı. Aksi halde ekrandaki "18 satış günü" tutmaz.
   const prodTot = {}, gunler = {};
@@ -1400,7 +1400,7 @@ function tmrTonajHesap(DB, now) {
       toplam += t;
       coded = true;
     });
-    if (coded) { gunler[String(o.date).slice(8, 10)] = true; siparis++; }
+    if (coded) { gunler[satisTarihiFN(o).slice(8, 10)] = true; siparis++; }   // gün = FİİLEN teslim günü
   });
   const aktifGun = Object.keys(gunler).length;
   // BEKLEYEN: alınmış ama henüz çıkmamış mal. Rapor yalnız sevk edileni sayar (firma kararı 31.07) —
@@ -1411,8 +1411,8 @@ function tmrTonajHesap(DB, now) {
   let bekTon = 0, bekAdet = 0;
   const prodTotAy = Object.assign({}, prodTot);
   (DB.orders || []).forEach((o) => {
-    if (!o || !o.date || String(o.date).slice(0, 7) !== curYM) return;
-    if (o.status === "iptal" || cikanSiparisFN(o)) return;
+    if (!o || o.status === "iptal" || satisMiFN(o)) return;
+    if (String(o.teslimTarihi || o.date || "").slice(0, 7) !== curYM) return;   // bekleyen = PLANLANAN teslim ayı
     let coded = false;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
@@ -1437,7 +1437,7 @@ function tmrTonajMesaj(D, now) {
   // 1 sevk edilen · 2 bekleyen · 3 toplam sipariş (sevk+bekleyen) · 4 satış günü · 5 günlük ort.
   // Beş satır HER ZAMAN yazılır (bekleyen 0 olsa da) — sabit biçim, gözle kıyas kolay olsun.
   const ozet = [
-    sat("Sevk Edilen", fmtTonFN(D.toplam) + " t"),
+    sat("Teslim Edilen", fmtTonFN(D.toplam) + " t"),
     sat("Bekleyen", fmtTonFN(D.bekTon) + " t"),
     sat("Toplam Sipariş", (D.siparis + D.bekAdet) + " adet"),
     sat("Satış Günü", D.aktifGun + " gün"),
@@ -1475,7 +1475,7 @@ function tmrTonajMesaj(D, now) {
     "<pre>" + escHTML(ozet) + "</pre>" +
     hedefBlok +
     urunBlok +
-    "\n\n<i>Bekleyen = sipariş alındı, henüz sevk edilmedi. Ürün kırılımı ay toplamıdır (sevk + bekleyen). Hedef takibi sevk edilen üzerinden yürür.</i>" +
+    "\n\n<i>Bekleyen = sipariş alındı, henüz sevk edilmedi. Ürün kırılımı ay toplamıdır (sevk + bekleyen). Hedef takibi teslim edilen üzerinden yürür.</i>" +
     "\n\n<i>Sipariş Yönetimi · TMR · her sabah 10:00</i>";
 }
 // ---- TARİHSEL SATIŞ ARŞİVİ (istemci siparis-takip/index.html YON_TARIHSEL AYNASI) ----
@@ -1498,7 +1498,7 @@ function haftaOzetHesap(DB, now) {
   const oncekiSon = new Date(son); oncekiSon.setDate(son.getDate() - 7);
   const isoBas = isoTarih(bas), isoSon = isoTarih(son), oisoBas = isoTarih(oncekiBas), oisoSon = isoTarih(oncekiSon);
   const topla = (a, b) => {
-    const list = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && o.date >= a && o.date <= b);   // taban: fiilen çıkan mal
+    const list = (DB.orders || []).filter((o) => satisMiFN(o) && satisTarihiFN(o) >= a && satisTarihiFN(o) <= b);   // taban: fiilen TESLİM edilen
     let ton = 0; const gunler = {}, custTon = {}, prodTon = {};
     let siparis = 0;
     list.forEach((o) => {
@@ -1511,7 +1511,7 @@ function haftaOzetHesap(DB, now) {
       });
       if (!coded) return;
       siparis++;
-      gunler[o.date] = (gunler[o.date] || 0) + oTon;
+      gunler[satisTarihiFN(o)] = (gunler[satisTarihiFN(o)] || 0) + oTon;   // gün = FİİLEN teslim günü
       const ad = o.customer || o.aliciMusteri || "—";
       custTon[ad] = (custTon[ad] || 0) + oTon;
     });
@@ -1535,7 +1535,7 @@ function haftaOzetMesaj(Dmonth, H, now) {
   const sat = (lbl, val) => lbl.padEnd(15, " ") + String(val).padStart(13, " ");
   // özet + trend
   const ozet = [
-    sat("Sevk edilen", fmtTonFN(bu.ton) + " t"),
+    sat("Teslim edilen", fmtTonFN(bu.ton) + " t"),
     sat("  geçen hafta", fmtTonFN(onceki.ton) + " t"),
     sat("  değişim", trendEt(bu.ton, onceki.ton)),
     "",
@@ -1565,7 +1565,7 @@ function haftaOzetMesaj(Dmonth, H, now) {
   const proj = dayOfM ? (Dmonth.toplam / dayOfM * daysInM) : Dmonth.toplam;
   // Projeksiyon SEVK EDİLEN üzerinden kurulur; bekleyen ayrı satırda gösterilir ki
   // "ay içi 0 t" görünürken bekleyen 14 t sipariş olduğu yönetimden gizlenmesin.
-  let projSat = sat("Ay içi sevk", fmtTonFN(Dmonth.toplam) + " t") + "\n" + sat("Tahmini kapanış", fmtTonFN(proj) + " t");
+  let projSat = sat("Ay içi teslim", fmtTonFN(Dmonth.toplam) + " t") + "\n" + sat("Tahmini kapanış", fmtTonFN(proj) + " t");
   if (Dmonth.bekAdet > 0) projSat += "\n" + sat("Bekleyen", fmtTonFN(Dmonth.bekTon) + " t (" + Dmonth.bekAdet + " sipariş)");
   projSat += "\n" + sat("Ay toplamı", fmtTonFN(Dmonth.toplam + Dmonth.bekTon) + " t");   // sevk + bekleyen
   if (Dmonth.hedef > 0) {
@@ -1588,14 +1588,26 @@ function haftaOzetMesaj(Dmonth, H, now) {
 // Tarihsel arşiv zaten fiilen satılan malı taşır → canlı ayları da aynı ölçüye getirir,
 // yoksa geçmiş "satılan", bugün "sipariş alınan" olur ve yıllık kıyas sahte artış gösterir.
 // Bu kural DEĞİŞİRSE site tarafı da değişmeli — iki rapor birbirini tutmalı.
+// ══ SATIŞ KURALI (firma kararı 07.08.2026) — istemciyle BİREBİR (siparis-takip: satisMi/satisTarihi)
+// Teslim edilmeyen hiçbir sipariş satış değildir: tonaj, ciro, danışman payı, günlük/haftalık/aylık
+// raporların HEPSİ yalnız status==='teslim' olanı sayar. 'sevk' sayılmaz — mal yolda.
+// TARİH: fiilen teslim edildiği gün. Eski kayıtta alan yoksa teslimTarihi → date sırasıyla düşülür
+// (yalnız OKUMA yolu; hiçbir kayıt güncellenmez, göç yok).
+// İKİ TARAF AYRIŞMAMALI: test/odeme.test.js bölüm 29 eşliği denetler.
+function satisMiFN(o) {
+  return !!o && o.status === "teslim";
+}
+function satisTarihiFN(o) {
+  return satisMiFN(o) ? String(o.teslimEdildiTarih || o.teslimTarihi || o.date || "") : "";
+}
 function cikanSiparisFN(o) {
-  return !!o && (o.status === "sevk" || o.status === "teslim");
+  return satisMiFN(o);   // ESKİ AD — kalan çağrılar satış kuralına düşer
 }
 function ayTonajOf(DB, ym) {
   if (ym > YON_TARIHSEL_SON_FN) {
     let ton = 0;
     (DB.orders || []).forEach((o) => {
-      if (!o || !o.date || !cikanSiparisFN(o) || String(o.date).slice(0, 7) !== ym) return;
+      if (!satisMiFN(o) || satisTarihiFN(o).slice(0, 7) !== ym) return;
       (o.lines || []).forEach((l) => { if (l && l.code) ton += (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000; });
     });
     return ton;
@@ -1612,7 +1624,7 @@ function danismanTonajOf(DB, ym) {
   if (ym <= YON_TARIHSEL_SON_FN) return null;
   const out = {};
   (DB.orders || []).forEach((o) => {
-    if (!o || !o.date || !cikanSiparisFN(o) || String(o.date).slice(0, 7) !== ym) return;   // taban: ayTonajOf ile AYNI — pay yüzdeleri tutarlı kalsın
+    if (!satisMiFN(o) || satisTarihiFN(o).slice(0, 7) !== ym) return;   // taban: ayTonajOf ile AYNI — pay yüzdeleri tutarlı kalsın
     const did = String(o.danismanId || "");
     if (!did) return;                                     // danışmansız sipariş sayılmaz
     let t = 0;
@@ -1631,7 +1643,7 @@ function danismanAdi(DB, id) {
 function aylikRaporHesap(DB, ym) {
   const [Ys, Ms] = ym.split("-");
   const gecenYilYm = (String(+Ys - 1)) + "-" + Ms;
-  const list = (DB.orders || []).filter((o) => o && o.date && cikanSiparisFN(o) && String(o.date).slice(0, 7) === ym);   // taban: fiilen çıkan mal
+  const list = (DB.orders || []).filter((o) => satisMiFN(o) && satisTarihiFN(o).slice(0, 7) === ym);   // taban: fiilen TESLİM edilen
   const prodTon = {}, custTon = {}, gunler = {}, haftaTon = {};
   let ton = 0, siparis = 0;
   list.forEach((o) => {
@@ -1644,9 +1656,9 @@ function aylikRaporHesap(DB, ym) {
     });
     if (!coded) return;
     siparis++;
-    gunler[o.date] = true;
+    gunler[satisTarihiFN(o)] = true;   // gün = FİİLEN teslim günü
     custTon[o.customer || o.aliciMusteri || "—"] = (custTon[o.customer || o.aliciMusteri || "—"] || 0) + oTon;
-    const gun = +String(o.date).slice(8, 10);
+    const gun = +satisTarihiFN(o).slice(8, 10);   // hafta kırılımı da teslim gününe göre
     const hafta = Math.min(4, Math.floor((gun - 1) / 7));   // 5. haftanın kalanı 4. haftaya biner
     haftaTon[hafta] = (haftaTon[hafta] || 0) + oTon;
   });
@@ -1655,8 +1667,8 @@ function aylikRaporHesap(DB, ym) {
   let bekTon = 0, bekAdet = 0;
   const prodTonAy = Object.assign({}, prodTon);   // ürün kırılımının AY TOPLAMI tabanı (sevk + bekleyen)
   (DB.orders || []).forEach((o) => {
-    if (!o || !o.date || String(o.date).slice(0, 7) !== ym) return;
-    if (o.status === "iptal" || cikanSiparisFN(o)) return;
+    if (!o || o.status === "iptal" || satisMiFN(o)) return;
+    if (String(o.teslimTarihi || o.date || "").slice(0, 7) !== ym) return;   // bekleyen = PLANLANAN teslim ayı
     let coded = false;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
@@ -1706,7 +1718,7 @@ function aylikRaporMesaj(A) {
   ] : [
     // SIRA FİRMA TARAFINDAN BELİRLENDİ (04.08.2026) — günlük raporla AYNI:
     // sevk · bekleyen · toplam sipariş · satış günü · günlük ort.
-    sat("Sevk edilen", fmtTonFN(A.ton) + " t"),
+    sat("Teslim edilen", fmtTonFN(A.ton) + " t"),
     sat("Bekleyen", fmtTonFN(A.bekTon) + " t"),
     sat("Toplam sipariş", (A.siparis + A.bekAdet) + " adet"),
     sat("Satış günü", A.aktifGun + " gün"),
@@ -2741,6 +2753,10 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         out.brut = Math.round((+o.brutListe > 0) ? (+o.brutListe) : brut);
         out.iskonto = Math.max(0, Math.round(out.brut - (+o.total || 0)));
         out.hat = "tmr";
+        // SATIŞ KURALI damgası: bayinin gördüğü çeyreklik iskonto/tonaj iç raporla AYNI olsun.
+        // Sipariş listesi tüm durumları göstermeye devam eder (takip), yalnız İSKONTO ekranı süzer.
+        out.teslimEdildi = satisMiFN(o);
+        out.satisTarih = satisTarihiFN(o);
         return out;
       });
     const musteriler = (DB.customers || [])

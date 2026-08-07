@@ -95,13 +95,16 @@ function orderKomisyon(o,kom){
   return {tutar:0,rate:(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0)};
 }
 function bayiAlimOzet(bayiId,yil){
-  const os=D().orders.filter(o=>o.aliciBayi&&o.status!=='iptal'&&(ordBayi(o)||{}).id===bayiId&&(o.date||'').slice(0,4)===String(yil));
+  // SATIŞ KURALI: teslim edilmemiş siparişe bayi iskontosu işlenmez (bayiAlimData ile BİREBİR)
+  const os=D().orders.filter(o=>o.aliciBayi&&satisMi(o)&&(ordBayi(o)||{}).id===bayiId&&satisTarihi(o).slice(0,4)===String(yil));
   let brut=0,fat=0;const ceyrek=[0,0,0,0];
-  os.forEach(o=>{const pl=orderPL(o);let b=0;(o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});const ft=tmrTotal(o);const isk=Math.max(0,b-ft);const q=Math.floor((+(o.date||'').slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;brut+=b;fat+=ft;});
+  os.forEach(o=>{const pl=orderPL(o);let b=0;(o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});const ft=tmrTotal(o);const isk=Math.max(0,b-ft);const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;brut+=b;fat+=ft;});
   return {adet:os.length,brut,fatura:fat,iskonto:Math.max(0,brut-fat),ceyrek};
 }
 function danismanHakedis(danId){
-  let hak=0,adet=0;D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId){hak+=orderKomisyon(o,d).tutar||0;adet++;}});
+  // SATIŞ KURALI: komisyon YALNIZ teslim edilen siparişten doğar. Burada hiç durum süzgeci yoktu —
+  // iptal ve teslim edilmemiş siparişlerin primi de hakedişe giriyordu (İskonto&Komisyon ekranıyla çelişki).
+  let hak=0,adet=0;D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId&&satisMi(o)){hak+=orderKomisyon(o,d).tutar||0;adet++;}});
   const odenen=D().odemeler.filter(p=>p.komisyoncuId===danId).reduce((s,p)=>s+(+p.odenenTutar||0),0);
   return {hak,odenen,bakiye:hak-odenen,adet};
 }
@@ -247,7 +250,13 @@ function datasets(){
     {src:'yem',lbl:'Yem',orders:D().yemOrders,custs:D().yemCustomers,prods:D().yemProducts,ton:yemTon,total:yemTotal,custCity:o=>{const c=D().yemCustomers.find(x=>x.id===o.customerId);return c?c.city:'';}},
   ].filter(ds=>ds.orders.length);
 }
-const donemFiltre=(orders,P)=>orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===P.yil&&(P.tip!=='ay'||o.date.slice(5,7)===P.ay));
+// ══ SATIŞ KURALI (firma kararı 07.08.2026) — siparis-takip/index.html satisMi/satisTarihi ile BİREBİR
+// Teslim edilmeyen sipariş satış değildir: tonaj, ciro, hakediş yalnız status==='teslim' olanı sayar.
+// Tarih = fiilen teslim günü; eski kayıtta teslimTarihi → date sırasıyla düşülür.
+// İKİ TARAF AYRIŞIRSA aynı soruya iki ekran farklı cevap verir (test bölüm 29 eşliği denetler).
+const satisMi=o=>!!o&&o.status==='teslim';
+const satisTarihi=o=>satisMi(o)?String(o.teslimEdildiTarih||o.teslimTarihi||o.date||''):'';
+const donemFiltre=(orders,P)=>orders.filter(o=>{const t=satisTarihi(o);return t&&t.slice(0,4)===P.yil&&(P.tip!=='ay'||t.slice(5,7)===P.ay);});
 
 // ---- Sipariş durumları (TMR + Yem) ----
 function ansDurumSayim(q){
@@ -285,7 +294,7 @@ function ansTonaj(q){
     return card('Satış Tonajı — '+esc(P.lbl)+esc(etiket)+' '+srcBadge(ds.src),
       row('Toplam',`<span class="ka-big">${fmtTon(ton)} ton</span>`)+row('Çuval',fmtN(cuval)+' adet')+row('Sipariş',os.length+' adet')+
       (top.length?`<div class="ka-sub">${mp&&!mc?'Müşteri kırılımı':'Ürün kırılımı (çuval)'}</div>`+top.map(([c,v])=>row(c,mp&&!mc?fmtTon(v)+' t':fmtN(v)+' çuval')).join(''):'')+
-      `<div class="ka-note">iptal siparişler hariç · detay: <a href="${ds.src==='yem'?'yem/#raporlar':'siparis-takip/#raporlar'}">Raporlar</a></div>`);
+      `<div class="ka-note">yalnız teslim edilen siparişler (satış kuralı) · detay: <a href="${ds.src==='yem'?'yem/#raporlar':'siparis-takip/#raporlar'}">Raporlar</a></div>`);
   }).filter(Boolean).join('')||card('Satış Tonajı — '+esc(P.lbl),'<p class="ka-p">Bu dönemde kayıt bulunamadı.</p>');
 }
 
@@ -300,7 +309,7 @@ function ansCiro(q){
     return card('Satış Cirosu — '+esc(P.lbl)+' '+srcBadge(ds.src),
       row('Toplam Ciro',`<span class="ka-big">${fmtTL(ciro)}</span>`)+row('Sipariş',os.length+' adet')+row('Tonaj',fmtTon(ton)+' t')+
       row('Ortalama Sipariş',os.length?fmtTL(ciro/os.length):'—')+
-      `<div class="ka-note">Sipariş satış tutarları toplamıdır (iptal hariç). Kasa/tahsilat muhasebe modülündedir, aramaya kapalıdır.</div>`);
+      `<div class="ka-note">Yalnız TESLİM EDİLEN siparişlerin tutarı (satış kuralı). Kasa/tahsilat muhasebe modülündedir, aramaya kapalıdır.</div>`);
   }).filter(Boolean).join('')||null;
 }
 
@@ -337,7 +346,7 @@ function ansEnCok(q){
     const rows=top.map(([k,v],i)=>`<tr><td><b>${i+1}.</b></td><td><b>${esc(k)}</b></td><td class="n">${fmtTon(v)} t</td><td class="n">${toplam?('%'+Math.round(v/toplam*100)):''}</td></tr>`).join('');
     return card(baslik+' — '+esc(P.lbl)+' '+srcBadge(ds.src),
       table([{t:''},{t:tip==='urun'?'Ürün':(tip==='il'?'İl':'Ad')},{t:'Tonaj',n:1},{t:'Pay',n:1}],rows)+
-      `<div class="ka-note">Sıralama ton bazlıdır · iptal siparişler hariç.</div>`);
+      `<div class="ka-note">Sıralama ton bazlıdır · yalnız teslim edilen siparişler.</div>`);
   }).filter(Boolean).join('')||null;
 }
 
@@ -368,8 +377,8 @@ function ansKiyas(q){
 function ansHedef(q){
   if(!norm(q).includes('hedef'))return null;
   const H=(D().meta&&D().meta.tonajHedef)||{};const yil=String(new Date().getFullYear());
-  const os=D().orders.filter(o=>o.status!=='iptal'&&o.date&&o.date.slice(0,4)===yil);
-  const byM={};os.forEach(o=>{const m=o.date.slice(5,7);byM[m]=(byM[m]||0)+tmrTon(o);});
+  const os=D().orders.filter(o=>satisMi(o)&&satisTarihi(o).slice(0,4)===yil);
+  const byM={};os.forEach(o=>{const m=satisTarihi(o).slice(5,7);byM[m]=(byM[m]||0)+tmrTon(o);});
   const rows=AYLAR_TR.map((ad,i)=>{const k=yil+'-'+String(i+1).padStart(2,'0');const hv=+H[k]||0,g=byM[String(i+1).padStart(2,'0')]||0;if(!hv&&!g)return '';return `<tr><td>${ad}</td><td class="n">${hv?fmtTon(hv):'—'}</td><td class="n">${g?fmtTon(g):'—'}</td><td class="n" style="font-weight:700">${hv?('%'+Math.round(g/hv*100)):'—'}</td></tr>`;}).join('');
   if(!rows)return card('Tonaj Hedefleri — '+yil,`<p class="ka-p">Henüz aylık ton hedefi girilmemiş. Hedefler <a class="ka-link" href="siparis-takip/#raporlar">Sipariş Takip → Raporlar → Tonaj &amp; Hedef</a> ekranından girilir.</p>`);
   return card('Tonaj Hedefleri — '+yil+' '+srcBadge('tmr'),table([{t:'Ay'},{t:'Hedef (t)',n:1},{t:'Gerçekleşen (t)',n:1},{t:'Oran',n:1}],rows)+`<a class="ka-link" href="siparis-takip/#raporlar">Tonaj &amp; Hedef raporunu aç →</a>`);
