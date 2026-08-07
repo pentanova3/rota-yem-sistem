@@ -3634,7 +3634,17 @@ function komDetayData(komId,from,to){
     // DÖKÜM: satır primini net'e ölçekle — böylece satırlar toplamı net'e eşittir ve ayarlama görünmez.
     const kargo=r.kargo||0;const rawSum=(r.det||[]).reduce((s,d)=>s+(d.prim||0),0);
     const factor=rawSum>0?((effNet+kargo)/rawSum):0;
-    (r.det||[]).forEach((d,i)=>{const tutar=d.satis*d.qty;const primEff=(d.prim||0)*factor;rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?kargo:0,prim:primEff});totTutar+=tutar;totPrim+=primEff;});
+    // PRİMİ SIFIR OLAN SATIR GÖSTERİLMEZ (firma isteği 07.08): danışman listesi olmayan ürün
+    // (CA SABUNU vb.) prim üretmez, dökümü kalabalıklaştırır. Toplamlar YALNIZ görünen satırlardan
+    // birikir — aksi halde danışman kolonu toplayınca tablodaki TOPLAM ile tutmaz.
+    // KARGO, görünen İLK satıra iliştirilir: i===0 kullanılsaydı o satır gizlendiğinde nakliye
+    // kolonu tablodan tamamen düşer, üstteki "Kargo düşülmüş" toplamıyla çelişirdi.
+    const _gor=(r.det||[]).map(d=>({d,primEff:(d.prim||0)*factor})).filter(x=>Math.abs(x.primEff)>0.005);
+    _gor.forEach((x,i)=>{const d=x.d;const tutar=d.satis*d.qty;
+      rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?kargo:0,prim:x.primEff});
+      totTutar+=tutar;totPrim+=x.primEff;});
+    // Hiç prim üretmeyen ama NAKLİYESİ olan sipariş: kargo tablodan düşmesin diye tek satır kalır.
+    if(!_gor.length&&kargo>0){rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:false,urun:'—',miktar:0,liste:0,alis:0,satis:0,tutar:0,kargo,prim:0});}
     totKargo+=kargo;netHam+=(r.tutar||0);netEff+=effNet;
     if(o.primAyar&&o.primAyar.mode){ayarSay++;ayarlar.push({no:o.no,tarih:satisTarihi(o),ham:r.tutar||0,net:effNet,ay:o.primAyar});}
     const ayKey=satisTarihi(o).slice(0,7);                      // YYYY-MM — fiilen teslim edilen ay

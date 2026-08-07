@@ -1985,6 +1985,30 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /const bayiKom=ordBayi\(o\);\s*\n\s*const danKom=ordDanisman\(o\);/.test(H));
     }
 
+    // ── PRİMİ SIFIR OLAN SATIR DÖKÜMDE GÖSTERİLMEZ (firma isteği 07.08) ─────────────────
+    // CA SABUNU gibi danışman listesi olmayan ürünler prim üretmiyor, dökümü kalabalıklaştırıyordu.
+    // TUZAK: toplamlar bu döngüde birikiyor ve kargo İLK satıra iliştiriliyor — gizlerken
+    // ikisi de bozulmamalı, yoksa danışman kolonu toplayınca TOPLAM ile tutmaz.
+    dogru('döküm prim=0 satırlarını süzüyor',
+      /const _gor=\(r\.det\|\|\[\]\)\.map\(d=>\(\{d,primEff:\(d\.prim\|\|0\)\*factor\}\)\)\.filter\(x=>Math\.abs\(x\.primEff\)>0\.005\)/.test(H));
+    dogru('toplamlar YALNIZ görünen satırlardan birikiyor (kolon toplamı tutsun)',
+      /_gor\.forEach\(\(x,i\)=>[\s\S]{0,400}?totTutar\+=tutar;totPrim\+=x\.primEff;\}\);/.test(H));
+    dogru('kargo GÖRÜNEN ilk satıra iliştiriliyor (nakliye kolonu düşmesin)',
+      /_gor\.forEach\(\(x,i\)=>[\s\S]{0,340}?kargo:i===0\?kargo:0/.test(H));
+    dogru('hiç prim yok ama nakliye varsa tek satır KALIYOR',
+      /if\(!_gor\.length&&kargo>0\)\{rows\.push\(/.test(H));
+    // Süzme mantığı koşturularak: 3 kalemin 1'i prim üretiyor
+    {
+      const factor = 1;
+      const det = [{code: 'BK-300 PLUS', prim: 16000, satis: 1100, qty: 100},
+        {code: 'CA SABUNU', prim: 0, satis: 0, qty: 1},
+        {code: '10-40', prim: 0, satis: 0, qty: 1}];
+      const gor = det.map((d) => ({d, primEff: (d.prim || 0) * factor})).filter((x) => Math.abs(x.primEff) > 0.005);
+      esit('3 kalemden yalnız 1 satır kalıyor', gor.length, 1);
+      esit('kalan satır prim üreten kalem', gor[0].d.code === 'BK-300 PLUS' ? 1 : 0, 1);
+      esit('prim toplamı DEĞİŞMİYOR', gor.reduce((s2, x) => s2 + x.primEff, 0), 16000);
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
