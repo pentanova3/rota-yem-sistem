@@ -271,6 +271,7 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .pre-t{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pre-tot{padding:0 9px 7px;font-size:10px;font-weight:700;color:var(--amber-700);text-align:right;font-variant-numeric:tabular-nums}
 .pre-chip{flex:0 0 auto;min-width:150px}
+.pre-ar{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--amber-200);color:#92400E;border-radius:4px;padding:1px 4px;vertical-align:1px}
 .day-list::-webkit-scrollbar{width:4px}.day-list::-webkit-scrollbar-thumb{background:var(--slate-200);border-radius:2px}
 .day-ord{position:relative;padding:5px 7px 5px 18px;border-radius:5px;cursor:pointer;margin-bottom:3px;background:var(--slate-50);transition:filter var(--dur-1) var(--ease)}
 .day-ord::before{content:'';position:absolute;left:7px;top:10px;width:6px;height:6px;border-radius:50%;background:var(--slate-400)}
@@ -1312,11 +1313,12 @@ function renderPanel(c,tb){
       ${(function(){
         // ÇİZGİNİN ALTI: o güne tahmini tarihi düşen AÇIK ön siparişler (üretim planlaması için).
         // Üstteki kesin siparişlerden ayrı tutulur; tonaj/ciro sayaçlarına GİRMEZ.
-        const pl=preOrdersVisible().filter(p=>p.durum==='acik'&&p.tarih===ds);
+        const _hb=isoOf(days[0]);
+        const pl=preOrdersVisible().filter(p=>p.durum==='acik'&&preDemirGun(p,_hb)===ds);
         if(!pl.length)return '';
         const pt=pl.reduce((s2,p)=>s2+preOrderTon(p),0);
         return `<div class="pre-sep"><span>ön sipariş</span></div><div class="pre-list">`+
-          pl.map(p=>`<div class="pre-ord" onclick="openPreOrder('${esc(p.id)}')" title="${esc(p.customer)}${p.not?' · '+esc(p.not):''}"><span class="do-name">${esc(p.customer)}</span><span class="pre-t">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'?'}</span></div>`).join('')+
+          pl.map(p=>`<div class="pre-ord" onclick="openPreOrder('${esc(p.id)}')" title="${esc(p.customer)} · ${esc(preTarihMetin(p))}${p.not?' · '+esc(p.not):''}"><span class="do-name">${esc(p.customer)}${preAralikMi(p)?' <span class="pre-ar">aralık</span>':''}</span><span class="pre-t">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'?'}</span></div>`).join('')+
           `</div>${pt>0?`<div class="pre-tot">${fmtTon(pt)} t tahmini</div>`:''}`;
       })()}
     </div>`;
@@ -1356,6 +1358,23 @@ function preOrderUrunOzet(p){
   if(!l.length)return '<span style="color:var(--slate-400)">ürün belirsiz</span>';
   return esc(l.map(x=>x.code+(+x.qty>0?' × '+fmtN(x.qty):'')).join(' · '));
 }
+// TARİH ARALIĞI: müşteri "12-15 Ağustos arası" diyebiliyor. tarih=başlangıç, tarihSon=bitiş (boşsa tek gün).
+function preBas(p){return (p&&p.tarih)||'';}
+function preSon(p){return (p&&p.tarihSon)||preBas(p);}
+function preAralikMi(p){return !!(preBas(p)&&preSon(p)>preBas(p));}
+function preTarihMetin(p){
+  const b=preBas(p);if(!b)return '';
+  return preAralikMi(p)?(fmtDate(b)+' – '+fmtDate(preSon(p))):fmtDate(b);
+}
+// Aralıklı ön siparişin haftada DEMİR ATTIĞI gün. Aralık haftadan ÖNCE başlıyorsa haftanın ilk
+// gününe demirler → aralık haftayla kesiştiği sürece MUTLAKA görünür, ama yalnız BİR kez sayılır.
+// (Her güne yazsaydık aynı talep haftada 5 kez sayılıp tahmini tonajı şişirirdi.)
+function preDemirGun(p,haftaBas){
+  const b=preBas(p),s2=preSon(p);
+  if(!b)return '';
+  if(s2<haftaBas)return b;               // aralık hafta başlamadan bitmiş — kendi gününde kalır
+  return b<haftaBas?haftaBas:b;
+}
 let editPre=null;
 function openPreOrder(id){
   if(!canEdit()){toast('Yetkiniz yok');return}
@@ -1383,8 +1402,13 @@ function renderPreModal(){
       Ön siparişler onaya sunulmaz, Telegram'a düşmez ve <b>tonaj/ciro raporlarına girmez</b>.</p>
       <div class="fgrid c2">
         <div class="fld"><label>Müşteri *</label><select onchange="preSetCust(this.value)"><option value="">— seçiniz —</option>${musteriler.map(c=>`<option value="${esc(c.id)}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
-        <div class="fld"><label>Tahmini Tarih</label><input type="date" value="${esc(o.tarih||'')}" onchange="editPre.tarih=this.value">
-          <div class="fld-hint">Boş bırakılabilir — panelde "tarih belirsiz" şeridinde görünür</div></div>
+        <div class="fld"><label>Tahmini Tarih</label>
+          <div style="display:flex;align-items:center;gap:7px">
+            <input type="date" value="${esc(o.tarih||'')}" onchange="editPre.tarih=this.value;renderPreModal()" style="flex:1">
+            <span style="color:var(--slate-400);font-size:12px">–</span>
+            <input type="date" value="${esc(o.tarihSon||'')}" onchange="editPre.tarihSon=this.value;renderPreModal()" style="flex:1" title="Aralık için bitiş tarihi">
+          </div>
+          <div class="fld-hint">${preAralikMi(o)?('<b>'+esc(preTarihMetin(o))+'</b> arası'):(o.tarih?'Tek gün — aralık için sağdaki kutuyu doldurun':'Boş bırakılabilir — panelde "tarih belirsiz" şeridinde görünür')}</div></div>
       </div>
       <div class="sub-hd">Ürünler <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— belirsizse boş bırakın</span></div>
       ${o.lines.map(satir).join('')}
@@ -1408,6 +1432,11 @@ function savePreOrder(){
   const o=editPre;
   if(!o.customerId){toast('Müşteri seçiniz');return}
   o.lines=(o.lines||[]).filter(l=>l&&(l.code||(+l.qty>0)));
+  // Aralık normalizasyonu: bitiş başlangıçtan küçükse TERS girilmiştir → yer değiştirir.
+  // Başlangıç boşken yalnız bitiş girilmişse o tek gün sayılır. Eşitse aralık değil, tek gün.
+  if(o.tarihSon&&!o.tarih){o.tarih=o.tarihSon;o.tarihSon='';}
+  if(o.tarih&&o.tarihSon&&o.tarihSon<o.tarih){const _t=o.tarih;o.tarih=o.tarihSon;o.tarihSon=_t;}
+  if(o.tarihSon&&o.tarihSon===o.tarih)o.tarihSon='';
   if(o.id){const i=preOrders().findIndex(p=>p.id===o.id);
     if(i<0){preOrders().push(o);toast('Kayıt bulunamadı — yeniden eklendi');}else preOrders()[i]=o;
     logAct('Ön sipariş güncellendi: '+o.customer);}
@@ -1455,7 +1484,7 @@ function renderPreOrders(c,tb){
     return `<tr${kapali?' style="opacity:.55"':''}>
       <td><b>#${esc(p.no||'?')}</b></td>
       <td><b>${esc(p.customer||'—')}</b></td>
-      <td>${p.tarih?fmtDate(p.tarih):'<span style="color:var(--amber-700)">belirsiz</span>'}</td>
+      <td style="white-space:nowrap">${p.tarih?esc(preTarihMetin(p))+(preAralikMi(p)?' <span class="pre-ar">aralık</span>':''):'<span style="color:var(--amber-700)">belirsiz</span>'}</td>
       <td>${preOrderUrunOzet(p)}</td>
       <td class="num">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'<span style="color:var(--slate-300)">—</span>'}</td>
       <td style="max-width:260px;font-size:11.5px;color:var(--slate-600)">${esc(p.not||'')}</td>

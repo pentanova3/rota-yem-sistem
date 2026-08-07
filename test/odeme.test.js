@@ -2291,7 +2291,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
 
     // Panel: çizginin altı + tarihsizler
     dogru('panelde ön siparişler AYRI şeritte (çizgi altı)', /class="pre-sep"><span>ön sipariş<\/span>/.test(H3));
-    dogru('panelde yalnız AÇIK ve o güne ait olanlar', /p\.durum==='acik'&&p\.tarih===ds/.test(H3));
+    dogru('panelde yalnız AÇIK olanlar, demir attıkları günde',
+      /p\.durum==='acik'&&preDemirGun\(p,_hb\)===ds/.test(H3));
     dogru('tarihi belirsizler ayrı kartta (gözden kaçmasın)', /p\.durum==='acik'&&!p\.tarih/.test(H3));
     dogru('gün kutusundaki sipariş SAYACI ön siparişi saymıyor',
       /const dayO=weekOrders\.filter\(o=>kanbanDate\(o\)===ds\)/.test(H3));
@@ -2302,6 +2303,49 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       /function preOrdersVisible\(\)\{return isPlasiyer\(\)\?/.test(H3));
     dogru('SUNUCU: eşzamanlı ön sipariş kaybolmuyor',
       /\["preOrders", curDB\.preOrders, "ön sipariş"\]/.test(FN3));
+
+    // TARİH ARALIĞI: müşteri "12-15 Ağustos arası" diyebilir
+    {
+      const gov = (nm) => {
+        const i = H3.indexOf('function ' + nm + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H3.length; k++) { const c = H3[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H3.slice(i, k + 1); } }
+        return '';
+      };
+      const R = new Function('fmtDate', [gov('preBas'), gov('preSon'), gov('preAralikMi'),
+        gov('preTarihMetin'), gov('preDemirGun'),
+        'return {preBas, preSon, preAralikMi, preTarihMetin, preDemirGun};'].join('\n'))((d) => String(d));
+
+      dogru('tek gün aralık SAYILMAZ', !R.preAralikMi({tarih: '2026-08-12'}));
+      dogru('bitiş = başlangıç aralık SAYILMAZ', !R.preAralikMi({tarih: '2026-08-12', tarihSon: '2026-08-12'}));
+      dogru('gerçek aralık tanınır', R.preAralikMi({tarih: '2026-08-12', tarihSon: '2026-08-15'}));
+      dogru('tarihsizde aralık yok', !R.preAralikMi({}) && R.preBas({}) === '');
+      esit('aralık metni iki tarihi de gösterir',
+        R.preTarihMetin({tarih: '2026-08-12', tarihSon: '2026-08-15'}), '2026-08-12 – 2026-08-15');
+
+      // DEMİR ATMA: aynı talep haftada BİR kez görünmeli, ama aralık haftayla kesişiyorsa MUTLAKA görünmeli
+      const HB = '2026-08-17';   // görüntülenen hafta 17–23
+      esit('tek gün kendi gününe düşer', R.preDemirGun({tarih: '2026-08-19'}, HB), '2026-08-19');
+      esit('hafta İÇİNDE başlayan aralık başlangıcına düşer',
+        R.preDemirGun({tarih: '2026-08-19', tarihSon: '2026-08-21'}, HB), '2026-08-19');
+      // EN KRİTİK: aralık haftadan ÖNCE başlayıp içine sarkıyorsa haftanın İLK gününe demirler
+      esit('haftadan ÖNCE başlayan aralık haftanın ilk gününde görünür',
+        R.preDemirGun({tarih: '2026-08-15', tarihSon: '2026-08-19'}, HB), HB);
+      // Hafta başlamadan BİTEN aralık bu haftaya sarkmaz → kendi gününde kalır (o hafta görünmez)
+      esit('hafta başlamadan biten aralık haftaya SARKMAZ',
+        R.preDemirGun({tarih: '2026-08-10', tarihSon: '2026-08-14'}, HB), '2026-08-10');
+      dogru('tarihsiz ön sipariş hiçbir güne demirlemez', R.preDemirGun({}, HB) === '');
+      // Aralık haftanın SONUNDAN sonra başlıyorsa kendi gününde kalır (gelecek haftada görünür)
+      esit('gelecek haftaya taşan aralık kendi gününde',
+        R.preDemirGun({tarih: '2026-08-25', tarihSon: '2026-08-28'}, HB), '2026-08-25');
+    }
+    // Aralık normalizasyonu kaydetmede yapılır (ters/eksik girişi düzeltir)
+    dogru('ters aralık kaydetmede düzeltiliyor',
+      /if\(o\.tarih&&o\.tarihSon&&o\.tarihSon<o\.tarih\)\{const _t=o\.tarih;o\.tarih=o\.tarihSon;o\.tarihSon=_t;\}/.test(H3));
+    dogru('yalnız bitiş girilirse tek gün sayılıyor', /if\(o\.tarihSon&&!o\.tarih\)\{o\.tarih=o\.tarihSon;o\.tarihSon='';\}/.test(H3));
+    dogru('eşit tarihler aralık olarak saklanmıyor', /if\(o\.tarihSon&&o\.tarihSon===o\.tarih\)o\.tarihSon='';/.test(H3));
+    dogru('panelde demir atma kuralı kullanılıyor', /preDemirGun\(p,_hb\)===ds/.test(H3));
 
     // Motor gerçekten koşturulur
     {
