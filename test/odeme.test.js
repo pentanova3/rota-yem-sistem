@@ -1939,6 +1939,52 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     dogru('İMECE vade farkı yalnız teslim edilenden', /satisMi\(o\)&&!o\.tarihsel&&imeceFark\(o\)>0/.test(H));
     dogru('arşiv sınırı SATIŞ tarihine göre (Haziran alınıp Temmuz teslim kaybolmasın)',
       /var t=raporTarihi\(o\);return t&&t\.slice\(0,7\)>YON_TARIHSEL_SON/.test(H));
+    // ── DAMGASIZ SİPARİŞTE KOMİSYON (saha bulgusu 07.08) ─────────────────────────────────
+    // Excel'den aktarılan siparişte danismanId/komisyoncuId BOŞ kaldı, atama sonradan yapıldı.
+    // Liste satırı ordDanisman ile danışmanı gösteriyordu ama orderKomisyon ham komisyoncuId'yi
+    // okuduğu için PRİM 0 çıkıyordu — "gözüküyor ama komisyon atamıyor".
+    {
+      const gov2 = (nm) => {
+        const i = H.indexOf('function ' + nm + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) { const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+      const DAN = {id: 'd1', name: 'Kadir Çaylı', type: 'danisman'};
+      const DB = {meta: {tdIskonto: 6}, komisyoncular: [DAN], customers: [{id: 'c1', name: 'Hamdi Karatuğ', danismanId: 'd1'}]};
+      const ort = {
+        DB,
+        komById: (id) => DB.komisyoncular.find((k) => k.id === id) || null,
+        custById: (id) => DB.customers.find((c) => c.id === id) || null,
+        plasById: () => null,
+        prodByCode: (c) => ({code: c, danismanListe: 1000, fabrika: 900}),
+        lineUnit: () => 1100,               // satış birim fiyatı
+        orderPL: () => null, tariffPrice: () => 0,
+        TD_ISKONTO_DEFAULT: 6,
+      };
+      const KOM = new Function(...Object.keys(ort), [gov2('ordBayi'), gov2('ordDanisman'),
+        gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
+        'return {orderKomisyon, ordDanisman, ordDanismanDamgali};'].join('\n'))(...Object.values(ort));
+
+      // alis = 1000 × (1−0,06) = 940 · satis = 1100 → prim = (1100−940) × 100 = 16.000
+      const DAMGASIZ = {id: 'o1', customerId: 'c1', lines: [{code: 'A', qty: 100}], nakliye: 0, status: 'teslim'};
+      const DAMGALI = Object.assign({}, DAMGASIZ, {danismanId: 'd1'});
+
+      dogru('DAMGASIZ siparişte danışman çözülüyor', (KOM.ordDanisman(DAMGASIZ) || {}).id === 'd1');
+      dogru('damga YOK olduğu ekranda söyleniyor', !KOM.ordDanismanDamgali(DAMGASIZ) && KOM.ordDanismanDamgali(DAMGALI));
+      esit('DAMGASIZ siparişte PRİM DOĞUYOR (eskiden 0 idi)', Math.round(KOM.orderKomisyon(DAMGASIZ).tutar), 16000);
+      esit('damgalı sipariş aynı tutarı veriyor', Math.round(KOM.orderKomisyon(DAMGALI).tutar), 16000);
+      dogru('açık override hâlâ önceliyor', KOM.orderKomisyon(DAMGASIZ, DAN).kom === DAN);
+      // Müşterisi olmayan / danışmansız sipariş prim ÜRETMEMELİ (uydurma komisyon olmasın)
+      esit('danışmansız siparişte prim yok', KOM.orderKomisyon({lines: [{code: 'A', qty: 5}]}).tutar, 0);
+      esit('boş girdi güvenli', KOM.orderKomisyon(null).tutar, 0);
+      dogru('çözüm zinciri kodda: override → damga → kart',
+        /komOverride\|\|\(\(o&&o\.komisyoncuId\)\?komById\(o\.komisyoncuId\):null\)\|\|ordDanisman\(o\)\|\|ordBayi\(o\)/.test(H));
+      dogru('sipariş kartı ham alan yerine çözümleyici kullanıyor',
+        /const bayiKom=ordBayi\(o\);\s*\n\s*const danKom=ordDanisman\(o\);/.test(H));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

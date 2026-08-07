@@ -624,7 +624,10 @@ function ordDanismanDamgali(o){return !!(o&&(o.danismanId||(o.komisyoncuId&&(kom
 // Siparişin plasiyeri: sipariş anında kilitlenen plasiyerId, yoksa müşterinin güncel plasiyeri
 function ordPlasiyer(o){var pid=(o&&o.plasiyerId)||((o&&o.customerId)?(custById(o.customerId)||{}).plasiyerId:'')||((o&&o.bayiId)?(komById(o.bayiId)||{}).plasiyerId:'');return pid?plasById(pid):null;}
 function orderKomisyon(o,komOverride){
-  const kom=komOverride||((o&&o.komisyoncuId)?komById(o.komisyoncuId):null);
+  // Komisyoncu çözümü: açık override → sipariş anında damgalanan komisyoncuId → ordDanisman/ordBayi
+  // (bunlar damga yoksa müşteri/bayi kartına düşer). Son iki adım OLMADAN Excel'den aktarılıp ataması
+  // sonradan yapılan siparişte prim 0 çıkıyordu: liste satırında danışman görünüyor ama tutar doğmuyordu.
+  const kom=komOverride||((o&&o.komisyoncuId)?komById(o.komisyoncuId):null)||ordDanisman(o)||ordBayi(o);
   if(!o||!kom)return {kom:null,rate:0,tutar:0,type:''};
   if(kom.type==='danisman'){
     const isk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
@@ -2092,8 +2095,10 @@ function setImeceAy(v){
   renderOrderModal();
 }
 function orderKomisyonRow(o,ro){
-  const bayiKom=o.bayiId?komById(o.bayiId):null;
-  const danKom=o.danismanId?komById(o.danismanId):null;
+  // Liste satırıyla AYNI çözümleyici: damga yoksa müşteri/bayi kartına düşer. Ham alan okunursa
+  // satırda "Dan. KADİR ÇAYLI" görünürken kart "danışman ataması yok" der (saha bulgusu 07.08).
+  const bayiKom=ordBayi(o);
+  const danKom=ordDanisman(o);
   const _mp=isPlasiyer()?myPlasiyer():null;
   const bayiList=komByType('bayi').filter(k=>k.active!==false&&(!isPlasiyer()||(_mp&&k.plasiyerId===_mp.id)));   // plasiyerde yalnız kendi bayileri
   let danBreakdown='';
