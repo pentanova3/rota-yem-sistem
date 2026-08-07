@@ -2347,6 +2347,21 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     dogru('eşit tarihler aralık olarak saklanmıyor', /if\(o\.tarihSon&&o\.tarihSon===o\.tarih\)o\.tarihSon='';/.test(H3));
     dogru('panelde demir atma kuralı kullanılıyor', /preDemirGun\(p,_hb\)===ds/.test(H3));
 
+    // PANEL: haftalık tonaj kartı + üç grafik sekmesi (firma isteği 07.08 — "tonajı her zaman görmek istiyorlar")
+    dogru('panelde "Bu Hafta Tonaj" kartı var', /Bu Hafta Tonaj<\/div><div class="kv"[^>]*>\$\{fmtTon\(haftaTon\)\} t/.test(H3));
+    dogru('tonaj kartı iptalleri saymıyor', /const haftaAktif=weekOrders\.filter\(o=>o\.status!=='iptal'\)/.test(H3));
+    dogru('kartın alt satırı fiilen SEVK EDİLENİ gösteriyor (rapor tabanıyla karışmasın)',
+      /haftaSevkTon=haftaAktif\.filter\(o=>o\.status==='sevk'\|\|o\.status==='teslim'\)/.test(H3));
+    dogru('üç grafik sekmesi tanımlı', /\['onsip','Ön Siparişler'\],\['tonaj','Tonajlar'\]/.test(H3));
+    dogru('Ciro sekmesi YALNIZ fiyat yetkisinde', /\.concat\(canSeePrice\(\)\?\[\['ciro','Ciro'\]\]:\[\]\)/.test(H3));
+    dogru('fiyat yetkisi yoksa varsayılan sekme Tonaj', /panelGrafik=canSeePrice\(\)\?'ciro':'tonaj'/.test(H3));
+    dogru('geçersiz sekme seçimi kendini toparlıyor', /if\(!panelGrafik\|\|!_grSek\.some\(x=>x\[0\]===panelGrafik\)\)/.test(H3));
+    dogru('GRAFİK ARTIK canSeePrice kapısında DEĞİL (tonaj/ön sipariş fiyat bilgisi değil)',
+      /if\(typeof Chart!=='undefined'\)setTimeout/.test(H3) && !/if\(canSeePrice\(\)&&typeof Chart/.test(H3));
+    dogru('ön sipariş grafiği demir atma kuralını kullanıyor',
+      /_gunOn=\(ds\)=>preOrdersVisible\(\)[\s\S]{0,120}?preDemirGun\(p,weekStart\)===ds/.test(H3));
+    dogru('tonaj grafiği iptalleri saymıyor', /_gunTon=\(ds\)=>haftaAktif\.filter/.test(H3));
+
     // Motor gerçekten koşturulur
     {
       const govde2 = (nm) => {
