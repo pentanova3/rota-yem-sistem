@@ -2009,6 +2009,78 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       esit('prim toplamı DEĞİŞMİYOR', gor.reduce((s2, x) => s2 + x.primEff, 0), 16000);
     }
 
+    // ══ 34 · ANTETLİ BELGE (bayiye/danışmana gönderilen raporlar) ═══════════════════════
+    // Firmanın gerçek antetli kağıdı belgeye basılıyor. Kırılgan noktalar: sayfalama
+    // mekaniği, MUTLAK görsel yolu (about:blank penceresinde göreli yol çözülmez) ve
+    // iç tablo tfoot'unun her sayfada "ara toplam" gibi tekrarlaması.
+    {
+      const fsx = require('fs');
+      const KOK = require('path').join(__dirname, '..');
+      const AB = fsx.readFileSync(KOK + '/antet-belge.js', 'utf8');
+      dogru('antet-belge.js siparis-takip sayfasına bağlı', /<script src="\/antet-belge\.js"><\/script>/.test(H));
+      dogru('antet görselleri depoda duruyor',
+        fsx.existsSync(KOK + '/antet-ust.png') && fsx.existsSync(KOK + '/antet-alt.png'));
+      dogru('antet görselleri gerçek (>40 KB, boş yer tutucu değil)',
+        fsx.statSync(KOK + '/antet-ust.png').size > 40000 && fsx.statSync(KOK + '/antet-alt.png').size > 40000);
+      dogru('kaynak antet PDF arşivde (yeniden kırpmak gerekirse)', fsx.existsSync(KOK + '/veri/rota-smi-antet.pdf'));
+      // Dağıtım tuzağı: portal hedefi kökü yayımlıyor; ignore listesine düşerse antet 404 olur
+      // ve belge SESSİZCE antetsiz basılır (hata yok, kimse fark etmez).
+      const FB = JSON.parse(fsx.readFileSync(KOK + '/firebase.json', 'utf8'));
+      const portal = FB.hosting.find((x) => x.target === 'portal');
+      const yasak = (portal.ignore || []).some((p) => /antet/i.test(p));
+      dogru('antet dosyaları hosting ignore listesinde DEĞİL', !yasak);
+
+      dogru('@page A4 + sıfır marj (marj içerik hücresinde)', /@page\{size:A4;margin:0\}/.test(AB));
+      dogru('yan marj içerik hücresinde (bantlar kenardan kenara)', /td\.icerik\{padding:0 \$\{YAN_MM\}mm/.test(AB));
+      dogru('baskıda renk korunuyor (lacivert bantlar solmasın)', /print-color-adjust:exact/.test(AB));
+      dogru('alt bant baskıda fixed (yarım sayfada dibe otursun)', /@media print\{[\s\S]*?\.alt\{position:fixed\}/.test(AB));
+      dogru('İÇ tablo tfoot her sayfada TEKRARLAMIYOR (genel toplam ≠ ara toplam)',
+        /table\.t tfoot\{display:table-row-group\}/.test(AB));
+      dogru('SAYFA iskeletinin tfoot\'u tekrarlıyor (alt bant yer tutucusu)',
+        /table\.sayfa > tfoot\{display:table-footer-group\}/.test(AB));
+      dogru('antet payı thead hücresinde (devam sayfasında da uygulansın)',
+        /table\.sayfa > thead > tr > td\{padding:0 0 \d+mm\}/.test(AB));
+
+      // Modülü GERÇEKTEN çalıştır — üretilen belgenin iskeletini doğrula
+      const win = {location: {origin: 'https://rota-yem.web.app'}};
+      new Function('window', AB)(win);
+      const belge = win.antetBelge({tip: 'Bayi İskonto Raporu', ad: 'Test <b>Bayi</b> A.Ş.',
+        kunye: [{k: 'Yıl', v: '2026'}], ozet: [{k: 'Toplam', v: '₺1'}], govde: '<p>gövde</p>'});
+      dogru('üst bant MUTLAK yolla (about:blank\'te göreli yol çözülmez)',
+        belge.includes('src="https://rota-yem.web.app/antet-ust.png"'));
+      dogru('alt bant MUTLAK yolla', belge.includes('src="https://rota-yem.web.app/antet-alt.png"'));
+      dogru('üst bant <thead> içinde (her sayfada tekrarlar)',
+        /<thead><tr><td><img class="ust"/.test(belge));
+      dogru('<tfoot> yer tutucusu var (içerik antedin altına girmesin)',
+        /<tfoot><tr><td><div class="altyer">/.test(belge));
+      dogru('gerçek alt bant tfoot\'tan SONRA, kağıdın dibinde', belge.indexOf('class="alt"') > belge.indexOf('altyer'));
+      dogru('kullanıcı verisi kaçırılmıyor (XSS)',
+        belge.includes('Test &lt;b&gt;Bayi&lt;/b&gt; A.Ş.') && !belge.includes('Test <b>Bayi</b>'));
+      const otoSuz = win.antetBelge({ad: 'x', govde: ''});
+      dogru('otoYazdır verilmezse script basılmıyor', !/window\.print/.test(otoSuz));
+      const oto = win.antetBelge({ad: 'x', govde: '', otoYazdir: 400});
+      dogru('otoYazdır window.onload\'a bağlı (görseller yüklenmeden basmasın)',
+        /window\.onload=function\(\)\{setTimeout\(function\(\)\{window\.print\(\)\},400\)\}/.test(oto));
+
+      // Raporlar iskeleti gerçekten kullanıyor mu — elle HTML kurup kaçmasın
+      dogru('openKomDetay antetli iskeleti kullanıyor',
+        /function openKomDetay\(komId\)\{[\s\S]{0,14000}?antetBelgeAc\(antetBelge\(o\)\)/.test(H));
+      dogru('tariffPDF antetli iskeleti kullanıyor',
+        /function tariffPDF\(id,bayiNusha\)\{[\s\S]{0,3000}?antetBelge\(\{/.test(H));
+      dogru('antet modülü yoksa belge üretilmiyor (sessiz bozuk çıktı yerine uyarı)',
+        (H.match(/if\(!window\.antetBelge\)\{toast\(/g) || []).length >= 2);
+      dogru('bayi nüshasında danışman liste fiyatı ÜRETİLMİYOR',
+        /const td=canSeeKomisyon\(\)&&!bayiNusha;/.test(H));
+      dogru('iç nüsha kendini "iç kullanım" diye işaretliyor',
+        /İç kullanım nüshası/.test(H) && /k:'Kapsam',v:'İç kullanım'/.test(H));
+      dogru('tarife penceresinde Bayi Nüshası düğmesi var',
+        /onclick="tariffPDF\('\$\{pl\.id\}',1\)"/.test(H));
+      dogru('bayi dökümünde ilave iskontonun İÇERİDE olduğu yazıyor',
+        /İlave iskonto ayrıca eklenmez/.test(H));
+      dogru('bayi üzerinden satış hançerle işaretli (satırı ikiye katlayan etiket değil)',
+        /r\.viaBayi\?'<span class="kk">&dagger;<\/span>':''/.test(H));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

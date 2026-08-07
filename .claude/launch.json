@@ -34,6 +34,18 @@
         "/Users/ismailizbudak/Pentanova/pentanova-ik/public"
       ],
       "port": 8791
+    },
+    {
+      "name": "antet-onizleme",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8795",
+        "--directory",
+        "/private/tmp/claude-501/-Users-ismailizbudak-Pentanova-rota-yem-sistem/7bf2b3e5-c104-4dbb-8417-cb5a912833ad/scratchpad/onizleme"
+      ],
+      "port": 8795
     }
   ]
 }
