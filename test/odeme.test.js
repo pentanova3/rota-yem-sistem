@@ -2255,5 +2255,78 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       !/if\(DB\.meta\.priceVersion!==PRICE_VERSION\)\{applyPriceList\(\)/.test(H2));
   }
 
+  // ==========================================================================
+  baslik('32) ÖN SİPARİŞ — ayrı dizide yaşar, hiçbir rapora SIZMAZ');
+  // ==========================================================================
+  // Müşteri talebi netleşmeden not alınır. DB.orders'a bayrakla konsaydı tonaj/ciro/komisyon/
+  // Telegram/onay zincirinin HEPSİNİ tek tek süzmek gerekirdi; biri atlanınca ön sipariş
+  // gerçek satış gibi görünürdü. Bu yüzden AYRI dizi: DB.preOrders.
+  {
+    const H3 = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    const FN3 = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+
+    dogru('ayrı dizide tutuluyor (orders’a bayrak DEĞİL)',
+      /DB\.preOrders=DB\.preOrders\|\|\[\]/.test(H3) && !/o\.onSiparis\b/.test(H3));
+    // SIZINTI KAPISI: tonaj/ciro/rapor toplayıcılarının hiçbiri preOrders okumamalı
+    for (const fn of ['tonajData', 'yonVeri', 'raporOrders', 'custRaporHTML', 'tarihselSanalOrders']) {
+      const i = H3.indexOf('function ' + fn + '(');
+      let g = '';
+      if (i >= 0) { let d = 0, b = false; for (let k = i; k < H3.length; k++) { const c = H3[k];
+        if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) { g = H3.slice(i, k + 1); break; } } } }
+      dogru(fn + ' ön siparişe DOKUNMUYOR', !!g && g.indexOf('preOrder') < 0);
+    }
+    dogru('sunucu tonaj toplayıcıları ön siparişi bilmiyor', FN3.indexOf('preOrder') < 0 || !/cikanSiparisFN[\s\S]{0,400}preOrder/.test(FN3));
+    dogru('ön siparişte onay/Telegram akışı YOK',
+      !/preOrder[\s\S]{0,3000}?sendTelegram/.test(H3) && !/savePreOrder\(\)\{[\s\S]{0,900}?muhasebeOnayGerek/.test(H3));
+
+    // DÖNÜŞTÜRME: ön sipariş ancak sipariş GERÇEKTEN kaydedilince kapanır
+    dogru('dönüştürme bayrağı bloba yazılmıyor', /const _onSip=o\._onSipId;delete o\._onSipId;/.test(H3));
+    dogru('ön sipariş kapanışı saveDB’den ÖNCE ve yalnız _onSip varsa',
+      /if\(_onSip\)\{[\s\S]{0,400}?durum='donusturuldu'[\s\S]{0,300}?\}\s*saveDB\(\);/.test(H3));
+    dogru('dönüştürülen ön sipariş sipariş numarasını saklıyor (iz)',
+      /_p\.donusenSiparisId=o\.id;_p\.donusenNo=o\.no;/.test(H3));
+    dogru('yalnız AÇIK ön sipariş dönüştürülür (iki kez kapanmaz)', /if\(_p&&_p\.durum==='acik'\)/.test(H3));
+
+    // Panel: çizginin altı + tarihsizler
+    dogru('panelde ön siparişler AYRI şeritte (çizgi altı)', /class="pre-sep"><span>ön sipariş<\/span>/.test(H3));
+    dogru('panelde yalnız AÇIK ve o güne ait olanlar', /p\.durum==='acik'&&p\.tarih===ds/.test(H3));
+    dogru('tarihi belirsizler ayrı kartta (gözden kaçmasın)', /p\.durum==='acik'&&!p\.tarih/.test(H3));
+    dogru('gün kutusundaki sipariş SAYACI ön siparişi saymıyor',
+      /const dayO=weekOrders\.filter\(o=>kanbanDate\(o\)===ds\)/.test(H3));
+
+    // Yetki + eşzamanlılık
+    dogru('ön sipariş yazımı canEdit kapısında', /function openPreOrder\(id\)\{\s*if\(!canEdit\(\)\)/.test(H3));
+    dogru('plasiyer yalnız kendi müşterisinin ön siparişini görür',
+      /function preOrdersVisible\(\)\{return isPlasiyer\(\)\?/.test(H3));
+    dogru('SUNUCU: eşzamanlı ön sipariş kaybolmuyor',
+      /\["preOrders", curDB\.preOrders, "ön sipariş"\]/.test(FN3));
+
+    // Motor gerçekten koşturulur
+    {
+      const govde2 = (nm) => {
+        const i = H3.indexOf('function ' + nm + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H3.length; k++) { const c = H3[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H3.slice(i, k + 1); } }
+        return '';
+      };
+      const DB = {products: [{code: 'A', pkg: '25 kg'}, {code: 'B', pkg: '50 kg'}], preOrders: []};
+      const M = new Function('DB', 'prodByCode', 'isPlasiyer', [
+        govde2('preOrders'), govde2('preOrderTon'), govde2('preNextNo'),
+        'return {preOrders, preOrderTon, preNextNo};',
+      ].join('\n'))(DB, (c) => DB.products.find((p) => p.code === c), () => false);
+      // tonOf/prodKg zincirini taklit etmeden doğrudan ölçelim: 25 kg × 400 = 10 t
+      dogru('preOrderTon: ürünsüz ön sipariş 0 t', M.preOrderTon({lines: []}) === 0);
+      dogru('preOrderTon: bozuk satır çökertmiyor', M.preOrderTon({lines: [null, {}, {code: ''}]}) === 0);
+      dogru('preOrderTon: girdisiz çağrı güvenli', M.preOrderTon(null) === 0 && M.preOrderTon({}) === 0);
+      DB.preOrders = [{no: 3}, {no: 7}, {no: 1}];
+      esit('preNextNo en büyükten devam eder', M.preNextNo(), 8);
+      DB.preOrders = [];
+      esit('ilk ön sipariş no 1', M.preNextNo(), 1);
+    }
+  }
+
   sonuc();
 })();

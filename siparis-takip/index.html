@@ -263,6 +263,14 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .day-cnt-lbl{font-size:10px;color:var(--slate-400);margin-left:3px}
 .day-tot{font-size:11px;color:var(--green-700);font-weight:700;margin-top:3px}
 .day-list{flex:1;overflow-y:auto;max-height:240px;padding:5px}
+.pre-sep{display:flex;align-items:center;gap:6px;margin:2px 7px 4px;font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--amber-700)}
+.pre-sep::before,.pre-sep::after{content:'';flex:1;height:1px;background:var(--amber-200)}
+.pre-list{padding:0 5px 5px;display:flex;flex-direction:column;gap:3px}
+.pre-ord{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#FFFBEB;border:1px dashed var(--amber-200);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;color:#92400E}
+.pre-ord:hover{background:#FEF3C7}
+.pre-t{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pre-tot{padding:0 9px 7px;font-size:10px;font-weight:700;color:var(--amber-700);text-align:right;font-variant-numeric:tabular-nums}
+.pre-chip{flex:0 0 auto;min-width:150px}
 .day-list::-webkit-scrollbar{width:4px}.day-list::-webkit-scrollbar-thumb{background:var(--slate-200);border-radius:2px}
 .day-ord{position:relative;padding:5px 7px 5px 18px;border-radius:5px;cursor:pointer;margin-bottom:3px;background:var(--slate-50);transition:filter var(--dur-1) var(--ease)}
 .day-ord::before{content:'';position:absolute;left:7px;top:10px;width:6px;height:6px;border-radius:50%;background:var(--slate-400)}
@@ -684,7 +692,7 @@ function loadDB(){
   }
   DB.users=DB.users||[{username:'admin',role:'admin',name:'Yönetici'}];
   DB.log=DB.log||[];DB.products=DB.products||[];DB.customers=DB.customers||[];DB.orders=DB.orders||[];DB.stock=DB.stock||{};DB.meta=DB.meta||{};DB.drivers=DB.drivers||[];DB.plasiyerler=DB.plasiyerler||[];
-  DB.hammaddeler=DB.hammaddeler||[];DB.receteler=DB.receteler||{};DB.uretimler=DB.uretimler||[];
+  DB.hammaddeler=DB.hammaddeler||[];DB.receteler=DB.receteler||{};DB.uretimler=DB.uretimler||[];DB.preOrders=DB.preOrders||[];
   if(!DB.uzakCities)DB.uzakCities=UZAK_CITIES.filter(c=>c!=='URFA'&&c!=='ANTEP');
   // Fiyat listesi güncellemesi initApp'e taşındı (bkz. fiyatGocuCalistir).
   // NOT: bir kerelik fiyat göçü buradan ÇIKARILDI — loadDB, USER kurulmadan ÖNCE koşar (isAdmin daima false).
@@ -1176,6 +1184,7 @@ function svgIcon(name,cls){return `<svg class="${cls||''}" viewBox="0 0 24 24" f
 const NAV=[
   {v:'panel',ic:'panel',l:'Panel'},
   {v:'siparisler',ic:'siparisler',l:'Siparişler'},
+  {v:'onsiparis',ic:'siparisler',l:'Ön Siparişler'},
   {v:'musteriler',ic:'musteriler',l:'Müşteriler'},
   {v:'bayimusteri',ic:'musteriler',l:'Bayi Müşterileri'},
   {v:'komisyoncular',ic:'komisyoncular',l:'Bayi & Danışman'},   // plasiyerde etiketi 'Bayilerim' olur (renderNav)
@@ -1189,7 +1198,8 @@ const NAV=[
 function renderNav(){
   const pending=visibleOrders().filter(o=>o.status==='beklemede').length;
   document.getElementById('sbNav').innerHTML=NAV.filter(n=>((n.v!=='ayarlar'&&n.v!=='hammadde'&&n.v!=='plasiyerler')||isAdmin())&&!bolumKapaliSip(n.v)).map(n=>{
-    const badge=(n.v==='siparisler'&&pending)?`<span class="nav-badge">${pending}</span>`:'';
+    const _onAcik=(n.v==='onsiparis')?preOrdersVisible().filter(p=>p.durum==='acik').length:0;
+    const badge=(n.v==='siparisler'&&pending)?`<span class="nav-badge">${pending}</span>`:((n.v==='onsiparis'&&_onAcik)?`<span class="nav-badge">${_onAcik}</span>`:'');
     const _l=(isPlasiyer()&&n.v==='komisyoncular')?'Bayilerim':n.l;   // plasiyer yalnız kendi bayilerini görür
     return `<div class="nav-item ${n.v===VIEW?'active':''}" onclick="go('${n.v}')"><span class="nav-ic">${svgIcon(n.ic)}</span><span>${_l}</span>${badge}</div>`;
   }).join('');
@@ -1213,7 +1223,7 @@ function applyDeepLink(){
   const h=decodeURIComponent((location.hash||'').replace('#',''));if(!h)return;
   const m=/^siparis=(\d+)$/.exec(h);
   if(m){VIEW='siparisler';const o=DB.orders.find(x=>String(x.no)===m[1]);if(o)setTimeout(()=>openOrder(o.id),200);}
-  else if(['panel','siparisler','musteriler','komisyoncular','plasiyerler','komisyon','urunler','stok','hammadde','raporlar','ayarlar'].indexOf(h)>=0)VIEW=h;
+  else if(['panel','siparisler','onsiparis','musteriler','komisyoncular','plasiyerler','komisyon','urunler','stok','hammadde','raporlar','ayarlar'].indexOf(h)>=0)VIEW=h;
   history.replaceState(null,'',location.pathname+location.search);
 }
 function initApp(){
@@ -1232,6 +1242,7 @@ function render(){
   const _fa=document.activeElement,_fid=_fa&&_fa.id;let _fs=null,_fe=null;try{_fs=_fa&&_fa.selectionStart;_fe=_fa&&_fa.selectionEnd;}catch(e){}   // arama inputunda odak/imleç render sonrası korunsun
   if(VIEW==='panel')renderPanel(c,tb);
   else if(VIEW==='siparisler')renderOrders(c,tb);
+  else if(VIEW==='onsiparis')renderPreOrders(c,tb);
   else if(VIEW==='musteriler')renderCustomers(c,tb);
   else if(VIEW==='bayimusteri')renderBayiMusteri(c,tb);
   else if(VIEW==='komisyoncular')renderKomisyoncular(c,tb);
@@ -1298,9 +1309,31 @@ function renderPanel(c,tb){
       <div class="day-hd"><span class="day-name">${GUN_TR[i]}</span><span class="day-date">${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}</span></div>
       <div class="day-stat"><span class="day-cnt">${dayO.length}</span><span class="day-cnt-lbl">sipariş</span>${canSeePrice()&&dayTotal?`<div class="day-tot">${fmtTL(dayTotal)}</div>`:''}</div>
       <div class="day-list">${ordList}</div>
+      ${(function(){
+        // ÇİZGİNİN ALTI: o güne tahmini tarihi düşen AÇIK ön siparişler (üretim planlaması için).
+        // Üstteki kesin siparişlerden ayrı tutulur; tonaj/ciro sayaçlarına GİRMEZ.
+        const pl=preOrdersVisible().filter(p=>p.durum==='acik'&&p.tarih===ds);
+        if(!pl.length)return '';
+        const pt=pl.reduce((s2,p)=>s2+preOrderTon(p),0);
+        return `<div class="pre-sep"><span>ön sipariş</span></div><div class="pre-list">`+
+          pl.map(p=>`<div class="pre-ord" onclick="openPreOrder('${esc(p.id)}')" title="${esc(p.customer)}${p.not?' · '+esc(p.not):''}"><span class="do-name">${esc(p.customer)}</span><span class="pre-t">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'?'}</span></div>`).join('')+
+          `</div>${pt>0?`<div class="pre-tot">${fmtTon(pt)} t tahmini</div>`:''}`;
+      })()}
     </div>`;
   });
   h+=`</div>`;
+  // TARİHİ BELİRSİZ ÖN SİPARİŞLER: hiçbir güne düşmedikleri için gün kutularında görünmezler.
+  // Ayrı şeritte gösterilmezse üretim planlamasında tamamen gözden kaçarlar.
+  (function(){
+    const ts=preOrdersVisible().filter(p=>p.durum==='acik'&&!p.tarih);
+    if(!ts.length)return;
+    const tt=ts.reduce((s2,p)=>s2+preOrderTon(p),0);
+    h+=`<div class="card" style="margin-top:12px"><div class="card-hd"><h3>Ön Sipariş — Tarih Belirsiz (${ts.length})</h3>
+      <span style="font-size:11px;color:var(--slate-400)">${tt>0?fmtTon(tt)+' t tahmini · ':''}müşteri tarih vermedi</span></div>
+      <div class="card-bd" style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px">`+
+      ts.map(p=>`<div class="pre-ord pre-chip" onclick="openPreOrder('${esc(p.id)}')" title="${esc(p.not||'')}"><span class="do-name">${esc(p.customer)}</span><span class="pre-t">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'?'}</span></div>`).join('')+
+      `</div></div>`;
+  })();
   c.innerHTML=h;
   // grafik çiz
   if(canSeePrice()&&typeof Chart!=='undefined')setTimeout(()=>{
@@ -1308,6 +1341,137 @@ function renderPanel(c,tb){
     const el=document.getElementById('panelDayChart');if(!el)return;
     panelChart=new Chart(el,{type:'bar',data:{labels:days.map((d,i)=>GUN_TR[i].slice(0,3)+' '+d.getDate()),datasets:[{label:'Ciro ₺',data:days.map(d=>{const ds=isoOf(d);return weekOrders.filter(o=>kanbanDate(o)===ds).reduce((s,o)=>s+orderTotal(o),0)}),backgroundColor:days.map(d=>isoOf(d)===todayISO()?'#1D62A8':'#8DC2F2'),borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v>=1000?(v/1000)+'B':v}}}}});
   },40);
+}
+/* ============ ÖN SİPARİŞLER ============
+   Müşteri sipariş vermek istiyor ama ürünü/miktarı/tarihi netleşmemiş → burada not tutulur.
+   AYRI DİZİDE (DB.preOrders) yaşar, DB.orders'a bayrakla KARIŞTIRILMAZ: bayrak olsaydı tonaj,
+   ciro, komisyon, Telegram, onay zinciri ve tüm raporları tek tek süzmek gerekirdi ve biri
+   atlandığında ön sipariş gerçek satış gibi görünürdü. Onay akışı YOK, bildirim YOK.
+   Netleşince "Siparişe Dönüştür" ile normal sipariş modalı ön-doldurularak açılır. */
+function preOrders(){return (DB.preOrders=DB.preOrders||[]);}
+function preOrdersVisible(){return isPlasiyer()?preOrders().filter(p=>{const c=custById(p.customerId);return c&&orderMine({customerId:p.customerId});}):preOrders();}
+function preOrderTon(p){return (p&&Array.isArray(p.lines)?p.lines:[]).reduce((s,l)=>s+(l&&l.code?tonOf(l.code,l.qty):0),0);}
+function preOrderUrunOzet(p){
+  const l=(p&&Array.isArray(p.lines)?p.lines:[]).filter(x=>x&&x.code);
+  if(!l.length)return '<span style="color:var(--slate-400)">ürün belirsiz</span>';
+  return esc(l.map(x=>x.code+(+x.qty>0?' × '+fmtN(x.qty):'')).join(' · '));
+}
+let editPre=null;
+function openPreOrder(id){
+  if(!canEdit()){toast('Yetkiniz yok');return}
+  const o=id?preOrders().find(p=>p.id===id):null;
+  editPre=o?JSON.parse(JSON.stringify(o)):{id:null,customerId:'',customer:'',tarih:'',lines:[{code:'',qty:''}],not:'',durum:'acik'};
+  if(!editPre.lines||!editPre.lines.length)editPre.lines=[{code:'',qty:''}];
+  renderPreModal();
+}
+function preAddLine(){editPre.lines.push({code:'',qty:''});renderPreModal();}
+function preDelLine(i){editPre.lines.splice(i,1);if(!editPre.lines.length)editPre.lines.push({code:'',qty:''});renderPreModal();}
+function preSetCust(id){const c=custById(id);editPre.customerId=id||'';editPre.customer=c?c.name:'';renderPreModal();}
+function renderPreModal(){
+  const o=editPre;
+  const musteriler=(DB.customers||[]).filter(c=>c&&c.active!==false&&!c.arsiv).sort((a,b)=>String(a.name).localeCompare(String(b.name),'tr'));
+  const urunler=(DB.products||[]).filter(p=>p&&p.active!==false);
+  const satir=(l,i)=>`<div class="fgrid" style="grid-template-columns:1fr 120px 40px;gap:8px;margin-bottom:6px">
+    <select onchange="editPre.lines[${i}].code=this.value"><option value="">— ürün belirsiz —</option>${urunler.map(p=>`<option value="${esc(p.code)}" ${l.code===p.code?'selected':''}>${esc(p.code)}</option>`).join('')}</select>
+    <input type="number" min="0" step="1" placeholder="çuval" value="${l.qty===''||l.qty==null?'':esc(l.qty)}" onchange="editPre.lines[${i}].qty=this.value">
+    <button class="btn btn-gray btn-sm" onclick="preDelLine(${i})" title="Satırı sil">✕</button></div>`;
+  const ton=preOrderTon(o);
+  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hd"><h2>${o.id?'Ön Sipariş':'Yeni Ön Sipariş'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
+    <div class="modal-bd">
+      <p style="font-size:12.5px;color:var(--slate-600);margin-top:0;line-height:1.5">Netleşmemiş talep. <b>Yalnız müşteri zorunlu</b> — ürün, miktar ve tarih sonradan doldurulabilir.
+      Ön siparişler onaya sunulmaz, Telegram'a düşmez ve <b>tonaj/ciro raporlarına girmez</b>.</p>
+      <div class="fgrid c2">
+        <div class="fld"><label>Müşteri *</label><select onchange="preSetCust(this.value)"><option value="">— seçiniz —</option>${musteriler.map(c=>`<option value="${esc(c.id)}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Tahmini Tarih</label><input type="date" value="${esc(o.tarih||'')}" onchange="editPre.tarih=this.value">
+          <div class="fld-hint">Boş bırakılabilir — panelde "tarih belirsiz" şeridinde görünür</div></div>
+      </div>
+      <div class="sub-hd">Ürünler <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-500);font-size:10.5px">— belirsizse boş bırakın</span></div>
+      ${o.lines.map(satir).join('')}
+      <button class="btn btn-gray btn-sm" onclick="preAddLine()">+ Satır Ekle</button>
+      ${ton>0?`<div class="fld-hint" style="margin-top:8px">Tahmini tonaj: <b>${fmtTon(ton)} t</b></div>`:''}
+      <div class="fld" style="margin-top:12px"><label>Not</label><textarea rows="3" placeholder="örn. 3 hafta içinde, miktar netleşince arayacak" onchange="editPre.not=this.value">${esc(o.not||'')}</textarea></div>
+      ${o.durum==='donusturuldu'?`<div style="background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;border-radius:8px;padding:9px 13px;margin-top:10px;font-size:12.5px">Bu ön sipariş <b>#${esc(o.donusenNo||'?')}</b> numaralı siparişe dönüştürüldü${o.donusTs?' · '+fmtDate(String(o.donusTs).slice(0,10)):''}.</div>`:''}
+    </div>
+    <div class="modal-ft">
+      <div>${o.id&&canEdit()?`<button class="btn btn-gray btn-sm" onclick="delPreOrder('${o.id}')" style="color:var(--red-700)">Sil</button>`:''}</div>
+      <div style="display:flex;gap:8px">
+        ${(o.id&&o.durum==='acik')?`<button class="btn" style="background:#0E7490;color:#fff" onclick="preDonustur('${o.id}')">Siparişe Dönüştür</button>`:''}
+        <button class="btn btn-grn" onclick="savePreOrder()">Kaydet</button>
+        <button class="btn btn-gray" onclick="closeModal()">Kapat</button>
+      </div>
+    </div>
+  </div></div>`;
+  document.getElementById('modalRoot').innerHTML=m;
+}
+function savePreOrder(){
+  const o=editPre;
+  if(!o.customerId){toast('Müşteri seçiniz');return}
+  o.lines=(o.lines||[]).filter(l=>l&&(l.code||(+l.qty>0)));
+  if(o.id){const i=preOrders().findIndex(p=>p.id===o.id);
+    if(i<0){preOrders().push(o);toast('Kayıt bulunamadı — yeniden eklendi');}else preOrders()[i]=o;
+    logAct('Ön sipariş güncellendi: '+o.customer);}
+  else{o.id=uid('pre');o.no=preNextNo();o.createdAt=new Date().toISOString();o.alan=(USER&&(USER.name||USER.username))||'';
+    preOrders().push(o);logAct('Ön sipariş alındı: '+o.customer);}
+  saveDB();closeModal();toast('Ön sipariş kaydedildi');render();
+}
+function preNextNo(){return preOrders().reduce((m,p)=>Math.max(m,+p.no||0),0)+1;}
+function delPreOrder(id){
+  if(!canEdit())return;
+  if(!confirm('Ön sipariş silinsin mi?'))return;
+  const p=preOrders().find(x=>x.id===id);
+  DB.preOrders=preOrders().filter(x=>x.id!==id);
+  logAct('Ön sipariş silindi: '+((p&&p.customer)||'?'));
+  saveDB();closeModal();toast('Silindi');render();
+}
+// Netleşen ön siparişi normal sipariş modalına taşır. Kayıt saveOrder'da olur; ön sipariş
+// ancak sipariş GERÇEKTEN kaydedilince "dönüştürüldü" olur (modal kapatılırsa açık kalır).
+function preDonustur(id){
+  const p=preOrders().find(x=>x.id===id);if(!p)return;
+  if(!canEdit()){toast('Yetkiniz yok');return}
+  closeModal();openOrder();
+  if(!editOrder)return;
+  editOrder.customerId=p.customerId;editOrder.customer=p.customer;
+  const c=custById(p.customerId);if(c&&c.firma)editOrder.firma=c.firma;
+  const ln=(p.lines||[]).filter(l=>l&&l.code).map(l=>({code:l.code,qty:+l.qty||'',price:''}));
+  if(ln.length)editOrder.lines=ln;
+  if(p.tarih)editOrder.teslimTarihi=p.tarih;
+  if(p.not)editOrder.not=p.not;
+  editOrder._onSipId=p.id;                      // saveOrder yeni sipariş yazınca ön siparişi kapatır
+  try{onChangeCustomer&&onChangeCustomer(p.customerId);}catch(e){}
+  applyTariffToLines();renderOrderModal();
+  toast('Ön sipariş taşındı — bilgileri tamamlayıp kaydedin');
+}
+function renderPreOrders(c,tb){
+  if(canEdit())tb.innerHTML=`<button class="btn btn-pri" onclick="openPreOrder()">+ Yeni Ön Sipariş</button>`;
+  const list=preOrdersVisible().slice().sort((a,b)=>{
+    if((a.durum==='acik')!==(b.durum==='acik'))return a.durum==='acik'?-1:1;   // açık olanlar üstte
+    return String(a.tarih||'9999').localeCompare(String(b.tarih||'9999'))||((+b.no||0)-(+a.no||0));
+  });
+  const acik=list.filter(p=>p.durum==='acik');
+  const ton=acik.reduce((s,p)=>s+preOrderTon(p),0);
+  const rows=list.map(p=>{
+    const kapali=p.durum!=='acik';
+    return `<tr${kapali?' style="opacity:.55"':''}>
+      <td><b>#${esc(p.no||'?')}</b></td>
+      <td><b>${esc(p.customer||'—')}</b></td>
+      <td>${p.tarih?fmtDate(p.tarih):'<span style="color:var(--amber-700)">belirsiz</span>'}</td>
+      <td>${preOrderUrunOzet(p)}</td>
+      <td class="num">${preOrderTon(p)>0?fmtTon(preOrderTon(p))+' t':'<span style="color:var(--slate-300)">—</span>'}</td>
+      <td style="max-width:260px;font-size:11.5px;color:var(--slate-600)">${esc(p.not||'')}</td>
+      <td>${kapali?`<span class="badge" style="background:#ECFDF5;color:#065F46">Siparişe dönüştü${p.donusenNo?' · #'+esc(p.donusenNo):''}</span>`:'<span class="badge" style="background:#FFFBEB;color:#92400E">Açık</span>'}</td>
+      <td><button class="btn btn-gray btn-sm" onclick="openPreOrder('${esc(p.id)}')">Aç</button></td></tr>`;
+  }).join('');
+  c.innerHTML=`<div class="kpis">
+      <div class="kpi"><div class="kl">Açık Ön Sipariş</div><div class="kv" style="font-size:18px">${acik.length}</div><div class="ks">netleşmeyi bekliyor</div></div>
+      <div class="kpi"><div class="kl">Tahmini Tonaj</div><div class="kv" style="font-size:18px">${fmtTon(ton)} t</div><div class="ks">yalnız ürünü girilenler</div></div>
+      <div class="kpi"><div class="kl">Tarihi Belirsiz</div><div class="kv" style="font-size:18px">${acik.filter(p=>!p.tarih).length}</div><div class="ks">panelde ayrı şeritte</div></div>
+    </div>
+    <div class="card"><div class="card-hd"><h3>${list.length} Ön Sipariş</h3>
+      <span style="font-size:11px;color:var(--slate-400)">Onaya sunulmaz · Telegram'a düşmez · tonaj/ciro raporlarına girmez</span></div>
+      <div class="card-bd" style="overflow-x:auto">${list.length?`<table class="tbl"><thead><tr>
+        <th>No</th><th>Müşteri</th><th>Tahmini Tarih</th><th>Ürünler</th><th class="num">Tonaj</th><th>Not</th><th>Durum</th><th></th>
+      </tr></thead><tbody>${rows}</tbody></table>`:'<div class="tbl-empty">Henüz ön sipariş yok. Müşteri talebi netleşmediğinde buraya not alın.</div>'}</div></div>`;
 }
 // ============ ORDERS ============
 function filteredOrders(){
@@ -2225,6 +2389,7 @@ function saveOrder(){
   // Damga güvenilir değilse (brüt≤net) HİÇ yazılmaz; sunucu tersine hesaba düşer.
   const _bl=brutListeDamga(o);
   if(_bl>0)o.brutListe=_bl; else delete o.brutListe;
+  const _onSip=o._onSipId;delete o._onSipId;   // ön siparişten geldi mi — bloba YAZILMAZ, kayıt sonrası kullanılır
   delete o._acilis;   // yalnız modal ömrü boyunca yaşayan karşılaştırma tabanı — bloba YAZILMAZ
   delete o._kilitAcik;   // sevk kilidi açması YALNIZ o oturum içindir; bloba yazılsaydı kilit herkes için KALICI açılırdı
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
@@ -2246,6 +2411,15 @@ function saveOrder(){
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim')&&!o.gecmisKayit;   // geçmiş kayıtta müşteriye WA sorulmaz (olmuş bitmiş sipariş)
   if(_yeniSt==='sevk'&&_origSt!=='sevk'){o.sevkTarih=o.sevkTarih||todayISO();if(!o.hareketTarihi)o.hareketTarihi=todayISO();pushHist(o,'sevk','Sipariş sevk edildi'+(o.plaka?' · Plaka: '+o.plaka:''));}
   if(_yeniSt==='teslim'&&_origSt!=='teslim'){o.teslimEdildiTarih=o.teslimEdildiTarih||todayISO();pushHist(o,'teslim','Sipariş teslim edildi');}
+  // ÖN SİPARİŞ KAPANIŞI: yalnız sipariş GERÇEKTEN kaydedildiyse. Modal kapatılıp vazgeçilirse
+  // ön sipariş AÇIK kalır — aksi halde talep hem listeden düşer hem sipariş olmaz, izi kaybolurdu.
+  if(_onSip){
+    const _p=preOrders().find(x=>x.id===_onSip);
+    if(_p&&_p.durum==='acik'){
+      _p.durum='donusturuldu';_p.donusenSiparisId=o.id;_p.donusenNo=o.no;_p.donusTs=new Date().toISOString();
+      logAct('Ön sipariş #'+(_p.no||'?')+' siparişe dönüştürüldü: #'+o.no);
+    }
+  }
   saveDB();
   crossDurumYaz(o);   // Yem'den gelen çapraz siparişse: durumu kaynağa (Yem sayfasına) geri yaz
   if(_bildirim){ensureOnayToken(o);if(confirm('Sipariş durumu "'+statusLabel(_yeniSt)+'" oldu.\n\nMüşteriye WhatsApp bilgilendirme mesajı gönderilsin mi?'))openWa(o);}

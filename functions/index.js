@@ -996,7 +996,8 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
               return new Set(L.slice(0, 5000).map(String));
             };
             if (!_muaf) {
-              [["orders", curDB.orders, "sipariş"], ["customers", curDB.customers, "müşteri"]].forEach(function (t) {
+              [["orders", curDB.orders, "sipariş"], ["customers", curDB.customers, "müşteri"],
+                ["preOrders", curDB.preOrders, "ön sipariş"]].forEach(function (t) {
                 const ad = t[0], curArr = t[1], etiket = t[2];
                 if (!Array.isArray(curArr) || !Array.isArray(inDB[ad])) return;
                 const sil = _silSeti(ad);
