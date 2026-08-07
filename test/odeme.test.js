@@ -2387,5 +2387,34 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     }
   }
 
+  // ==========================================================================
+  baslik('33) DBS GÖRÜNÜRLÜĞÜ — oran ayarı + listede/siparişte rozet');
+  // ==========================================================================
+  {
+    const H4 = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+
+    // Oran ayarı: zaten vardı ama bulunamıyordu → kartlardaki ipucu artık yerini söylüyor/götürüyor
+    dogru('Ayarlar’da DBS oran alanı var', /onchange="dbsOranKaydet\(this\.value\)"/.test(H4));
+    dogru('oran ayarı yalnız yöneticide', /function dbsOranKaydet\(v\)\{\s*if\(!isAdmin\(\)\)\{toast\('Sadece yönetici'\)/.test(H4));
+    dogru('boş oran reddediliyor (sessizce 0 olmuyor)', /DBS oranı boş bırakılamaz/.test(H4));
+    dogru('kartlardan Ayarlar’a kısayol var (yönetici)', (H4.match(/Oranı değiştir →/g) || []).length === 2);
+    dogru('yönetici olmayana yerini TARİF ediyor', /Oranı yönetici <b>Ayarlar → DBS İndirimi<\/b>/.test(H4));
+
+    // Bayi & Danışman listesinde Ödeme sütunu
+    dogru('listede "Ödeme" sütunu başlığı', /<th>Ödeme<\/th>/.test(H4));
+    dogru('listede DBS rozeti, değilse çizgi',
+      /k\.odemeTipi==='dbs'\?`<span class="tip-chip tip-dbs"[^`]*>DBS<\/span>`:'<span style="color:var\(--slate-300\)">—<\/span>'/.test(H4));
+    dogru('rozet güncel oranı ipucunda gösteriyor', /ek indirim, her siparişte otomatik">DBS/.test(H4));
+
+    // Sipariş satırı + modal başlığı
+    dogru('sipariş satırında DBS rozeti', /if\(dbsAliciAktif\(o\)\)\{var _dr=dbsOran\(o\);m\.push\('<span class="m-dbs"/.test(H4));
+    dogru('satır rozeti KAYITTAKİ oranı okuyor (geçmiş kaymaz)', /var _dr=dbsOran\(o\);/.test(H4));
+    dogru('modal başlığında DBS çipi', /\$\{dbsAliciAktif\(o\)\?` <span class="tip-chip tip-dbs"/.test(H4));
+    dogru('İMECE seçiliyken DBS rozeti ÇIKMAZ (dbsAliciAktif zaten dışlar)',
+      /function dbsAliciAktif\(o\)\{return odemeTipiOf\(o\)==='dbs'&&!imeceAliciAktif\(o\);\}/.test(H4));
+    dogru('rozet CSS’leri tanımlı', /\.ot-meta \.m-dbs\{/.test(H4) && /\.tip-chip\.tip-dbs\{/.test(H4));
+  }
+
   sonuc();
 })();
