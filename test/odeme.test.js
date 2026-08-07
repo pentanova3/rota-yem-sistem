@@ -1138,6 +1138,7 @@ baslik('21) AYLIK RAPOR — DANIŞMAN SATIŞLARI (tonaj + toplamdaki pay + önce
   global.prodKgOf = al('prodKgOf');
   // SATIŞ KURALI (07.08): tonaj/pay tabanı yalnız TESLİM edilen; tarih fiilen teslim günü.
   global.satisMiFN = al('satisMiFN'); global.satisTarihiFN = al('satisTarihiFN');
+  global.danismanIdFN = al('danismanIdFN');   // damgasız siparişte müşteri/bayi kartına düşer
   global.cikanSiparisFN = al('cikanSiparisFN');   // eski ad — satış kuralına düşer
   const danismanTonajOf = al('danismanTonajOf'), danismanAdi = al('danismanAdi');
   dogru('danismanTonajOf / danismanAdi tanımlı', !!(danismanTonajOf && danismanAdi));
@@ -1146,6 +1147,7 @@ baslik('21) AYLIK RAPOR — DANIŞMAN SATIŞLARI (tonaj + toplamdaki pay + önce
   const DB = {products: [{code: 'P', pkg: '50 kg'}],
     komisyoncular: [{id: 'd1', name: 'Ahmet Yılmaz', type: 'danisman'}, {id: 'd2', name: 'Mehmet Kaya', type: 'danisman'},
       {id: 'b1', name: 'BAREM', type: 'bayi', danismanId: 'd1'}],
+    customers: [{id: 'c9', name: 'Dursun Yeşil', danismanId: 'd2'}],   // atama SONRADAN yapılmış müşteri
     orders: [
       {date: '2026-08-05', status: 'teslim', danismanId: 'd1', lines: [{code: 'P', qty: 2000}]},                  // 100 t  ÇIKTI
       {date: '2026-08-12', status: 'teslim', aliciBayi: true, bayiId: 'b1', danismanId: 'd1', lines: [{code: 'P', qty: 400}]},  // 20 t TESLİM (BAYİ üzerinden)
@@ -1155,15 +1157,19 @@ baslik('21) AYLIK RAPOR — DANIŞMAN SATIŞLARI (tonaj + toplamdaki pay + önce
       {date: '2026-08-26', status: 'beklemede', danismanId: 'd1', lines: [{code: 'P', qty: 800}]},                // 40 t  BEKLEYEN → sayılmaz
       {date: '2026-08-21', status: 'teslim', lines: [{code: 'P', qty: 200}]},                                     // danışmansız
       {date: '2026-08-22', status: 'iptal', danismanId: 'd1', lines: [{code: 'P', qty: 9999}]},                   // iptal
+      {date: '2026-08-27', status: 'teslim', customerId: 'c9', lines: [{code: 'P', qty: 200}]},                     // 10 t · DAMGASIZ (Excel) → müşteri kartından d2
       {date: '2026-07-10', status: 'teslim', danismanId: 'd1', lines: [{code: 'P', qty: 1960}]},                  // 98 t
     ]};
   const bu = danismanTonajOf(DB, '2026-08');
   esit('d1: doğrudan + BAYİ üzerinden toplanıyor', bu.d1, 120);
-  esit('d2 tonajı', bu.d2, 45);
+  esit('d2 tonajı (45 damgalı + 10 damgasız)', bu.d2, 55);
+  // Excel'den aktarılan sipariş damgasız kaldı, atama sonradan yapıldı → müşteri kartına düşülür,
+  // yoksa o siparişin tonajı/primi danışmana HİÇ yazılmazdı (07.08 saha bulgusu).
+  dogru('DAMGASIZ sipariş müşteri kartındaki danışmana düşüyor', bu.d2 === 55);
   dogru('danışmansız sipariş sayılmıyor', Object.keys(bu).length === 2);
   dogru('iptal sipariş sayılmıyor', bu.d1 === 120);
   // 31.07 kararı: tonaj tabanı = fiilen çıkan mal. Beklemede/onaylandı sipariş danışman payını ŞİŞİRMEZ.
-  dogru('BEKLEYEN sipariş danışman tonajına girmiyor (d1 40 t, d2 30 t hariç)', bu.d1 === 120 && bu.d2 === 45);
+  dogru('BEKLEYEN sipariş danışman tonajına girmiyor (d1 40 t, d2 30 t hariç)', bu.d1 === 120 && bu.d2 === 55);
   // 07.08 kararı: SEVK edilmiş ama teslim edilmemiş mal da danışman payına girmez
   dogru('SEVK edilmiş (yolda) sipariş danışman payına GİRMİYOR — 30 t hariç', bu.d1 === 120);
   esit('önceki ay (canlı) hesaplanıyor', danismanTonajOf(DB, '2026-07').d1, 98);

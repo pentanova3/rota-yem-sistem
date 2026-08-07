@@ -75,7 +75,17 @@ const tonOf=(code,qty)=>(+qty||0)*prodKg(code)/1000;
 function lineUnit(l,kad){if(l.price==='')return 0;if(l.price!=null)return +l.price||0;const p=prodByCode(l.code);return p?(+p[kad||'fabrika']||0):0;}
 function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0;}return o.total||0;}
 function ordBayi(o){let id=o&&o.bayiId;if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='bayi')id=o.komisyoncuId;}return id?komById(id):null;}
-function ordDanisman(o){let id=o&&o.danismanId;if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}return id?komById(id):null;}
+// siparis-takip/index.html ordDanisman ile BİREBİR: damga yoksa müşteri/bayi kartına düşülür
+// (Excel'den aktarılmış + ataması sonradan yapılmış siparişlerde danışman kaybolmasın).
+function ordDanisman(o){
+  let id=o&&o.danismanId;
+  if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}
+  if(!id&&o){
+    if(o.bayiId){const b=komById(o.bayiId);id=(b&&b.danismanId)||'';}
+    else if(o.customerId){const c=custById(o.customerId);id=(c&&c.danismanId)||'';}
+  }
+  return id?komById(id):null;
+}
 const tmrTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=tonOf(l.code,l.qty);});return t;};
 const tmrTotal=o=>(+o.total||0)||orderTotal(o);
 function orderKomisyon(o,kom){

@@ -605,7 +605,22 @@ function seedKomisyon(){
 function komById(id){return (DB.komisyoncular||[]).find(k=>k.id===id)}
 function komByType(t){return (DB.komisyoncular||[]).filter(k=>k.type===t).sort((a,b)=>a.name.localeCompare(b.name,'tr'))}
 function ordBayi(o){var id=o&&o.bayiId;if(!id&&o&&o.komisyoncuId){var k=komById(o.komisyoncuId);if(k&&k.type==='bayi')id=o.komisyoncuId;}return id?komById(id):null;}
-function ordDanisman(o){var id=o&&o.danismanId;if(!id&&o&&o.komisyoncuId){var k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}return id?komById(id):null;}
+// Siparişin danışmanı: sipariş anında kilitlenen danismanId, YOKSA müşteri/bayi kartındaki güncel danışman.
+// DAMGALI siparişe DOKUNULMAZ — müşterinin danışmanı sonradan değişince geçmiş komisyon KAYMAZ.
+// Geri düşüş yalnız damgası HİÇ OLMAYAN siparişte devreye girer: Excel'den aktarılan (aktarım anında
+// müşteri kartı boştu) ve atama sonradan yapılan siparişlerde danışman görünmüyor, dolayısıyla o
+// siparişin primi hiç doğmuyordu. ordPlasiyer aynı deseni zaten kullanıyor.
+function ordDanisman(o){
+  var id=o&&o.danismanId;
+  if(!id&&o&&o.komisyoncuId){var k=komById(o.komisyoncuId);if(k&&k.type==='danisman')id=o.komisyoncuId;}
+  if(!id&&o){
+    if(o.bayiId){var b=komById(o.bayiId);id=(b&&b.danismanId)||'';}
+    else if(o.customerId){var c=custById(o.customerId);id=(c&&c.danismanId)||'';}
+  }
+  return id?komById(id):null;
+}
+// Danışman DAMGALI mı (sipariş anında kilitlenmiş mi) — ekranda kaynağını dürüstçe söylemek için.
+function ordDanismanDamgali(o){return !!(o&&(o.danismanId||(o.komisyoncuId&&(komById(o.komisyoncuId)||{}).type==='danisman')));}
 // Siparişin plasiyeri: sipariş anında kilitlenen plasiyerId, yoksa müşterinin güncel plasiyeri
 function ordPlasiyer(o){var pid=(o&&o.plasiyerId)||((o&&o.customerId)?(custById(o.customerId)||{}).plasiyerId:'')||((o&&o.bayiId)?(komById(o.bayiId)||{}).plasiyerId:'');return pid?plasById(pid):null;}
 function orderKomisyon(o,komOverride){
@@ -2172,7 +2187,7 @@ function orderKomisyonRow(o,ro){
     // MÜŞTERİYE SATIŞ: atama müşteri kartından OTOMATİK — elle seçim yok
     if(!o.customerId)atama=`<div class="atama-box" style="background:var(--slate-50);border:1px dashed var(--slate-300);color:var(--slate-500)">Önce müşteri seçin — müşterinin atanmış bayisi veya teknik danışmanı otomatik uygulanır.</div>`;
     else if(bayiKom)atama=kart('BAYİ','#B45309','#fff',bayiKom.name,canSeeKomisyon()?('%'+fmtN((o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayiKom.rate||0))+' iskonto · müşteri kartından otomatik'):'müşteri kartından otomatik');
-    else if(danKom)atama=kart('DANIŞMAN','#6D28D9','#fff',danKom.name,'komisyon hesaplanır · müşteri kartından otomatik');
+    else if(danKom)atama=kart('DANIŞMAN','#6D28D9','#fff',danKom.name,ordDanismanDamgali(o)?'komisyon hesaplanır · sipariş anında kilitlendi':'komisyon hesaplanır · müşteri kartından okundu (bu siparişte damga yok)');
     else atama=kart('FABRİKA','#64748B','#fff','Fabrika müşterisi (direkt)','bayi / danışman ataması yok');
     if(o.customerId)atama+=`<div style="font-size:10px;color:var(--slate-400);margin-top:5px">Atamayı değiştirmek için Müşteriler sayfasından müşteri kartını düzenleyin; yeni siparişe otomatik yansır.</div>`;
   }

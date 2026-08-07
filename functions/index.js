@@ -1620,12 +1620,33 @@ function ayTonajOf(DB, ym) {
 // siparişinde (müşteri kartındaki danışman) hem de BAYİ siparişinde (bayinin bağlı danışmanı).
 // Tarihsel arşivde danışman bilgisi YOKTUR → yalnız canlı aylar (> YON_TARIHSEL_SON_FN) hesaplanır;
 // arşiv ayı istenirse null döner ve kıyas gösterilmez (Haziran 2026 ve öncesi böyledir).
+// Siparişin danışmanı — istemci ordDanisman ile BİREBİR: damga yoksa müşteri/bayi kartına düşülür.
+// Excel'den aktarılan siparişlerde damga boş kaldı ve atama sonradan yapıldı; geri düşüş olmazsa
+// o siparişlerin tonajı danışman payına HİÇ girmez (ekran ile Telegram ayrışır).
+function danismanIdFN(DB, o) {
+  if (!o) return "";
+  if (o.danismanId) return String(o.danismanId);
+  const kl = DB.komisyoncular || [];
+  if (o.komisyoncuId) {
+    const k = kl.find((x) => x && x.id === o.komisyoncuId);
+    if (k && k.type === "danisman") return String(o.komisyoncuId);
+  }
+  if (o.bayiId) {
+    const b = kl.find((x) => x && x.id === o.bayiId);
+    return String((b && b.danismanId) || "");
+  }
+  if (o.customerId) {
+    const c = (DB.customers || []).find((x) => x && x.id === o.customerId);
+    return String((c && c.danismanId) || "");
+  }
+  return "";
+}
 function danismanTonajOf(DB, ym) {
   if (ym <= YON_TARIHSEL_SON_FN) return null;
   const out = {};
   (DB.orders || []).forEach((o) => {
     if (!satisMiFN(o) || satisTarihiFN(o).slice(0, 7) !== ym) return;   // taban: ayTonajOf ile AYNI — pay yüzdeleri tutarlı kalsın
-    const did = String(o.danismanId || "");
+    const did = danismanIdFN(DB, o);
     if (!did) return;                                     // danışmansız sipariş sayılmaz
     let t = 0;
     (Array.isArray(o.lines) ? o.lines : []).forEach((l) => { if (l && l.code) t += (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000; });
