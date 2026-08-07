@@ -686,9 +686,9 @@ function loadDB(){
   DB.log=DB.log||[];DB.products=DB.products||[];DB.customers=DB.customers||[];DB.orders=DB.orders||[];DB.stock=DB.stock||{};DB.meta=DB.meta||{};DB.drivers=DB.drivers||[];DB.plasiyerler=DB.plasiyerler||[];
   DB.hammaddeler=DB.hammaddeler||[];DB.receteler=DB.receteler||{};DB.uretimler=DB.uretimler||[];
   if(!DB.uzakCities)DB.uzakCities=UZAK_CITIES.filter(c=>c!=='URFA'&&c!=='ANTEP');
-  // Fiyat listesi güncellemesi (versiyon değiştiyse mevcut kurulumu da güncelle)
-  const _hadLists=!!(DB.priceLists&&DB.priceLists.length);
-  if(DB.meta.priceVersion!==PRICE_VERSION){applyPriceList();if(_hadLists){publishSnapshot(isoFromTR(DB.meta.priceDate)||todayISO(),'Sistem fiyat güncellemesi');}saveDB();}
+  // Fiyat listesi güncellemesi initApp'e taşındı (bkz. fiyatGocuCalistir).
+  // NOT: bir kerelik fiyat göçü buradan ÇIKARILDI — loadDB, USER kurulmadan ÖNCE koşar (isAdmin daima false).
+  // Göç artık fiyatGocuCalistir() ile initApp içinde, kullanıcı belli olduktan sonra yürür.
   ensurePriceLists();  // ilk kurulum / eski DB migrasyonu için tarife arşivini garanti et
   migrateIsimTel();    // mevcut isimleri Title Case, geçerli telefonları normalize (bir kez)
   seedKomisyon();seedOpts();saveDB();
@@ -718,6 +718,16 @@ function kanbanDate(o){return (o&&(o.teslimTarihi||o.date))||''}  // kanban tesl
 function canSeePrice(){return USER && (USER.role==='admin'||USER.role==='sevkiyat'||USER.role==='goruntule'||USER.role==='plasiyer'||USER.fiyatGor===true)}
 function canEdit(){return USER && (USER.role==='admin'||USER.role==='siparis'||USER.role==='sevkiyat'||USER.role==='plasiyer')}
 function isAdmin(){return USER&&USER.role==='admin'}
+// Bir kerelik fiyat göçü. loadDB'de DEĞİL burada: sunucuda fiyat/tarife yazımı yönetici kapısına bağlı,
+// göçü yetkisiz kullanıcı tetikleseydi 403 yiyip yerel blobu kirli kalır ve BİR DAHA kaydedemezdi.
+// Yetkisizde sessizce bekler; yönetici girdiğinde göç akar ve senkronla herkese dağılır.
+function fiyatGocuCalistir(){
+  if(!DB||!DB.meta||DB.meta.priceVersion===PRICE_VERSION||!isAdmin())return;
+  const hadLists=!!(DB.priceLists&&DB.priceLists.length);
+  applyPriceList();
+  if(hadLists)publishSnapshot(isoFromTR(DB.meta.priceDate)||todayISO(),'Sistem fiyat güncellemesi');
+  saveDB();
+}
 // Sipariş silme: yönetici VEYA portalda "Sipariş Siler" izni verilmiş kullanıcı.
 // Ayrı izin — yönetici yapmadan yalnız silme hakkı vermek için (fiyat/komisyon yetkisi açılmaz).
 function canDelete(){return !!(USER&&(USER.role==='admin'||USER.siparisSil===true))}
@@ -1207,6 +1217,7 @@ function applyDeepLink(){
   history.replaceState(null,'',location.pathname+location.search);
 }
 function initApp(){
+  fiyatGocuCalistir();   // USER kurulduktan SONRA: fiyat göçü yönetici kapısına bağlı
   applyDeepLink();
   document.getElementById('uName').textContent=USER.name;
   document.getElementById('uRole').textContent=ROLES[USER.role]||USER.role;

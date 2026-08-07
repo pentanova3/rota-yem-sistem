@@ -961,10 +961,10 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
     // yaz'ın okuması ile yazması ARASINDA commit ederse blind set() onu KALICI ezer (optimistic-lock'a katılmaz).
     // Bu yüzden koruma (son 10 dk portal kayıtlarını geri ekle) + toptan-silme guard'ı + nihai yazım TEK transaction'da:
     // portal transaction'ı ile aynı kilit havuzunda yarışır → çakışırsa yaz yeniden dener, kayıp olmaz.
-    let wipe = null, silinen = null, silinenMusteri = null, yetkisizSilme = false, degisen = null, iptalEdilen = null, sevkKilidi = null;
+    let wipe = null, silinen = null, silinenMusteri = null, yetkisizSilme = false, degisen = null, iptalEdilen = null, sevkKilidi = null, fiyatKorundu = null;
     try {
       await db.runTransaction(async (tx) => {
-        wipe = null; silinen = null; silinenMusteri = null; yetkisizSilme = false; degisen = null; iptalEdilen = null; sevkKilidi = null;   // transaction YENİDEN DENENEBİLİR → her denemede sıfırla (yoksa mükerrer bildirim)
+        wipe = null; silinen = null; silinenMusteri = null; yetkisizSilme = false; degisen = null; iptalEdilen = null; sevkKilidi = null; fiyatKorundu = null;   // transaction YENİDEN DENENEBİLİR → her denemede sıfırla (yoksa mükerrer bildirim)
         const cur = await tx.get(db.doc("apps/" + app));
         const curBlob = cur.exists ? (cur.data().data || null) : null;
         // TARİHÇE: "eksikleri geri ekle" ilk denemede TOPLAM sayaçlı guard ile birlikte KRİTİK açık doğurmuştu
@@ -1155,6 +1155,35 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
                 inDB.komisyoncular = curDB.komisyoncular; korundu = true; console.log("yaz: komisyoncular sunucu sürümü korundu (yalnız komisyoncuYonet yazar)");
               }
             }
+            // FİYAT & TARİFE KAPISI: ürün fiyatları ve yayınlanmış tarifeler YALNIZ yöneticiyle değişir.
+            // Arayüz zaten kilitli ama konsoldan atlanabilir; fiyat yayınlanan tarifeye, oradan HER siparişe yansır.
+            // REDDETME DEĞİL SÜZME (komisyoncular deseniyle aynı): 403 dönseydi yetkisiz kullanıcının YEREL blobu
+            // kirli kalır, aynı istek her seferinde reddedilir ve o sekme BİR DAHA hiç kaydedemezdi.
+            // Sunucudaki sürüm korunur; istemci taze 'updated' ile doğrusunu geri alır.
+            if (app === "siparis" || app === "yem") {
+              const fyYonetici = (dec.portalYonetici === true) || (dec[app] === "admin");
+              if (!fyYonetici) {
+                // Ürün imzası SIRADAN BAĞIMSIZ (kart düzenlemesi diziyi kaydırırsa yanlış alarm olmasın),
+                // tarife imzası ise birebir: tarife append-only, içeriği değişmemeli.
+                const urunImza = (db) => JSON.stringify((Array.isArray(db.products) ? db.products : [])
+                  .map((p) => p ? [String(p.code || ""), +p.fabrika || 0, +p.yakin || 0, +p.uzak || 0,
+                    +p.danismanListe || 0, +p.krediKarti || 0, String(p.pkg || ""), p.active !== false] : null)
+                  .sort((x, y) => String(x && x[0]).localeCompare(String(y && y[0]))));
+                const tarifeImza = (db) => JSON.stringify(db.priceLists || null) + "|" +
+                  String((db.meta && db.meta.activePriceListId) || "");
+                const uD = urunImza(inDB) !== urunImza(curDB), tD = tarifeImza(inDB) !== tarifeImza(curDB);
+                if (uD || tD) {
+                  if (uD && Array.isArray(curDB.products)) inDB.products = curDB.products;
+                  if (tD) {
+                    if (curDB.priceLists !== undefined) inDB.priceLists = curDB.priceLists;
+                    if (inDB.meta && curDB.meta) inDB.meta.activePriceListId = curDB.meta.activePriceListId;
+                  }
+                  korundu = true;
+                  fiyatKorundu = {urun: uD, tarife: tD};
+                  console.warn("yaz: yetkisiz fiyat/tarife değişimi süzüldü", {app, uid: dec.uid, urun: uD, tarife: tD});
+                }
+              }
+            }
             // KORUMA blobu DEĞİŞTİRDİYSE taze 'updated' üret — yoksa istemci echo'yu görüp onSnapshot'ı self-suppress eder
             // (updated===lastUpdated) ve geri-eklenen kaydı hidratlamaz. Taze updated ile pushlayan istemci merge'i alır.
             if (korundu) { outData = Object.assign({}, b.data, {[KEY]: JSON.stringify(inDB)}); outUpdated = Date.now(); }
@@ -1177,6 +1206,12 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
     if (wipe) { const ak = (dec.email || "").replace(EPOSTA_SON, "") || dec.uid; console.warn("yaz toptan-silme engellendi", {app, dizi: wipe.dizi, eski: wipe.eski, yeni: wipe.yeni, uid: dec.uid}); await denetimVer("toptan-silme-engellendi", ak, {app, dizi: wipe.dizi, eski: wipe.eski, yeni: wipe.yeni}); res.status(409).json({hata: "toptan_silme_korumasi", dizi: wipe.dizi, eski: wipe.eski, yeni: wipe.yeni}); return; }
     // Yetkisiz silme: yazım yapılmadı. 403 → istemci token'ı tazeleyip bir kez yeniden dener (bayat claim kurtarılır).
     // Denetime yazılır ama Telegram uyarısı GÖNDERİLMEZ: bayat token'lı meşru kullanıcı ilk denemede buraya düşebilir → yanlış alarm olmasın.
+    // FİYAT KAPISI: yazım UYGULANDI ama fiyat/tarife alanları sunucudaki hâliyle korundu.
+    // Sessiz kalmaz: sahibi kimin denediğini görsün diye denetime yazılır (Telegram'a taşınmaz — gürültü).
+    if (fiyatKorundu) {
+      const ak = (dec.email || "").replace(EPOSTA_SON, "") || dec.uid;
+      try { await denetimVer("fiyat-degisimi-engellendi", ak, {app, urun: fiyatKorundu.urun, tarife: fiyatKorundu.tarife}); } catch (e) {}
+    }
     // SEVK KİLİDİ: yazım yapılmadı. Arayüz bunu zaten engelliyor; buraya yalnız kilidi atlatan istek düşer.
     if (sevkKilidi) {
       const ak = (dec.email || "").replace(EPOSTA_SON, "") || dec.uid;

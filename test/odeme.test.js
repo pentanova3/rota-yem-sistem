@@ -999,8 +999,16 @@ baslik('17) SUNUCU KANCALARI — değişiklik/iptal tespiti yaz() içinde ve ona
 {
   const fs = require('fs'), path = require('path');
   const fn = fs.readFileSync(path.join(__dirname, '..', 'functions', 'index.js'), 'utf8');
-  dogru('yaz() değişiklik/iptal değişkenleri var', /let wipe = null, silinen = null, silinenMusteri = null, yetkisizSilme = false, degisen = null, iptalEdilen = null, sevkKilidi = null;/.test(fn));
-  dogru('transaction her denemede sıfırlıyor (mükerrer bildirim yok)', /degisen = null; iptalEdilen = null; sevkKilidi = null;\s*\/\//.test(fn));
+  // Bildirim bayrakları TEK satırda tanımlanır; yeni bayrak eklendiğinde test kırılmasın diye
+  // tam metin değil, GEREKLİ olanların hepsinin bulunduğu doğrulanır.
+  {
+    const _bild = ['wipe', 'silinen', 'silinenMusteri', 'yetkisizSilme', 'degisen', 'iptalEdilen', 'sevkKilidi', 'fiyatKorundu'];
+    const _tanim = (fn.match(/let wipe = null,[^;]*;/) || [''])[0];
+    const _sifir = (fn.match(/wipe = null; silinen = null;[^;]*;[^\n]*/) || [''])[0];
+    dogru('yaz() bildirim bayraklarının HEPSİ tanımlı', _bild.every((k) => _tanim.indexOf(k) >= 0), _tanim.slice(0, 90));
+    dogru('transaction her denemede HEPSİNİ sıfırlıyor (mükerrer bildirim yok)',
+      _bild.every((k) => _sifir.indexOf(k + ' = null') >= 0 || _sifir.indexOf(k + ' = false') >= 0));
+  }
   dogru('imza karşılaştırması tespitte kullanılıyor', /const eImza = siparisImza\(eo\), yImza = siparisImza\(yo\);/.test(fn));
   dogru('iptal ayrı tespit ediliyor', /if \(!eskiIptal && yeniIptal\)/.test(fn));
   dogru('blob tarafında onay bayrakları düşüyor', /delete kopya\.muhasebeOnay; delete kopya\.fabrikaOnay; delete kopya\.yemOnay;/.test(fn));
@@ -2163,6 +2171,88 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     dogru('yükleme yöneticiye kilitli', /function openFiyatYukle\(\)\{\s*if\(!isAdmin\(\)\)\{toast\('Sadece yönetici'\)/.test(H));
     dogru('0/boş fiyat YAZILMIYOR', /if\(v==null\|\|!\(v>0\)\)return;/.test(H));
     dogru('uygulamadan önce onay isteniyor', /if\(!confirm\([\s\S]{0,200}?Yeni tarife yayınlanacak/.test(H));
+  }
+
+  // ==========================================================================
+  baslik('31) FİYAT & TARİFE SUNUCU KAPISI — yetkisiz değişim süzülür (reddedilmez)');
+  // ==========================================================================
+  // Arayüz fiyat düzenlemeyi yöneticiye kilitliyor ama konsoldan atlanabilir; fiyat yayınlanan
+  // tarifeye, oradan HER siparişe yansır → sunucu da doğrulamalı.
+  // 403 DEĞİL SÜZME: reddetseydik yetkisiz kullanıcının yerel blobu kirli kalır ve o sekme bir daha
+  // hiç kaydedemezdi (İK'da yaşanan hata). Sunucudaki sürüm korunur, istemci taze updated ile alır.
+  {
+    const fs = require('fs'), path = require('path');
+    const FN = fs.readFileSync(path.join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+    const H2 = fs.readFileSync(path.join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    // Ok fonksiyonunu parantez sayarak çıkar (regex çok satırlı gövdede yanılıyor)
+    const cikar = (nm) => {
+      const i = FN.indexOf('const ' + nm + ' = (db) =>');
+      if (i < 0) throw new Error(nm + ' bulunamadı');
+      let d = 0, j = i;
+      for (; j < FN.length; j++) {
+        const c = FN[j];
+        if (c === '(' || c === '[' || c === '{') d++;
+        else if (c === ')' || c === ']' || c === '}') d--;
+        else if (c === ';' && d === 0) break;
+      }
+      return FN.slice(i, j + 1);
+    };
+    const I = new Function([cikar('urunImza'), cikar('tarifeImza'),
+      'return {urunImza, tarifeImza};'].join('\n'))();
+
+    const U = (kod, fab) => ({code: kod, pkg: '25 kg', fabrika: fab, yakin: fab + 100, uzak: fab + 140,
+      danismanListe: fab - 20, krediKarti: fab, active: true});
+    const TABAN = {products: [U('DG-10', 855), U('BK-300', 850)],
+      priceLists: [{id: 'pl1', date: '2026-08-06', active: true, items: [{code: 'DG-10', fabrika: 855}]}],
+      meta: {activePriceListId: 'pl1'}};
+    const kopya = () => JSON.parse(JSON.stringify(TABAN));
+
+    dogru('aynı veri → imza AYNI (boşuna süzme yok)',
+      I.urunImza(TABAN) === I.urunImza(kopya()) && I.tarifeImza(TABAN) === I.tarifeImza(kopya()));
+    // YANLIŞ ALARM KAPISI: ürün kartı düzenlemesi diziyi kaydırabilir; sıra değişimi değişiklik SAYILMAZ
+    const sirali = kopya(); sirali.products.reverse();
+    dogru('ürün SIRASI değişince süzme TETİKLENMEZ', I.urunImza(TABAN) === I.urunImza(sirali));
+    // Gerçek değişiklikler yakalanmalı
+    const fiyat = kopya(); fiyat.products[0].fabrika = 999;
+    dogru('fabrika fiyatı değişimi YAKALANIR', I.urunImza(TABAN) !== I.urunImza(fiyat));
+    const kk = kopya(); kk.products[0].krediKarti = 1;
+    dogru('krediKarti (İMECE tabanı) değişimi YAKALANIR', I.urunImza(TABAN) !== I.urunImza(kk));
+    const dan = kopya(); dan.products[1].danismanListe = 1;
+    dogru('danışman liste fiyatı değişimi YAKALANIR', I.urunImza(TABAN) !== I.urunImza(dan));
+    const yeni = kopya(); yeni.products.push(U('SAHTE', 1));
+    dogru('ürün EKLEME yakalanır', I.urunImza(TABAN) !== I.urunImza(yeni));
+    const eksik = kopya(); eksik.products.pop();
+    dogru('ürün SİLME yakalanır', I.urunImza(TABAN) !== I.urunImza(eksik));
+    const pasif = kopya(); pasif.products[0].active = false;
+    dogru('ürün pasifleştirme yakalanır', I.urunImza(TABAN) !== I.urunImza(pasif));
+    const tarifeIc = kopya(); tarifeIc.priceLists[0].items[0].fabrika = 1;
+    dogru('ARŞİVLENMİŞ tarife içeriğinin değişimi yakalanır', I.tarifeImza(TABAN) !== I.tarifeImza(tarifeIc));
+    const aktif = kopya(); aktif.meta.activePriceListId = 'pl0';
+    dogru('aktif tarife değiştirme yakalanır', I.tarifeImza(TABAN) !== I.tarifeImza(aktif));
+    const yeniTarife = kopya(); yeniTarife.priceLists.push({id: 'pl2', date: '2026-09-01', active: true, items: []});
+    dogru('yeni tarife yayınlama yakalanır', I.tarifeImza(TABAN) !== I.tarifeImza(yeniTarife));
+    dogru('eksik/bozuk blob çökertmiyor',
+      typeof I.urunImza({}) === 'string' && typeof I.tarifeImza({}) === 'string');
+
+    // Kapının kendisi
+    dogru('SUNUCU: yönetici ölçütü silme/sevk kapısıyla AYNI',
+      /const fyYonetici = \(dec\.portalYonetici === true\) \|\| \(dec\[app\] === "admin"\);/.test(FN));
+    dogru('SUNUCU: yalnız YETKİSİZ kullanıcıda çalışıyor', /if \(!fyYonetici\) \{/.test(FN));
+    dogru('SUNUCU: sunucudaki ürün/tarife sürümü korunuyor (403 DEĞİL)',
+      /inDB\.products = curDB\.products;/.test(FN) && /inDB\.priceLists = curDB\.priceLists;/.test(FN));
+    dogru('SUNUCU: koruma sonrası taze updated üretiliyor (istemci doğrusunu alır)',
+      /if \(korundu\) \{ outData = Object\.assign/.test(FN));
+    dogru('SUNUCU: deneme denetime yazılıyor', /denetimVer\("fiyat-degisimi-engellendi"/.test(FN));
+    dogru('SUNUCU: tx yeniden denemesinde bayrak sıfırlanıyor', /sevkKilidi = null; fiyatKorundu = null;/.test(FN));
+
+    // İSTEMCİ: bir kerelik fiyat göçü USER kurulduktan SONRA ve YALNIZ yöneticide koşmalı.
+    // loadDB'de kalsaydı isAdmin() daima false olur (USER henüz yok) ve göç hiç çalışmazdı;
+    // kapısız bırakılsaydı sürüm değişiminde ilk açan yetkisiz kullanıcının yazımı süzülürdü.
+    dogru('İSTEMCİ: fiyat göçü initApp içinde', /function initApp\(\)\{\s*fiyatGocuCalistir\(\);/.test(H2));
+    dogru('İSTEMCİ: fiyat göçü yönetici kapısına bağlı',
+      /function fiyatGocuCalistir\(\)\{[\s\S]{0,200}?!isAdmin\(\)\)return;/.test(H2));
+    dogru('İSTEMCİ: göç loadDB’den çıkarıldı',
+      !/if\(DB\.meta\.priceVersion!==PRICE_VERSION\)\{applyPriceList\(\)/.test(H2));
   }
 
   sonuc();
