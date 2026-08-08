@@ -2346,13 +2346,15 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('ölü docx/zip CDN kütüphaneleri saha\'dan söküldü',
         !/<script[^>]*(docxtemplater|pizzip|jszip)/i.test(SAHA));   // yorumda adı geçebilir, SCRIPT etiketi olmamalı
       dogru('yeni kayıttan sonra sözleşme teklif ediliyor',
-        /_yeniKayit&&confirm\([\s\S]{0,80}?sozlesmeHazirla\(id\)/.test(SAHA));
-      dogru('evrak takibinde Hazırla düğmesi var', /onclick="sozlesmeHazirla\('\$\{o\.id\}'\)"/.test(SAHA));
+        /_yeniKayit&&confirm\([\s\S]{0,100}?sozlesmeIndir\(id\)/.test(SAHA));
+      dogru('evrak takibinde İndir düğmesi var', /onclick="sozlesmeIndir\('\$\{o\.id\}'\)"/.test(SAHA));
       dogru('sözleşme tarihi alanı kaydediliyor', /sz\.sozTarih=V\('s_tarih'\)/.test(SAHA));
       dogru('bayi/danışman kartında e-posta alanı var', /id="k_eposta"/.test(SAHA));
       dogru('sözleşme Mail ve WA gönderimi var',
-        /function sozlesmeHazirla\(id,kanal\)/.test(SAHA) && /sozlesmeHazirla\([^)]*'mail'\)/.test(SAHA) && /sozlesmeHazirla\([^)]*'wa'\)/.test(SAHA));
+        /function sozlesmeGonder\(id,kanal\)/.test(SAHA) && /sozlesmeGonder\([^)]*'mail'\)/.test(SAHA) && /sozlesmeGonder\([^)]*'wa'\)/.test(SAHA) && /sozlesme-paylas/.test(SAHA));
       dogru('liste Sözleşme düğmesi sozlesmeIndir ile bağlı', /function sozlesmeIndir\(id\)/.test(SAHA));
+      dogru('WA/Mail mesajında sözleşme linki var', /Antetli sözleşmeyi buradan/.test(SAHA) && /function sozMesaj\(o, url\)/.test(SAHA));
+      dogru('kartta Hazırla yerine İndir/Gönder var', /Sözleşme İndir/.test(SAHA) && /Sözleşme Gönder \(WA\)/.test(SAHA) && /Sözleşme Gönder \(Mail\)/.test(SAHA) && !/Sözleşme Hazırla/.test(SAHA));
       dogru('bayi paketi bayiSozlesme + atama içerir',
         /bayiSozlesme/.test(SAHA) && /function sozBelgeler\(type\)[\s\S]*?bayiAtama/.test(SAHA));
       dogru('danışman paketi danismanSozlesme içerir (bayi metni değil)',

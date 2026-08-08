@@ -482,14 +482,16 @@ function renderKomModal(){
       <div class="fld-row"><div class="fld"><label>1) Ad Soyad</label>${F('s_y1ad',y1.ad)}</div><div class="fld"><label>T.C. Kimlik</label>${F('s_y1tc',y1.tc)}</div></div>
       <div class="fld-row"><div class="fld"><label>1) Görev</label>${F('s_y1gorev',y1.gorev)}</div><div class="fld"><label>1) Telefon</label>${F('s_y1tel',y1.tel)}</div></div>
       <div class="fld-row"><div class="fld"><label>2) Ad Soyad</label>${F('s_y2ad',y2.ad)}</div><div class="fld"><label>T.C. Kimlik</label>${F('s_y2tc',y2.tc)}</div></div>
-      <div class="fld-row"><div class="fld"><label>2) Görev</label>${F('s_y2gorev',y2.gorev)}</div><div class="fld"><label>2) Telefon</label>${F('s_y2tel',y2.tel)}</div></div>`;
+      <div class="fld-row"><div class="fld"><label>2) Görev</label>${F('s_y2gorev',y2.gorev)}</div><div class="fld"><label>2) Telefon</label>${F('s_y2tel',y2.tel)}</div></div>
+      ${sozOzelFormHTML(sz)}`;
   } else {
     szHtml=`
       <div class="fld-row"><div class="fld"><label>T.C. Kimlik No</label>${F('s_tc',sz.tcKimlik)}</div><div class="fld"><label>IBAN</label>${F('s_iban',sz.iban,'TR..')}</div></div>
       <div class="fld-row"><div class="fld"><label>Vergi Dairesi</label>${F('s_vd',sz.vergiDairesi)}</div><div class="fld"><label>Vergi No</label>${F('s_vn',sz.vergiNo)}</div></div>
       <div class="fld"><label>Adres</label>${F('s_adres',sz.adres,'Tam adres')}</div>
       <div class="fld"><label>E-posta</label><input value="${esc(sz.eposta||'')}" disabled title="Üstteki E-posta alanından düzenlenir"><div style="font-size:10.5px;color:var(--slate-400);margin-top:3px">üstteki E-posta alanından girilir</div></div>
-      <div class="fld"><label>Sözleşme Tarihi <span style="font-weight:500;color:var(--slate-400);font-size:10.5px">— boş bırakılırsa belgede tarih yeri boş basılır</span></label><input id="s_tarih" type="date" value="${esc(sz.sozTarih||'')}"></div>`;
+      <div class="fld"><label>Sözleşme Tarihi <span style="font-weight:500;color:var(--slate-400);font-size:10.5px">— boş bırakılırsa belgede tarih yeri boş basılır</span></label><input id="s_tarih" type="date" value="${esc(sz.sozTarih||'')}"></div>
+      ${sozOzelFormHTML(sz)}`;
   }
   document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
     <div class="modal-hd"><h3>${o.id?'Düzenle':'Yeni Kayıt'} — ${isBayi?'Bayi':'Teknik Danışman'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
@@ -522,7 +524,7 @@ function renderKomModal(){
         <div style="margin-top:10px">${szHtml}</div>
       </details>
     </div>
-    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-pri" onclick="sozlesmeHazirla('${o.id}')">Sözleşme Hazırla (PDF)</button><button class="btn btn-sm" onclick="sozlesmeHazirla('${o.id}','mail')" title="Özel madde + e-posta">Mail ile Gönder</button><button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozlesmeHazirla('${o.id}','wa')" title="Özel madde + WhatsApp">WA ile Gönder</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
+    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-pri" onclick="sozlesmeIndir('${o.id}')" title="Antetli sözleşmeyi indir / yazdır">Sözleşme İndir</button><button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozlesmeGonder('${o.id}','wa')" title="WhatsApp — antetli sözleşme linki">Sözleşme Gönder (WA)</button><button class="btn btn-sm" onclick="sozlesmeGonder('${o.id}','mail')" title="E-posta — antetli sözleşme linki">Sözleşme Gönder (Mail)</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
   </div></div>`;
   setTimeout(()=>{var n=document.getElementById('k_name');if(n)n.focus();},30);
 }
@@ -555,8 +557,9 @@ function flushKomForm(){
   } else {
     sz.tcKimlik=V('s_tc');sz.iban=V('s_iban');sz.vergiDairesi=V('s_vd');sz.vergiNo=V('s_vn');sz.adres=V('s_adres');sz.eposta=eposta;sz.sozTarih=V('s_tarih');
   }
-  // Kişiye özel ek maddeler formda yok — silinmesin
-  if(o.sz&&Array.isArray(o.sz.ozelMaddeler)&&o.sz.ozelMaddeler.length)sz.ozelMaddeler=o.sz.ozelMaddeler;
+  var oz=sozOzelTopla();
+  if(oz!==null)sz.ozelMaddeler=oz;
+  else if(o.sz&&Array.isArray(o.sz.ozelMaddeler)&&o.sz.ozelMaddeler.length)sz.ozelMaddeler=o.sz.ozelMaddeler;
   o.sz=sz;
   return true;
 }
@@ -576,7 +579,7 @@ async function saveKom(){
     BAYILER=DB.komisyoncular; saveSaha(); closeModal(); render();
     // YENİ kayıt: anlaşma yapılır yapılmaz sözleşme paketi hazır olsun (firma isteği 08.08).
     // Düzenlemede sorulmaz — her küçük değişiklikte sözleşme açmak gürültü olurdu.
-    if(_yeniKayit&&confirm(ex.name+' kaydı oluşturuldu.\n\nSözleşme paketini şimdi hazırlayalım mı?'))sozlesmeHazirla(id);
+    if(_yeniKayit&&confirm(ex.name+' kaydı oluşturuldu.\n\nAntetli sözleşmeyi şimdi indirelim mi?'))sozlesmeIndir(id);
   }catch(e){ alert('Kaydedilemedi: '+(e.message||e)+'\n(Bayi/danışman yönetimi yalnız saha yöneticisi/portal yöneticisi yetkisiyle yapılır.)'); }
 }
 async function delKom(id){
@@ -613,6 +616,42 @@ function sozMetinGet(key){
 function sozMetinKopya(key){
   var m=sozMetinGet(key); if(!m)return null;
   return JSON.parse(JSON.stringify(m));
+}
+function sozOzelFormHTML(sz){
+  var ozel=(sz&&sz.ozelMaddeler)||[];
+  var sat=ozel.map(function(m){
+    return '<div class="ozel-box" style="border:1px solid var(--slate-100);border-radius:8px;padding:8px;margin-bottom:6px">'
+      +'<div class="fld-row"><div class="fld"><label>Madde başlığı</label><input class="oz-bas" value="'+esc(m.baslik||'')+'" placeholder="Örn. Madde X — Özel hüküm"></div>'
+      +'<div class="fld" style="flex:0 0 auto;align-self:end"><button type="button" class="btn btn-sm" style="color:#b91c1c" onclick="sozOzelSatirSil(this)">Sil</button></div></div>'
+      +'<div class="fld"><label>Metin / hüküm</label><textarea class="oz-met" rows="3" style="width:100%;font:inherit;padding:8px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical">'+esc(m.metin||'')+'</textarea></div></div>';
+  }).join('');
+  return '<div style="margin-top:10px;border-top:1px dashed var(--slate-200);padding-top:10px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--slate-500);margin-bottom:6px">Kişiye özel ek madde / hüküm <span style="font-weight:500;color:var(--slate-400)">— isteğe bağlı, sözleşmeye eklenir</span></div>'
+    +'<div id="sozOzelList">'+(sat||'<div class="hint" id="sozOzelBos" style="margin-bottom:8px">Henüz özel madde yok.</div>')+'</div>'
+    +'<button type="button" class="btn btn-sm" onclick="sozOzelSatirEkle()">+ Madde ekle</button></div>';
+}
+function sozOzelSatirEkle(){
+  var list=document.getElementById('sozOzelList'); if(!list)return;
+  var bos=document.getElementById('sozOzelBos'); if(bos)bos.remove();
+  var d=document.createElement('div');
+  d.className='ozel-box'; d.style.cssText='border:1px solid var(--slate-100);border-radius:8px;padding:8px;margin-bottom:6px';
+  d.innerHTML='<div class="fld-row"><div class="fld"><label>Madde başlığı</label><input class="oz-bas" placeholder="Örn. Madde X — Özel hüküm"></div>'
+    +'<div class="fld" style="flex:0 0 auto;align-self:end"><button type="button" class="btn btn-sm" style="color:#b91c1c" onclick="sozOzelSatirSil(this)">Sil</button></div></div>'
+    +'<div class="fld"><label>Metin / hüküm</label><textarea class="oz-met" rows="3" style="width:100%;font:inherit;padding:8px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical" placeholder="Bu kişiye özel hüküm metni…"></textarea></div>';
+  list.appendChild(d);
+}
+function sozOzelSatirSil(btn){
+  var box=btn&&btn.closest?btn.closest('.ozel-box'):null;
+  if(box)box.remove();
+  var list=document.getElementById('sozOzelList');
+  if(list&&!list.querySelector('.oz-met'))list.innerHTML='<div class="hint" id="sozOzelBos" style="margin-bottom:8px">Henüz özel madde yok.</div>';
+}
+function sozOzelTopla(){
+  var list=document.getElementById('sozOzelList'); if(!list)return null; // formda yoksa dokunma
+  return Array.prototype.slice.call(list.querySelectorAll('.ozel-box')).map(function(box){
+    var bas=box.querySelector('.oz-bas'), ta=box.querySelector('.oz-met');
+    return {baslik:bas?(bas.value||'').trim():'',metin:ta?(ta.value||'').trim():''};
+  }).filter(function(m){return m.baslik||m.metin;});
 }
 // Kişiye özel ek maddeleri ana sözleşme metnine (imza öncesi) ekler.
 function sozBloklarKisi(bloklar,o){
@@ -728,14 +767,20 @@ function sozKomKayit(id){
   }
   return (DB.komisyoncular||[]).find(function(k){return k.id===id;})||null;
 }
-function sozMesaj(o){
+function sozMesaj(o, url){
   var tip=o.type==='bayi'?'bayilik':'danışmanlık';
-  return {konu:'Rota SMI — '+tip+' sözleşmesi — '+(o.name||''),
-    gov:'Sayın '+(o.name||'')+',\n\nRota SMI '+tip+' sözleşmesi hazırlanmıştır. Lütfen yazdır penceresinden «PDF olarak kaydet» ile indirip bu mesaja ekleyiniz; inceleyip imzalı nüshayı tarafımıza iletiniz.\n\nSaygılarımızla,\nRota SMI Tarım ve Hayvancılık San. Tic. A.Ş.'};
+  var gov='Sayın '+(o.name||'')+',\n\nRota SMI '+tip+' sözleşmeniz hazırdır.';
+  if(url){
+    gov+='\n\nAntetli sözleşmeyi buradan görüntüleyip indirebilirsiniz:\n'+url+'\n\nİnceleyip imzalı nüshayı tarafımıza iletiniz.';
+  }else{
+    gov+='\n\nAntetli sözleşme ektedir / ayrı pencerede açılmıştır. İnceleyip imzalı nüshayı tarafımıza iletiniz.';
+  }
+  gov+='\n\nSaygılarımızla,\nRota SMI Tarım ve Hayvancılık San. Tic. A.Ş.';
+  return {konu:'Rota SMI — '+tip+' sözleşmesi — '+(o.name||''), gov:gov};
 }
-function sozlesmeKanalAc(id,kanal){
+function sozlesmeKanalAc(id,kanal,url){
   var o=sozKomKayit(id); if(!o){alert('Kayıt bulunamadı');return;}
-  var msg=sozMesaj(o);
+  var msg=sozMesaj(o,url||'');
   if(kanal==='mail'){
     var ep=((o.sz||{}).eposta||'').trim();
     if(!sozEpostaOk(ep)){alert('Geçerli bir e-posta adresi girin ve kaydedin.');return;}
@@ -746,108 +791,79 @@ function sozlesmeKanalAc(id,kanal){
     window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg.gov),'_blank');
   }
 }
-function sozlesmeIndir(id){return sozlesmeHazirla(id);}
-function sozlesmeGonder(id,kanal){return sozlesmeHazirla(id,kanal);}
-// Çıktı öncesi: tip paketi doğrula + kişiye özel madde ekle/düzenle
-function sozlesmeHazirla(id,kanal){
-  var o=sozKomKayit(id); if(!o){alert('Kayıt bulunamadı');return;}
-  if(editKom&&editKom.id===id)flushKomForm();
-  o=sozKomKayit(id);
-  var isBayi=o.type==='bayi';
-  var paket=sozBelgeler(o.type).map(function(b){return b[1];}).join(' · ');
-  var ozel=(o.sz&&o.sz.ozelMaddeler)||[];
-  var sat=ozel.map(function(m,i){
-    return '<div class="ozel-box" style="border:1px solid var(--slate-100);border-radius:8px;padding:8px;margin-bottom:6px">'
-      +'<div class="fld-row"><div class="fld"><label>Madde başlığı</label><input class="oz-bas" value="'+esc(m.baslik||'')+'" placeholder="Örn. Madde X — Özel hüküm"></div>'
-      +'<div class="fld" style="flex:0 0 auto;align-self:end"><button type="button" class="btn btn-sm" style="color:#b91c1c" onclick="sozOzelSatirSil(this)">Sil</button></div></div>'
-      +'<div class="fld"><label>Metin / hüküm</label><textarea class="oz-met" rows="3" style="width:100%;font:inherit;padding:8px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical">'+esc(m.metin||'')+'</textarea></div></div>';
-  }).join('');
-  document.getElementById('modalRoot').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:560px">'
-    +'<div class="modal-hd"><h3>Sözleşme hazırla — '+esc(o.name||'')+'</h3><button class="xbtn" onclick="closeModal()">×</button></div>'
-    +'<div class="modal-bd" style="max-height:70vh;overflow:auto">'
-    +'<div style="padding:10px 12px;border-radius:8px;background:'+(isBayi?'#eff6ff':'#f0fdf4')+';border:1px solid '+(isBayi?'#bfdbfe':'#bbf7d0')+';margin-bottom:12px;font-size:12.5px;line-height:1.45">'
-    +'<b>Tip:</b> '+(isBayi?'BAYİ':'DANIŞMAN')+' — bu kayda yalnız kendi paketi basılır.<br>'
-    +'<b>Paket:</b> '+esc(paket)+'</div>'
-    +'<div style="font-size:12px;color:var(--slate-500);margin-bottom:8px">Çıktı almadan önce bu kişiye özel madde / hüküm ekleyebilirsiniz. Ana şablonlar Sözleşmeler sekmesinden düzenlenir.</div>'
-    +'<div id="sozOzelList">'+(sat||'<div class="hint" id="sozOzelBos" style="margin-bottom:8px">Henüz özel madde yok.</div>')+'</div>'
-    +'<button type="button" class="btn btn-sm" onclick="sozOzelSatirEkle()">+ Madde / hüküm ekle</button>'
-    +'</div><div class="modal-ft" style="flex-wrap:wrap;gap:6px">'
-    +'<button class="btn" onclick="closeModal()">Vazgeç</button>'
-    +'<button class="btn btn-pri" onclick="sozHazirlaDevam(\''+id+'\',\''+(kanal||'')+'\')">'+((kanal==='mail')?'Mail ile devam':(kanal==='wa')?'WA ile devam':'PDF hazırla')+'</button>'
-    +(kanal?'':'<button class="btn" onclick="sozHazirlaDevam(\''+id+'\',\'mail\')">Mail</button>'
-    +'<button class="btn" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozHazirlaDevam(\''+id+'\',\'wa\')">WA</button>')
-    +'</div></div></div>';
-}
-function sozOzelSatirEkle(){
-  var list=document.getElementById('sozOzelList'); if(!list)return;
-  var bos=document.getElementById('sozOzelBos'); if(bos)bos.remove();
-  var d=document.createElement('div');
-  d.className='ozel-box'; d.style.cssText='border:1px solid var(--slate-100);border-radius:8px;padding:8px;margin-bottom:6px';
-  d.innerHTML='<div class="fld-row"><div class="fld"><label>Madde başlığı</label><input class="oz-bas" placeholder="Örn. Madde X — Özel hüküm"></div>'
-    +'<div class="fld" style="flex:0 0 auto;align-self:end"><button type="button" class="btn btn-sm" style="color:#b91c1c" onclick="sozOzelSatirSil(this)">Sil</button></div></div>'
-    +'<div class="fld"><label>Metin / hüküm</label><textarea class="oz-met" rows="3" style="width:100%;font:inherit;padding:8px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical" placeholder="Bu kişiye özel hüküm metni…"></textarea></div>';
-  list.appendChild(d);
-}
-function sozOzelSatirSil(btn){
-  var box=btn&&btn.closest?btn.closest('.ozel-box'):null;
-  if(box)box.remove();
-  var list=document.getElementById('sozOzelList');
-  if(list&&!list.querySelector('.oz-met'))list.innerHTML='<div class="hint" id="sozOzelBos" style="margin-bottom:8px">Henüz özel madde yok.</div>';
-}
-function sozOzelTopla(){
-  var list=document.getElementById('sozOzelList'); if(!list)return[];
-  return Array.prototype.slice.call(list.querySelectorAll('.ozel-box')).map(function(box){
-    var bas=box.querySelector('.oz-bas'), ta=box.querySelector('.oz-met');
-    return {baslik:bas?(bas.value||'').trim():'',metin:ta?(ta.value||'').trim():''};
-  }).filter(function(m){return m.baslik||m.metin;});
-}
-function sozHazirlaDevam(id,kanal){
-  var o=(DB.komisyoncular||[]).find(function(k){return k.id===id;});
-  if(!o){alert('Kayıt bulunamadı');return;}
-  o.sz=o.sz||{};
-  o.sz.ozelMaddeler=sozOzelTopla();
-  if(editKom&&editKom.id===id){editKom.sz=editKom.sz||{};editKom.sz.ozelMaddeler=o.sz.ozelMaddeler;}
-  saveSaha();
-  if(kanal==='mail'&&!sozEpostaOk((o.sz||{}).eposta)){alert('Önce e-posta adresini girin.\n(Karttaki E-posta alanı — sonra Kaydet önerilir.)');return;}
-  if(kanal==='wa'&&!sozTelWa(o.phone)){alert('Önce telefon numarasını girin (WhatsApp).');return;}
-  closeModal();
-  if(!sozlesmePdf(id,{otoYazdir:kanal?false:undefined}))return;
-  if(kanal==='mail'||kanal==='wa'){
-    setTimeout(function(){sozlesmeKanalAc(id,kanal);},350);
-    toast(kanal==='mail'?'PDF + e-posta taslağı açıldı — PDF kaydedip ekleyin':'PDF + WhatsApp açıldı — PDF kaydedip ekleyin');
-  }
-}
-function sozlesmePdf(id,opt){
+// Antetli sözleşme HTML'i — girilen verilere göre her an hazır (ayrı "hazırla" adımı yok)
+function sozlesmeHtml(id,opt){
   opt=opt||{};
   var o=sozKomKayit(id);
-  if(!o){alert('Kayıt bulunamadı');return false;}
-  if(!window.antetBelge||!window.SOZ_METIN){alert('Sözleşme bileşenleri yüklenmedi — sayfayı yenileyin.');return false;}
-  var eksik=sozEksikler(o);
-  if(eksik.length&&!confirm('Sözleşmede boş kalacak alanlar var:\n\n• '+eksik.join('\n• ')+
-    '\n\nBoş alanlar noktalı çizgi olarak basılır (elle doldurabilirsiniz).\nYine de hazırlansın mı?\n\n'+
-    '(İptal → kaydı düzenleyip "Sözleşme Bilgileri" bölümünü doldurun.)'))return false;
+  if(!o){alert('Kayıt bulunamadı');return null;}
+  if(!window.antetBelge||!window.SOZ_METIN){alert('Sözleşme bileşenleri yüklenmedi — sayfayı yenileyin.');return null;}
+  if(!opt.sessizEksik){
+    var eksik=sozEksikler(o);
+    if(eksik.length&&!confirm('Sözleşmede boş kalacak alanlar var:\n\n• '+eksik.join('\n• ')+
+      '\n\nBoş alanlar noktalı çizgi olarak basılır (elle doldurabilirsiniz).\nYine de devam edilsin mi?\n\n'+
+      '(İptal → kaydı düzenleyip "Sözleşme Bilgileri" bölümünü doldurun.)'))return null;
+  }
   var V=sozVeri(o), parcalar=[];
   sozBelgeler(o.type).forEach(function(b,i){
     var m=sozMetinGet(b[0]); if(!m)return;
-    // Özel maddeler yalnız ana sözleşmeye (ilk belge)
     var bloklar=i===0?sozBloklarKisi(m.bloklar,o):m.bloklar;
     var ic=bloklar.map(function(x){return sozBlokHTML(x,V);}).join('');
     parcalar.push('<div class="sz'+(i?' yeni':'')+'">'+sozTarafDoldur(sozTarihDoldur(ic,(o.sz||{}).sozTarih),o.name)+'</div>');
   });
-  var epOk=sozEpostaOk((o.sz||{}).eposta), waOk=!!sozTelWa(o.phone);
-  var araclar='<button class="bp" onclick="window.print()">PDF olarak kaydet</button>'
-    +(epOk?'<button class="bx" onclick="window.opener&&window.opener.sozlesmeKanalAc&&window.opener.sozlesmeKanalAc(\''+id+'\',\'mail\')">Mail ile gönder</button>':'')
-    +(waOk?'<button class="bx" style="background:#25D366" onclick="window.opener&&window.opener.sozlesmeKanalAc&&window.opener.sozlesmeKanalAc(\''+id+'\',\'wa\')">WA ile gönder</button>':'')
-    +'<button class="bc" onclick="window.close()">Kapat</button>';
-  var html=window.antetBelge({duz:true,govde:parcalar.join(''),
+  if(!parcalar.length){alert('Sözleşme metni bulunamadı');return null;}
+  var araclar=opt.araclar!=null?opt.araclar
+    :('<button class="bp" onclick="window.print()">PDF olarak kaydet</button><button class="bc" onclick="window.close()">Kapat</button>');
+  return window.antetBelge({duz:true,govde:parcalar.join(''),
     baslikEtiket:(o.name||'')+' — '+(o.type==='bayi'?'Bayilik Sözleşmesi':'Danışmanlık Sözleşmesi'),
     imzaSol:'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş.',
     imzaSag:'Belge tarihi: '+new Date().toLocaleDateString('tr-TR'),
     araclar:araclar,
-    otoYazdir:opt.otoYazdir===false?undefined:(opt.otoYazdir||700)});
+    otoYazdir:opt.otoYazdir});
+}
+function sozlesmePdf(id,opt){
+  opt=opt||{};
+  var html=sozlesmeHtml(id,{otoYazdir:opt.otoYazdir===false?undefined:(opt.otoYazdir||700),
+    araclar:opt.araclar});
+  if(!html)return false;
   if(!window.antetBelgeAc(html)){alert('Açılır pencere engellendi — tarayıcı ayarından bu site için izin verin.');return false;}
   return true;
 }
+function sozlesmeIndir(id){
+  var o=sozKomKayit(id); if(!o){alert('Kayıt bulunamadı');return;}
+  if(editKom&&editKom.id===id){flushKomForm();o=sozKomKayit(id);}
+  return sozlesmePdf(id,{otoYazdir:700});
+}
+// WA/Mail: antetli sözleşmeyi depoya yükle → mesaja tıklanabilir link koy
+// (wa.me dosya ekleyemez; link ile karşı taraf sözleşmeyi görür)
+async function sozlesmeGonder(id,kanal){
+  var o=sozKomKayit(id); if(!o){alert('Kayıt bulunamadı');return;}
+  if(editKom&&editKom.id===id){flushKomForm();saveSaha();o=sozKomKayit(id);}
+  if(kanal==='mail'&&!sozEpostaOk((o.sz||{}).eposta)){alert('Önce e-posta adresini girin.\n(Karttaki E-posta alanı — sonra Kaydet önerilir.)');return;}
+  if(kanal==='wa'&&!sozTelWa(o.phone)){alert('Önce telefon numarasını girin (WhatsApp).');return;}
+  if(!window.__sahaUpload){alert('Depolama henüz hazır değil — sayfa yüklenince tekrar deneyin.');return;}
+  var html=sozlesmeHtml(id,{
+    otoYazdir:undefined,
+    araclar:'<button class="bp" onclick="window.print()">Yazdır / PDF</button>'
+  });
+  if(!html)return;
+  toast(kanal==='wa'?'Sözleşme hazırlanıyor (WA)…':'Sözleşme hazırlanıyor (mail)…');
+  try{
+    var ad=((o.name||'sozlesme').replace(/[^\wçğıöşüÇĞİÖŞÜ\- ]+/gi,'').trim()||'sozlesme').slice(0,48)+'-sozlesme.html';
+    var file=new File([html],ad,{type:'text/html;charset=utf-8'});
+    var up=await window.__sahaUpload(id,'sozlesme-paylas',file);
+    if(!up||!up.url)throw new Error('bağlantı alınamadı');
+    sozlesmeKanalAc(id,kanal,up.url);
+    toast(kanal==='wa'?'WhatsApp açıldı — mesajda sözleşme linki var':'E-posta taslağı açıldı — mesajda sözleşme linki var');
+  }catch(e){
+    alert('Sözleşme paylaşılamadı: '+(e.message||e)+'\n\nİsterseniz «Sözleşme İndir» ile PDF alıp elle ekleyebilirsiniz.');
+  }
+}
+// Eski ad — geriye uyumluluk (test / eski çağrılar)
+function sozlesmeHazirla(id,kanal){
+  if(kanal==='mail'||kanal==='wa')return sozlesmeGonder(id,kanal);
+  return sozlesmeIndir(id);
+}
+
 // ── Şablon düzenleme (DB.sozSablon) ──────────────────────────────────────
 function openSozSablon(key){
   var m=sozMetinKopya(key); if(!m){alert('Şablon bulunamadı');return;}
@@ -962,10 +978,10 @@ function renderSozlesme(){
     <div style="padding:12px 16px;font-size:12.5px;color:var(--slate-600);line-height:1.5">
       <div style="margin-bottom:8px"><b>Bayi</b> kaydı → Bayilik Sözleşmesi + Atama (EK-A) + KVKK · <b>Danışman</b> kaydı → Danışmanlık Sözleşmesi + KVKK. Karışmaz.</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${sablonBtns}</div>
-      <div style="color:var(--slate-400);font-size:11.5px">✎ = özel düzenleme kayıtlı. PDF / Mail / WA öncesi kişiye özel madde de ekleyebilirsiniz.</div>
+      <div style="color:var(--slate-400);font-size:11.5px">✎ = özel düzenleme kayıtlı. Kişiye özel madde karttaki Sözleşme Bilgileri bölümünden girilir.</div>
     </div></div>
     <div class="card"><div class="card-hd"><h3>Evrak Takibi — Bayi &amp; Danışman</h3><span class="hint">${tamam}/${toplam} eksiksiz</span></div>
-    <div style="padding:9px 16px;font-size:12px;color:var(--slate-500);border-bottom:1px solid var(--slate-100)"><b>PDF / Mail / WA</b> → önce kişiye özel maddeler, sonra antetli çıktı. İmzalı nüshaları buraya yükleyin. <b style="color:#16a34a">✓</b> yüklü · <b style="color:#dc2626">✕</b> eksik.</div>
+    <div style="padding:9px 16px;font-size:12px;color:var(--slate-500);border-bottom:1px solid var(--slate-100)"><b>İndir</b> antetli PDF · <b>WA / Mail</b> mesaja sözleşme linki ekler. İmzalı nüshaları buraya yükleyin. <b style="color:#16a34a">✓</b> yüklü · <b style="color:#dc2626">✕</b> eksik.</div>
     <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th><th style="text-align:center">Gönder</th></tr></thead><tbody>`;
   if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt yok. Bayi & Danışman sekmesinden ekleyin.</td></tr>`;
   arr.forEach(function(o){
@@ -979,7 +995,7 @@ function renderSozlesme(){
       <td style="text-align:center">${belgeCell(o,'kvkk')}</td>
       <td style="text-align:center">${belgeCell(o,'vergi')}</td>
       <td style="text-align:center"><span class="dur ${dt[0]===dt[1]?'dok':'dno'}">${dt[0]}/${dt[1]}</span></td>
-      <td style="text-align:center;white-space:nowrap"><button class="btn btn-sm" onclick="sozlesmeHazirla('${o.id}')" title="Özel madde + antetli PDF">PDF</button> <button class="btn btn-sm" onclick="sozlesmeHazirla('${o.id}','mail')" title="Mail ile gönder">Mail</button> <button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozlesmeHazirla('${o.id}','wa')" title="WhatsApp ile gönder">WA</button></td>
+      <td style="text-align:center;white-space:nowrap"><button class="btn btn-sm" onclick="sozlesmeIndir('${o.id}')" title="Antetli sözleşmeyi indir">İndir</button> <button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozlesmeGonder('${o.id}','wa')" title="WhatsApp ile gönder">WA</button> <button class="btn btn-sm" onclick="sozlesmeGonder('${o.id}','mail')" title="Mail ile gönder">Mail</button></td>
     </tr>`;
   });
   h+=`</tbody></table></div></div>`;
