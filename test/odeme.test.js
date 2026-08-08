@@ -2765,6 +2765,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       /function preOrdersVisible\(\)\{return isPlasiyer\(\)\?/.test(H3));
     dogru('SUNUCU: eşzamanlı ön sipariş kaybolmuyor',
       /\["preOrders", curDB\.preOrders, "ön sipariş"\]/.test(FN3));
+    dogru('ön sipariş silme AÇIK bildirilir (yoksa sunucu geri ekler)',
+      /function delPreOrder\(id\)\{[\s\S]{0,280}?silKaydet\('preOrders'/.test(H3));
+    dogru('push sil kuyruğunda preOrders var',
+      /preOrders:\(_s\.preOrders\|\|\[\]\)\.slice\(\)/.test(H3));
 
     // TARİH ARALIĞI: müşteri "12-15 Ağustos arası" diyebilir
     {

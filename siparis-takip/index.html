@@ -801,12 +801,12 @@ function canDelete(){return !!(USER&&(USER.role==='admin'||USER.siparisSil===tru
 // EŞZAMANLI DÜZENLEME KORUMASI: silme sunucuya AÇIKÇA bildirilir (blob'ta yokluk artık "sil" demek değil).
 // Böylece başkasının aynı anda eklediği kayıt, bizim bayat bloğumuz yüzünden kaybolmaz — sunucu geri ekler.
 // Kalıcı kayıt silen HER yeni yol buraya bildirmek ZORUNDA, yoksa silme sunucuda uygulanmaz.
-window.__SIL={orders:[],customers:[]};
+window.__SIL={orders:[],customers:[],preOrders:[]};
 function silKaydet(tur,id){try{(window.__SIL[tur]=window.__SIL[tur]||[]).push(String(id));}catch(e){}}
 // YEDEK GERİ YÜKLEME: yedekte OLMAYAN mevcut kayıtlar açıkça silme olarak bildirilmeli.
 // Yoksa sunucu onları "eşzamanlı ekleme" sanıp geri ekler ve geri yükleme sessizce BİRLEŞTİRMEYE döner.
 function yedekFarkiniSil(eski,yeni){try{
-  [['orders','orders'],['customers','customers']].forEach(function(t){
+  [['orders','orders'],['customers','customers'],['preOrders','preOrders']].forEach(function(t){
     var a=(eski&&eski[t[0]])||[],b=(yeni&&yeni[t[1]])||[];
     if(!Array.isArray(a)||!Array.isArray(b))return;
     var kalan=new Set(b.map(function(x){return x&&x.id;}));
@@ -1592,6 +1592,7 @@ function delPreOrder(id){
   if(!confirm('Ön sipariş silinsin mi?'))return;
   const p=preOrders().find(x=>x.id===id);
   DB.preOrders=preOrders().filter(x=>x.id!==id);
+  silKaydet('preOrders',id);   // yoksa sunucu eşzamanlı koruma ile kaydı GERİ EKLER
   logAct('Ön sipariş silindi: '+((p&&p.customer)||'?'));
   saveDB();closeModal();toast('Silindi');render();
 }
@@ -5937,8 +5938,8 @@ async function push(force){   // Faz 0.4: yazma doğrudan setDoc yerine yaz() uc
     const p={app:DOC_ID,data:collectLocal(),updated:lastUpdated};
     // AÇIK SİLME listesi: sunucu yalnız burada bildirilen kayıtları siler; blob'ta eksik olan diğerlerini geri ekler.
     const _s=window.__SIL||null;
-    const _snd=_s?{orders:(_s.orders||[]).slice(),customers:(_s.customers||[]).slice()}:null;
-    if(_snd&&(_snd.orders.length||_snd.customers.length))p.sil=_snd;
+    const _snd=_s?{orders:(_s.orders||[]).slice(),customers:(_s.customers||[]).slice(),preOrders:(_s.preOrders||[]).slice()}:null;
+    if(_snd&&(_snd.orders.length||_snd.customers.length||_snd.preOrders.length))p.sil=_snd;
     if(force===true)p.force=true;
     const body=JSON.stringify(p);
     let t=await __pAuth.currentUser.getIdToken();
@@ -5958,10 +5959,10 @@ async function push(force){   // Faz 0.4: yazma doğrudan setDoc yerine yaz() uc
       // KALICI hata (yetki yok / geçersiz veri) → silme kuyruğunu boşalt; yoksa aynı istek sonsuza dek
       // reddedilir ve o sekme BİR DAHA HİÇ kaydedemez. Geçici hatada (5xx/ağ) ve "hiç uygulanmadı"
       // hatalarında (toptan silme koruması) kuyruk KORUNUR.
-      if(r.status>=400&&r.status<500&&ht!=='toptan_silme_korumasi'&&_snd&&window.__SIL){window.__SIL.orders=[];window.__SIL.customers=[];}
+      if(r.status>=400&&r.status<500&&ht!=='toptan_silme_korumasi'&&_snd&&window.__SIL){window.__SIL.orders=[];window.__SIL.customers=[];window.__SIL.preOrders=[];}
       throw new Error('yaz '+r.status+(ht?' · '+ht:''));}
     // Gönderilen silmeler sunucuda uygulandı → kuyruktan düş (bu sırada eklenen YENİ silmeler korunur).
-    if(_snd&&window.__SIL){window.__SIL.orders=(window.__SIL.orders||[]).filter(x=>_snd.orders.indexOf(x)<0);window.__SIL.customers=(window.__SIL.customers||[]).filter(x=>_snd.customers.indexOf(x)<0);}
+    if(_snd&&window.__SIL){window.__SIL.orders=(window.__SIL.orders||[]).filter(x=>_snd.orders.indexOf(x)<0);window.__SIL.customers=(window.__SIL.customers||[]).filter(x=>_snd.customers.indexOf(x)<0);window.__SIL.preOrders=(window.__SIL.preOrders||[]).filter(x=>_snd.preOrders.indexOf(x)<0);}
     fbDot('#16A34A','Senkron');return true;
   }catch(e){console.warn('FB push',e);fbDot('#EF4444','Hata');if(force===true)throw e;return false;}}
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isSyncKey(k))_set(k,d[k]);});}finally{suppress=false;}}
