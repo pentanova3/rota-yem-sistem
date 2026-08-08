@@ -141,14 +141,27 @@
     };
   }
 
+  function safeTon(o) {
+    try { return +g().orderTon(o) || 0; } catch (e) { return 0; }
+  }
+  function safeTotal(o) {
+    try { return +g().orderTotal(o) || 0; } catch (e) { return 0; }
+  }
+  function safeTonOf(code, qty) {
+    try { return +g().tonOf(code, qty) || 0; } catch (e) { return 0; }
+  }
+  function safePlas(o) {
+    try { return g().ordPlasiyer(o); } catch (e) { return null; }
+  }
+
   function addOrder(b, o, live) {
-    var ton = g().orderTon(o) || 0;
+    var ton = safeTon(o);
     var cuval = (o.lines || []).reduce(function (s, l) { return s + (+l.qty || 0); }, 0);
     b.tonaj += ton;
     b.cuval += cuval;
     b.siparis += 1;
     if (live) {
-      b.ciro += g().orderTotal(o) || 0;
+      b.ciro += safeTotal(o);
       if (o.aliciBayi) b.bayiAracili += 1; else b.direkt += 1;
     }
     var cid = o.customerId || o.customer || '';
@@ -187,19 +200,23 @@
     var from = P.from, to = P.to;
     var out = [];
     (DB.orders || []).forEach(function (o) {
-      var pl = g().ordPlasiyer(o);
+      if (!o) return;
+      var pl = safePlas(o);
       if (!pl) return;
       if (S.plasId && pl.id !== S.plasId) return;
-      if (g().satisMi(o)) {
-        var ym = g().satisTarihi(o).slice(0, 7);
-        if (ym >= from && ym <= to) out.push({ o: o, pl: pl, ym: ym, kind: 'teslim' });
-      } else if (o.status === 'iptal') {
-        var d = String(o.date || '').slice(0, 7);
-        if (d >= from && d <= to) out.push({ o: o, pl: pl, ym: d, kind: 'iptal' });
-      } else if (o.status !== 'iptal') {
-        var d2 = String(o.date || '').slice(0, 7);
-        if (d2 >= from && d2 <= to) out.push({ o: o, pl: pl, ym: d2, kind: 'acik' });
-      }
+      try {
+        if (g().satisMi(o)) {
+          var st = String(g().satisTarihi(o) || '');
+          var ym = st.slice(0, 7);
+          if (ym.length === 7 && ym >= from && ym <= to) out.push({ o: o, pl: pl, ym: ym, kind: 'teslim' });
+        } else if (o.status === 'iptal') {
+          var d = String(o.date || '').slice(0, 7);
+          if (d.length === 7 && d >= from && d <= to) out.push({ o: o, pl: pl, ym: d, kind: 'iptal' });
+        } else if (o.status !== 'iptal') {
+          var d2 = String(o.date || '').slice(0, 7);
+          if (d2.length === 7 && d2 >= from && d2 <= to) out.push({ o: o, pl: pl, ym: d2, kind: 'acik' });
+        }
+      } catch (e) { /* bozuk sipariş satırını atla */ }
     });
     return out;
   }
@@ -247,7 +264,7 @@
       (r.o.lines || []).forEach(function (l) {
         if (!l || !l.code) return;
         var u = byUrun[l.code] || (byUrun[l.code] = { code: l.code, tonaj: 0, cuval: 0, ciro: 0, siparis: 0, musteri: {} });
-        var t = g().tonOf(l.code, l.qty);
+        var t = safeTonOf(l.code, l.qty);
         u.tonaj += t; u.cuval += (+l.qty || 0);
         if (live) {
           u.ciro += (+l.price || 0) * (+l.qty || 0);
@@ -259,8 +276,8 @@
         var m = byMusteri[mid] || (byMusteri[mid] = {
           id: r.o.customerId || '', ad: r.o.customer || '(müşteri)', tonaj: 0, ciro: 0, siparis: 0, urun: {}, plasId: id
         });
-        m.tonaj += g().orderTon(r.o) || 0;
-        m.ciro += g().orderTotal(r.o) || 0;
+        m.tonaj += safeTon(r.o);
+        m.ciro += safeTotal(r.o);
         m.siparis += 1;
         (r.o.lines || []).forEach(function (l) { if (l && l.code) m.urun[l.code] = 1; });
       }
@@ -463,10 +480,12 @@
   function yearsAvailable() {
     var ys = {};
     (g().DB.orders || []).forEach(function (o) {
-      if (!g().satisMi(o)) return;
-      if (!g().ordPlasiyer(o)) return;
-      var y = g().satisTarihi(o).slice(0, 4);
-      if (y) ys[y] = 1;
+      try {
+        if (!g().satisMi(o)) return;
+        if (!safePlas(o)) return;
+        var y = String(g().satisTarihi(o) || '').slice(0, 4);
+        if (y && y.length === 4) ys[y] = 1;
+      } catch (e) { /* skip */ }
     });
     var arr = Object.keys(ys).sort();
     if (!arr.length) arr = [String(new Date().getFullYear())];
@@ -476,7 +495,12 @@
   function html() {
     injectCss();
     ensureYil();
-    var D = build();
+    var D;
+    try { D = build(); }
+    catch (e) {
+      console.error('plasiyerRapor.build', e);
+      throw e;
+    }
     var tip = METRIK.find(function (m) { return m.k === S.metrik; }) || METRIK[0];
     var years = yearsAvailable();
     if (years.indexOf(S.yil) < 0) S.yil = years[years.length - 1];
