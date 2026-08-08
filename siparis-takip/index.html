@@ -5249,7 +5249,7 @@ function yoneticiRaporuHTML(){
   const kucukC=kucuk.reduce((a,p)=>a+(H.urunCur[p]||0),0),kucukV=kucuk.reduce((a,p)=>a+(H.urunPrev[p]||0),0);
   const paretoSatir=ana.length+(kucuk.length?1:0);
   h+=`<div class="report-grid">
-  <div class="card"><div class="card-hd"><h3>Ürün Karışımı — ${H.YCUR} YTD (Pareto)</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv pareto" style="height:${Math.max(220,paretoSatir*48+56)}px;position:relative;overflow:hidden"><canvas id="ycUrun"></canvas></div></div></div>
+  <div class="card"><div class="card-hd"><h3>Ürün Karışımı — ${H.YCUR} YTD (Pareto)</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv pareto" style="height:${Math.max(240,paretoSatir*52+64)}px;position:relative;overflow:visible"><canvas id="ycUrun"></canvas></div></div></div>
   <div class="card"><div class="card-hd" style="flex-wrap:wrap"><h3>Ürün Performansı (eş dönem)</h3><span style="font-size:11px;color:var(--slate-400);width:100%;margin-top:4px">Oca–${sonAyAdi} · &quot;Değişime Payı&quot;: ${(H.ytdCur-H.ytdPrev)<0?'+ açığı büyüten, − açığı kapatan':'+ büyümeyi taşıyan, − büyümeyi frenleyen'} (toplam %100)</span></div><div class="card-bd" style="overflow-x:auto">
   <table class="tbl"><thead><tr><th>Ürün</th><th class="num">${H.YPREV} (t)</th><th class="num">${H.YCUR} (t)</th><th class="num">Fark (t)</th><th class="num">Fark %</th><th class="num">Pay %</th><th class="num">Pay Δ</th><th class="num" title="Toplam değişimin yüzde kaçını bu ürün açıklıyor. + = değişimi aynı yönde derinleştirdi, − = ters yönde dengeledi. Sütun toplamı %100'dür.">Değişime Payı</th></tr></thead>
   <tbody>${ana.map(uRow).join('')}
@@ -5349,10 +5349,14 @@ function drawYonCharts(){
     deger.push(T(H.urunCur[p]));renk.push(i===0?'#1E3E90':'#94A3B8');});
   if(kucuk.length){const kt=kucuk.reduce((a,p)=>a+H.urunCur[p],0);kum2+=kt/Math.max(1,H.ytdCur)*100;
     etiket.push('Diğer ('+kucuk.length+') — '+fmtTon(kt/1000)+' t');deger.push(T(kt));renk.push('#CBD5E1');}
-  mk('ycUrun',{type:'bar',data:{labels:etiket,datasets:[{data:deger,backgroundColor:renk,borderRadius:3}]},
+  mk('ycUrun',{type:'bar',data:{labels:etiket,datasets:[{data:deger,backgroundColor:renk,borderRadius:3,barPercentage:.72}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,devicePixelRatio:2,
+      layout:{padding:{left:2,right:10,top:2,bottom:2}},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtTon(c.parsed.x)+' ton'}}},
-      scales:{x:{display:false},y:{ticks:{font:{size:11},autoSkip:false},grid:{display:false}}}}});
+      scales:{x:{display:false,grace:'2%'},
+        y:{ticks:{font:{size:11},autoSkip:false,padding:4},grid:{display:false},
+          // Uzun etiketler (BK-300 PLUS — …) varsayılan eksen genişliğine sığmıyor → soldan kesiliyordu.
+          afterFit:function(s){var m=0;etiket.forEach(function(t){m=Math.max(m,String(t).length);});s.width=Math.max(s.width,Math.min(460,Math.ceil(m*7.4)+20));}}}}});
 }
 
 // Yazdırmada canvas'lar keskin görüntüye dönüştürülür
