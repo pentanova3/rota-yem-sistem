@@ -315,7 +315,10 @@
     var rows = dataRows(table);
     if (!rows.length) return;
     table.dataset.taBound = '1';
-    table.classList.add('ta-on');
+    /* ta-on (table-layout:fixed) burada EKLENMEZ: fixed layout tüm sütunları eşit
+       sıkıştırıp başlıkları kesiyordu ve işlem butonları kart dışına taşıyordu.
+       Fixed layout yalnız kullanıcı sütun sürüklerse (enableResize) veya kayıtlı
+       genişlik geri yüklenirse (restoreWidths) devreye girer. */
 
     var st = {
       table: table,
