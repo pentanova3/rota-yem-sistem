@@ -19,7 +19,8 @@
       '.tbl-scroll{max-height:calc(100vh - 168px);overflow:auto;-webkit-overflow-scrolling:touch}',
       '.tbl-scroll > table.tbl > thead > tr > th,.tbl-scroll > table.t > thead > tr > th{position:sticky;top:0;z-index:3;background:var(--slate-50,#F8FAFC);box-shadow:0 1px 0 var(--slate-300,#D0D5DA)}',
       'table.tbl.ta-on{table-layout:fixed}',
-      'table.tbl.ta-on th{position:sticky;top:0;z-index:3;overflow:visible}',
+      /* overflow:visible sticky\'yi bazı motorlarda bozar — handle için th overflow clip olmasın yeter */
+      'table.tbl.ta-on th{position:sticky;top:0;z-index:3}',
       '.ta-th{display:flex;align-items:center;gap:4px;min-width:0;position:relative;padding-right:8px}',
       '.ta-th-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}',
       '.ta-filt{flex:none;width:18px;height:18px;border:none;background:transparent;border-radius:4px;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;color:var(--slate-400,#9CA2AA)}',
@@ -232,7 +233,8 @@
     var handle = document.createElement('div');
     handle.className = 'ta-handle';
     handle.title = 'Sütun genişliğini sürükle';
-    th.style.position = 'relative';
+    // position:relative YAZMA — sticky thead'i ezer, kaydırınca başlık kaybolur.
+    // sticky zaten absolute çocuk (.ta-handle) için containing block oluşturur.
     th.appendChild(handle);
     handle.addEventListener('mousedown', function (e) {
       e.preventDefault();

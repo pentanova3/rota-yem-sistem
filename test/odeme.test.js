@@ -2896,6 +2896,14 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     dogru('İMECE seçiliyken DBS rozeti ÇIKMAZ (dbsAliciAktif zaten dışlar)',
       /function dbsAliciAktif\(o\)\{return odemeTipiOf\(o\)==='dbs'&&!imeceAliciAktif\(o\);\}/.test(H4));
     dogru('rozet CSS’leri tanımlı', /\.ot-meta \.m-dbs\{/.test(H4) && /\.tip-chip\.tip-dbs\{/.test(H4));
+
+    // Sticky thead: sütun sürükleyici sticky'yi ezmesin
+    const TA = require('fs').readFileSync(require('path').join(__dirname, '..', 'tablo-arac.js'), 'utf8');
+    dogru('tablo-arac sticky thead tanımlı', /position:sticky/.test(TA) && /\.tbl-scroll\{/.test(TA));
+    dogru('sütun sürükleyici th.style.position=relative YAZMIYOR (sticky bozulmasın)',
+      !/th\.style\.position\s*=\s*['"]relative['"]/.test(TA));
+    dogru('mobil/tablet card-bd overflow tbl-scroll sticky\'yi ezmiyor',
+      /\.card-bd:not\(\.tbl-scroll\)\{overflow-x:auto\}/.test(H4));
   }
 
   sonuc();

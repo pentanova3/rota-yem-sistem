@@ -384,14 +384,15 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
   .rep-filter{flex-wrap:wrap;row-gap:8px}
   .line-tbl input,.line-tbl select{min-height:38px}
   .btn{min-height:38px}
-  .card-bd{overflow-x:auto}
+  /* tbl-scroll zaten overflow:auto — üstüne overflow-x koymak sticky başlığı bozar */
+  .card-bd:not(.tbl-scroll){overflow-x:auto}
 }
 @media(min-width:641px) and (max-width:1024px){
   .kpis{grid-template-columns:repeat(3,1fr)}
   .kpi:last-child:nth-child(3n+1){grid-column:span 3}
   .kpi:last-child:nth-child(3n+2){grid-column:span 2}
   .modal.wide{width:min(96vw,860px)}
-  .card-bd{overflow-x:auto}
+  .card-bd:not(.tbl-scroll){overflow-x:auto}
 }
 /* Rapor yazdırma: yalnız içerik basılır, kartlar bölünmez */
 @media print{
