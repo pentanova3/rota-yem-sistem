@@ -1331,6 +1331,7 @@ function render(){
 }
 // ============ PANEL ============
 const AYLAR_TR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+window.AYLAR_TR=AYLAR_TR;
 const GUN_TR=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
 let panelWeekStart=null,panelChart=null,panelGrafik=null;   // panelGrafik: 'ciro' | 'tonaj' | 'onsip'
 function orderTon(o){return (o&&Array.isArray(o.lines)?o.lines:[]).reduce((s,l)=>s+(l&&l.code?tonOf(l.code,l.qty):0),0);}
@@ -4711,6 +4712,7 @@ function silUretim(id){const u=(DB.uretimler||[]).find(x=>x.id===id);if(!u)retur
 function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k=>k.hammaddeId))].map(hammaddeById).filter(h=>hamLow(h));if(low.length)toast('⚠ Düşük stok: '+low.map(h=>h.ad).join(', '));/* TODO: Telegram entegrasyonu (alt limit altı bildirim) sonra eklenecek */}
 
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+window.AY_KISA=AY_KISA;
 const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi',bayi:'Bayi Satış'};
 const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 // ============ TONAJ & HEDEF RAPORU ============

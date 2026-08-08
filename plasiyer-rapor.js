@@ -83,6 +83,11 @@
   function fmtTL(n) { return g().fmtTL(n); }
   function fmtN(n) { return g().fmtN(n); }
   function fmtTon(n) { return g().fmtTon(n); }
+  /* const AYLAR_TR / AY_KISA window'a çıkmaz — yerelde tut */
+  var AYLAR_FALLBACK = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  var AY_KISA_FALLBACK = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  function aylarTr() { return g().AYLAR_TR || AYLAR_FALLBACK; }
+  function ayKisa() { return g().AY_KISA || AY_KISA_FALLBACK; }
 
   function todayYM() {
     var d = new Date();
@@ -102,13 +107,13 @@
   }
 
   function ayAd(ym) {
-    var A = g().AYLAR_TR || [];
+    var A = aylarTr();
     var i = +ym.slice(5, 7) - 1;
     return (A[i] || ym.slice(5, 7)) + ' ' + ym.slice(0, 4);
   }
 
   function ay3(ym) {
-    var K = g().AY_KISA || [];
+    var K = ayKisa();
     return (K[+ym.slice(5, 7) - 1] || ym.slice(5, 7)).toUpperCase();
   }
 
@@ -531,7 +536,7 @@
       h += '<select onchange="plasiyerRapor.set(\'ay\',this.value)">';
       for (var mi = 1; mi <= 12; mi++) {
         var ym = S.yil + '-' + String(mi).padStart(2, '0');
-        h += '<option value="' + ym + '"' + (S.ay === ym ? ' selected' : '') + '>' + (g().AYLAR_TR[mi - 1] || mi) + '</option>';
+        h += '<option value="' + ym + '"' + (S.ay === ym ? ' selected' : '') + '>' + (aylarTr()[mi - 1] || mi) + '</option>';
       }
       h += '</select>';
     }
@@ -554,7 +559,7 @@
         if (S.ay === ym2 && S.donem === 'ay') cls = 'on';
         var small = b && b.siparis ? fmtTon(b.tonaj) + ' t' : '—';
         h += '<div class="pr-myil-c ' + cls + '"' + (inScope && b && b.siparis ? ' onclick="plasiyerRapor.set(\'donem\',\'ay\');plasiyerRapor.set(\'ay\',\'' + ym2 + '\')"' : '') + '>' +
-          (g().AY_KISA[m - 1] || m) + '<small>' + small + '</small></div>';
+          (ayKisa()[m - 1] || m) + '<small>' + small + '</small></div>';
       }
       h += '</div>';
       h += '<div class="pr-help">Şeritteki dolu aylara tıklayınca <b>Aylık</b> görünüme geçilir. Ortalamalar dönemin ay sayısına (' + D.P.months.length + ') bölünür.</div>';
