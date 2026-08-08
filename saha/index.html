@@ -202,8 +202,13 @@ function setTab(t){
   document.getElementById('newBtn').style.display='none';
   render();
 }
+function icerikYaz(h){
+  var el=document.getElementById('content');
+  el.innerHTML=h;
+  try{if(window.tabloArac)tabloArac.bagla(el,{view:'saha-'+(tab||'x')});}catch(e){}
+}
 function render(){
-  if(MUSTERILER===null&&(tab==='musteri'||tab==='firsat')){document.getElementById('content').innerHTML='<div class="empty">Sipariş Takip\'ten müşteri verileri yükleniyor…</div>';return;}
+  if(MUSTERILER===null&&(tab==='musteri'||tab==='firsat')){icerikYaz('<div class="empty">Sipariş Takip\'ten müşteri verileri yükleniyor…</div>');return;}
   if(tab==='harita')return renderHarita();
   if(tab==='musteri')return renderMusteriHarita();
   if(tab==='firsat')return renderFirsat();
@@ -228,7 +233,7 @@ function renderHarita(){
   </div>
   <div id="detail">${detailHtml(selPlate,m)}</div></div>`;
   if(unmatched.length)h+=`<div class="card"><div class="card-hd"><h3>Şehri Eşleşmeyen Bayiler</h3><span class="hint">Sipariş Takip'te şehir alanını düzeltin</span></div><div style="padding:10px 16px;font-size:12.5px;color:var(--slate-600)">${unmatched.map(b=>`${esc(b.name)} <span style="color:var(--slate-400)">(${esc(b.city||'şehir yok')})</span>`).join(' · ')}</div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
   wireMap(renderHarita,el=>{const n=+el.dataset.n;return esc(el.dataset.ad)+(n?` · <span class="c">${n} bayi</span>`:' · bayi yok');});
 }
 function tier(n){return n>=5?'t4':n>=3?'t3':n>=2?'t2':''}
@@ -294,7 +299,7 @@ function renderMusteriHarita(){
   </div>
   <div id="detail">${musteriDetailHtml(selPlate,m)}</div></div>`;
   if(unmatched.length)h+=`<div class="card"><div class="card-hd"><h3>İli Eşleşmeyen Müşteriler</h3><span class="hint">Sipariş Takip → Müşteriler'de il seçin</span></div><div style="padding:10px 16px;font-size:12.5px;color:var(--slate-600)">${unmatched.slice(0,80).map(c=>`${esc(c.name)} <span style="color:var(--slate-400)">(${esc(c.city||'il yok')})</span>`).join(' · ')}${unmatched.length>80?' …':''}</div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
   wireMap(renderMusteriHarita,el=>{const n=+el.dataset.n;return esc(el.dataset.ad)+(n?` · <span class="c">${n} müşteri</span>`:' · müşteri yok');});
 }
 function musteriDetailHtml(plate,m){
@@ -351,7 +356,7 @@ function renderFirsat(){
       h+=`<tr style="cursor:pointer" onclick="selPlate='${r.plate}';renderFirsat()"><td class="num" style="color:var(--slate-400)">${i+1}</td><td><b>${esc(r.ad)}</b></td><td class="num"><b>${r.adet}</b></td><td class="num">${r.vol}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;min-width:70px;height:7px;background:var(--slate-100);border-radius:5px;overflow:hidden"><i style="display:block;height:100%;width:${r.skor}%;background:#EA580C"></i></div><b style="font-size:11.5px;color:var(--slate-700)">${r.skor}</b></div></td><td><span class="badge" style="background:${onc[2]};color:${onc[1]}">${onc[0]}</span></td></tr>`;});
     h+=`</tbody></table></div></div>`;
   }
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
   wireMap(renderFirsat,el=>{const p=el.dataset.plate;const o=oppCount[p];return esc(el.dataset.ad)+(o?` · <span class="c">${o} müşteri · BAYİ YOK</span>`:(bayiSet[p]?' · bayi var':' · müşteri yok'));});
 }
 
@@ -379,7 +384,7 @@ function renderListe(){
     <td style="white-space:nowrap">${(k.type==='bayi'||k.type==='danisman')?`<button class="btn btn-sm" style="${bayiPortalDurum(k.id).acik?'background:#059669;color:#fff':''}" onclick="bayiPortalModal('${k.id}')" title="Portal (giriş) erişimi">Portal</button> `:''}<button class="btn btn-sm" onclick="sozlesmeIndir('${k.id}')" title="Sözleşme paketini otomatik doldurup indir">Sözleşme</button> <button class="btn btn-sm" onclick="openKom(null,'${k.id}')">Düzenle</button></td>
   </tr>`;});
   h+=`</tbody></table></div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
 }
 
 // ====== BAYİ PORTAL ERİŞİMİ (Faz 1a) — bir bayiye giriş hesabı aç/sıfırla/kapat ======
@@ -715,7 +720,7 @@ function renderSozlesme(){
     </tr>`;
   });
   h+=`</tbody></table></div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
 }
 async function belgeYukle(komId,key,inp){
   var file=inp.files&&inp.files[0]; if(!file)return;
@@ -929,6 +934,7 @@ window.__komYonet=async function(payload){
   uygula();
 })();
 </script>
+<script src="/tablo-arac.js"></script>
 <script defer src="/surum-kontrol.js"></script>
 </body>
 </html>

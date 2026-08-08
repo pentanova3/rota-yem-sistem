@@ -1298,6 +1298,7 @@ function render(){
   else if(VIEW==='araci')renderAraci(c,tb);
   else if(VIEW==='raporlar')renderReports(c,tb);
   else if(VIEW==='ayarlar')renderSettings(c,tb);
+  try{if(window.tabloArac)tabloArac.bagla(c,{view:VIEW});}catch(e){console.warn('tabloArac',e);}
   if(_fid){const _el=document.getElementById(_fid);if(_el&&_el.focus){try{_el.focus({preventScroll:true});if(_fs!=null&&_el.setSelectionRange)_el.setSelectionRange(_fs,_fe);}catch(e){}}}
 }
 
@@ -1382,9 +1383,9 @@ function filteredOrders(){
 }
 function setStatusTab(v){filt.status=v;render()}
 function refreshOrders(){
-  if(ordSub==='cross'){var elx=document.getElementById('ordersTable');if(elx)elx.innerHTML=crossOutTable();return;}
+  if(ordSub==='cross'){var elx=document.getElementById('ordersTable');if(elx){elx.innerHTML=crossOutTable();try{if(window.tabloArac)tabloArac.bagla(elx,{view:VIEW});}catch(e){}}return;}
   const arr=filteredOrders();
-  const el=document.getElementById('ordersTable');if(el)el.innerHTML=orderTable(arr);
+  const el=document.getElementById('ordersTable');if(el){el.innerHTML=orderTable(arr);try{if(window.tabloArac)tabloArac.bagla(el,{view:VIEW});}catch(e){}}
   const cnt=document.getElementById('ordCount');if(cnt)cnt.textContent=arr.length+' Sipariş';
   const tot=document.getElementById('ordTotal');if(tot&&canSeePrice())tot.innerHTML='Toplam: <b style="color:var(--blue-900)">'+fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))+'</b>';
 }
@@ -3397,6 +3398,7 @@ window.__crossClaim=async function(qid,claimer){
 })();
 
 </script>
+<script src="/tablo-arac.js"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
 <script defer src="/surum-kontrol.js"></script>
 </body>

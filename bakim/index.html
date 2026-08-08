@@ -180,14 +180,19 @@ function setTab(t){
   render();
 }
 function newItem(){if(tab==='sozlesme')openSozlesme();else if(tab==='kitap')openKitap();else openKayit();}
+function icerikYaz(h){
+  var el=document.getElementById('content');
+  el.innerHTML=h;
+  try{if(window.tabloArac)tabloArac.bagla(el,{view:'bakim-'+(tab||'x')});}catch(e){}
+}
 function renderPBS(){
-  document.getElementById('content').innerHTML=`<div class="card"><div class="pbs-empty">
+  icerikYaz(`<div class="card"><div class="pbs-empty">
     <div class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/><circle cx="12" cy="12" r="1"/></svg></div>
     <h2>Planlı Bakım Sistemi (PBS)</h2>
     <p>Burada makineleri tek tek tanıtacak, her makine için periyodik bakım planı (yağlama, filtre, kalibrasyon, revizyon vb.) oluşturacak ve zamanı gelen bakımları buradan takip edeceğiz.</p>
     <p>Makine kartları, bakım takvimi ve otomatik hatırlatmalar bu bölümde olacak.</p>
     <span class="pbs-soon">Yakında</span>
-  </div></div>`;
+  </div></div>`);
 }
 
 // ===== Belge yardımcıları (link tabanlı) =====
@@ -215,7 +220,7 @@ function renderSozlesme(){
     <div class="kpi r"><div class="kl">Süresi Dolmuş</div><div class="kv">${dolmus}</div><div class="ks">yenilenmeli</div></div>
   </div>`;
   h+=`<div class="card"><div class="card-hd"><h3>Bakım Sözleşmeleri</h3><span class="hint">PDF için paylaşım linki (Drive vb.) ekleyin</span></div>`;
-  if(!list.length){h+=`<div class="empty">Henüz sözleşme yok. Sağ üstten <b>+ Sözleşme Ekle</b> ile firma sözleşmelerinin PDF linkini ekleyin.</div></div>`;document.getElementById('content').innerHTML=h;return;}
+  if(!list.length){h+=`<div class="empty">Henüz sözleşme yok. Sağ üstten <b>+ Sözleşme Ekle</b> ile firma sözleşmelerinin PDF linkini ekleyin.</div></div>`;icerikYaz(h);return;}
   h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Firma</th><th>Konu</th><th>Başlangıç</th><th>Bitiş</th><th>Durum</th><th>PDF</th><th></th></tr></thead><tbody>`;
   list.forEach(s=>{const st=sozStat(s);h+=`<tr>
     <td><b>${esc(s.firma||'—')}</b>${s.not?`<div style="font-size:11px;color:var(--slate-500);margin-top:2px">${esc(s.not)}</div>`:''}</td>
@@ -229,7 +234,7 @@ function renderSozlesme(){
       <button class="iconbtn del" onclick="delSozlesme('${s.id}')" title="Sil"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
     </div></td></tr>`;});
   h+=`</tbody></table></div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
 }
 function openSozlesme(id){
   const s=id?DB.sozlesmeler.find(x=>x.id===id):{firma:'',baslik:'',baslangic:'',bitis:'',link:'',not:''};
@@ -266,7 +271,7 @@ function delSozlesme(id){const s=DB.sozlesmeler.find(x=>x.id===id);if(!s)return;
 function renderKitap(){
   const list=[...DB.kitaplar].sort((a,b)=>(a.makine||'').localeCompare(b.makine||'','tr')||(a.baslik||'').localeCompare(b.baslik||'','tr'));
   let h=`<div class="card"><div class="card-hd"><h3>Bakım Kitapları · Kullanım Kılavuzları</h3><span class="hint">Büyük dosyalar Drive'da; buraya paylaşım linki eklenir</span></div>`;
-  if(!list.length){h+=`<div class="empty">Henüz kitap yok. Sağ üstten <b>+ Kitap Ekle</b> ile firmaların verdiği user manual / kılavuzların PDF linkini ekleyin.<br><span style="font-size:11.5px">İpucu: Büyük manuelleri Google Drive'a yükleyip paylaşım linkini buraya yapıştırın — yer kaplamaz.</span></div></div>`;document.getElementById('content').innerHTML=h;return;}
+  if(!list.length){h+=`<div class="empty">Henüz kitap yok. Sağ üstten <b>+ Kitap Ekle</b> ile firmaların verdiği user manual / kılavuzların PDF linkini ekleyin.<br><span style="font-size:11.5px">İpucu: Büyük manuelleri Google Drive'a yükleyip paylaşım linkini buraya yapıştırın — yer kaplamaz.</span></div></div>`;icerikYaz(h);return;}
   h+=`<div class="tbl-scroll"><table class="t"><thead><tr><th>Makine / Marka</th><th>Kitap / Kılavuz</th><th>Not</th><th>PDF</th><th></th></tr></thead><tbody>`;
   list.forEach(k=>{h+=`<tr>
     <td><span class="mtag">${esc(k.makine||'Genel')}</span></td>
@@ -278,7 +283,7 @@ function renderKitap(){
       <button class="iconbtn del" onclick="delKitap('${k.id}')" title="Sil"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
     </div></td></tr>`;});
   h+=`</tbody></table></div></div>`;
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
 }
 function openKitap(id){
   const k=id?DB.kitaplar.find(x=>x.id===id):{makine:'',baslik:'',link:'',not:''};
@@ -385,7 +390,7 @@ function render(){
   h+=`<div class="card"><div class="card-hd"><h3>Elde Olan Malzemeler</h3><button class="btn btn-sm no-print" onclick="openParca()">+ Ekle</button></div><div>${renderParca()}</div></div>`;
   h+=`</div></div>`;
 
-  document.getElementById('content').innerHTML=h;
+  icerikYaz(h);
 }
 
 function renderParca(){
@@ -526,7 +531,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
       if(tabs)tabs.style.display='none';
       var nb=document.getElementById('newBtn'); if(nb)nb.style.display='none';
       var pb=document.getElementById('printBtn'); if(pb)pb.style.display='none';
-      document.getElementById('content').innerHTML='<div class="card" style="padding:50px;text-align:center;color:#64748b;font-size:13px">Bu modülde görüntüleyebileceğiniz bölüm bulunmuyor.</div>';
+      icerikYaz('<div class="card" style="padding:50px;text-align:center;color:#64748b;font-size:13px">Bu modülde görüntüleyebileceğiniz bölüm bulunmuyor.</div>');
       return;
     }
     if(tabs)tabs.style.display='';        // izin sonradan açılırsa sekme çubuğu geri gelsin
@@ -536,6 +541,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
   if(window.__PA_USER)uygula();
 })();
 </script>
+<script src="/tablo-arac.js"></script>
 <script defer src="/surum-kontrol.js"></script>
 </body>
 </html>

@@ -85,7 +85,8 @@
     var tb = table.tBodies[0];
     if (!tb) return [];
     return Array.prototype.filter.call(tb.rows, function (tr) {
-      if (tr.querySelector('.tbl-empty,.bos')) return false;
+      if (tr.querySelector('.tbl-empty,.bos,.empty')) return false;
+      if (tr.classList && (tr.classList.contains('tbl-empty') || tr.classList.contains('empty'))) return false;
       return tr.cells.length > 1;
     });
   }
@@ -309,7 +310,7 @@
 
   function enhance(table, view) {
     if (!table || !table.tHead) return;
-    if (table.closest('.modal-bd, .modal, #modal, .line-tbl')) return;
+    if (table.closest('.modal-bd, .modal, #modal, .line-tbl, .overlay, .sz')) return;
     if (table.classList.contains('line-tbl')) return;
     if (table.dataset.taBound === '1') return;
     var rows = dataRows(table);
@@ -350,7 +351,13 @@
       bar.appendChild(meta);
       bar.appendChild(clr);
       var host = table.parentElement;
-      if (host) host.insertBefore(bar, table);
+      // Saha/Bakım: tablo .tbl-scroll içinde — arama çubuğunu kaydırma kutusunun ÜSTÜNE koy
+      if (host && host.classList.contains('tbl-scroll') && host.parentNode) {
+        host.parentNode.insertBefore(bar, host);
+        bar.style.padding = '10px 14px 0';
+      } else if (host) {
+        host.insertBefore(bar, table);
+      }
       st.meta = meta;
       st.clearBtn = clr;
       inp.addEventListener('input', function () {
@@ -376,7 +383,13 @@
       clr2.style.display = 'none';
       bar2.appendChild(meta2);
       bar2.appendChild(clr2);
-      if (table.parentElement) table.parentElement.insertBefore(bar2, table);
+      var host2 = table.parentElement;
+      if (host2 && host2.classList.contains('tbl-scroll') && host2.parentNode) {
+        host2.parentNode.insertBefore(bar2, host2);
+        bar2.style.padding = '10px 14px 0';
+      } else if (host2) {
+        host2.insertBefore(bar2, table);
+      }
       st.meta = meta2;
       st.clearBtn = clr2;
       clr2.addEventListener('click', function () {
@@ -428,7 +441,7 @@
     opts = opts || {};
     var view = opts.view || (global.VIEW || 'x');
     root = root || document.getElementById('content') || document.body;
-    var tables = root.querySelectorAll('table.tbl');
+    var tables = root.querySelectorAll('table.tbl, table.t');
     for (var i = 0; i < tables.length; i++) enhance(tables[i], view);
   }
 
