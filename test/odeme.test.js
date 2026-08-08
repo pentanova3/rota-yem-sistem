@@ -2226,6 +2226,20 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('girişte ana tutarı aşan değer reddediliyor',
         /if\(n>ana&&ana>0\)\{n=0;toast\(/.test(H));
       dogru('formda kart tutarı alanı var', /onchange="setImeceKartTutar\(this\.value\)"/.test(H));
+      // Alan PARA biçiminde yazıyor (₺ öneki + binlik ayracı). Ayrıştırma fiyatSayi ile olmalı:
+      // parseFloat("500.000") beş yüz TL okur, kart payı sessizce 1000 kat küçülürdü.
+      dogru('kart tutarı ₺ önekiyle ve binlik ayraçlı gösteriliyor',
+        /&#8378;<\/span>[\s\S]{0,200}?value="\$\{o\.imeceKartTutar\?esc\(fmtN\(o\.imeceKartTutar\)\):''\}"/.test(H));
+      dogru('girdi Türkçe para yazımıyla çözülüyor (fiyatSayi)',
+        /var n=t===''\?0:\(fiyatSayi\(t\)\|\|0\);/.test(H) && !/replace\(',','\.'\)/.test(
+          (H.match(/function setImeceKartTutar\(v\)\{[\s\S]*?\n\}/) || [''])[0]));
+      {
+        const fy = new Function((H.match(/^function fiyatSayi\(v\)\{[\s\S]*?^}/m) || [''])[0] + ';return fiyatSayi')();
+        esit('"500.000" → 500.000 TL (500 TL DEĞİL)', fy('500.000'), 500000);
+        esit('"1.234,56" → 1234,56', fy('1.234,56'), 1234.56);
+        esit('"₺500.000" → 500.000 (simge temizlenir)', fy('₺500.000'), 500000);
+        dogru('boş girdi null (tamamı kart)', fy('') === null && fy('abc') === null);
+      }
       dogru('muhasebe kartında "Karta İşlenen" sütunu', /<th class="num">Karta İşlenen<\/th>/.test(H));
       const FN = require('fs').readFileSync(require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
       dogru('SUNUCU: kart payı içerik alanı — değişirse müşteri onayı tazelenir',

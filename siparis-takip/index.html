@@ -2098,9 +2098,12 @@ function imeceBlokHTML(o,ro){
     <div style="font-size:11px;color:#5B21B6;font-weight:800;margin-bottom:7px">İMECE KART — VADE TABLOSU</div>
     <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#F8F6FF;border:1px solid #DDD6FE;border-radius:6px;padding:7px 9px">
       <label style="font-size:11.5px;font-weight:700;color:#5B21B6;white-space:nowrap">İMECE kart ile ödenecek</label>
-      <input type="number" step="0.01" min="0" value="${o.imeceKartTutar?esc(o.imeceKartTutar):''}" ${ro?'disabled':''}
-        onchange="setImeceKartTutar(this.value)" placeholder="tamamı"
-        style="width:130px;padding:5px 8px;border:1px solid #C4B5FD;border-radius:6px;font-size:12.5px;text-align:right;font-weight:700">
+      <div style="display:flex;align-items:center;border:1px solid #C4B5FD;border-radius:6px;background:${ro?'var(--slate-50)':'#fff'};overflow:hidden">
+        <span style="padding:5px 0 5px 9px;color:#5B21B6;font-weight:700;font-size:12.5px">&#8378;</span>
+        <input type="text" inputmode="decimal" value="${o.imeceKartTutar?esc(fmtN(o.imeceKartTutar)):''}" ${ro?'disabled':''}
+          onchange="setImeceKartTutar(this.value)" placeholder="tamamı"
+          style="width:118px;padding:5px 9px 5px 4px;border:0;outline:none;background:transparent;font-size:12.5px;text-align:right;font-weight:700;font-family:inherit">
+      </div>
       <span style="font-size:11px;color:var(--slate-500)">${kismi
         ? 'kalan <b style="color:var(--slate-700)">'+fmtTL(nakit)+'</b> nakit / kredi kartı — vade farkı yalnız kart tutarına işler'
         : 'boş bırakılırsa siparişin <b>tamamı</b> İMECE karta işlenir'}</span>
@@ -2121,8 +2124,11 @@ function imeceBlokHTML(o,ro){
 // büyütülürse eski değer taşımaz, küçültülürse okuma anındaki kırpma devreye girer.
 function setImeceKartTutar(v){
   if(!editOrder)return;
-  var t=String(v==null?'':v).replace(',','.').trim();
-  var n=t===''?0:round2(+t||0);
+  // Alan artık para biçiminde yazıyor (₺ öneki + binlik ayracı). fiyatSayi TÜRKÇE yazımı çözer:
+  // "500.000" → 500000 (nokta binlik), "500.000,50" → 500000.5. Ham parseFloat kullanılsaydı
+  // "500.000" beş yüz TL okunur, kart payı sessizce 1000 kat küçülürdü.
+  var t=String(v==null?'':v).trim();
+  var n=t===''?0:(fiyatSayi(t)||0);
   var ana=imeceAnaTutar(editOrder);
   if(n<0)n=0;
   if(n>ana&&ana>0){n=0;toast('Girilen tutar 1. faturayı aşıyor — tamamı İMECE sayıldı');}
