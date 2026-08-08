@@ -409,6 +409,7 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 </style>
 <script src="/vendor/xlsx/xlsx.full.min.js"></script>
 <script src="/antet-belge.js"></script>
+<script src="/tablo-arac.js"></script>
 <script type="module" src="/portal-auth.js"></script>
 </head>
 <body>
@@ -1285,6 +1286,7 @@ function render(){
   else if(VIEW==='raporlar')renderReports(c,tb);
   else if(VIEW==='ayarlar')renderSettings(c,tb);
   if(_fid){const _el=document.getElementById(_fid);if(_el&&_el.focus){try{_el.focus({preventScroll:true});if(_fs!=null&&_el.setSelectionRange)_el.setSelectionRange(_fs,_fe);}catch(e){}}}
+  try{if(window.tabloArac)tabloArac.bagla(c,{view:VIEW});}catch(e){console.warn('tabloArac',e);}
 }
 // ============ PANEL ============
 const AYLAR_TR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -1681,10 +1683,10 @@ function komSummaryHTML(){
   </div>`;
 }
 function refreshOrders(){
-  if(ordSub==='cross'){var elx=document.getElementById('ordersTable');if(elx)elx.innerHTML=crossOutTable();return;}
+  if(ordSub==='cross'){var elx=document.getElementById('ordersTable');if(elx){elx.innerHTML=crossOutTable();try{if(window.tabloArac)tabloArac.bagla(elx,{view:VIEW});}catch(e){}}return;}
   const arr=filteredOrders();
   const ks=document.getElementById('komSummary');if(ks)ks.innerHTML=komSummaryHTML();
-  const el=document.getElementById('ordersTable');if(el)el.innerHTML=orderTable(arr);
+  const el=document.getElementById('ordersTable');if(el){el.innerHTML=orderTable(arr);try{if(window.tabloArac)tabloArac.bagla(el,{view:VIEW});}catch(e){}}
   const cnt=document.getElementById('ordCount');if(cnt)cnt.textContent=arr.length+' Sipariş';
   const tot=document.getElementById('ordTotal');if(tot&&canSeePrice())tot.innerHTML='Toplam: <b style="color:var(--blue-900)">'+fmtTL(arr.reduce((s,o)=>s+orderTotal(o),0))+'</b>';
 }
@@ -3032,7 +3034,7 @@ function custTableHTML(){
   if(arsivMode)return `<div class="card-hd"><h3>${arr.length} Arşivli Müşteri</h3><span style="font-size:11px;color:var(--slate-400)">geçmişi korunur · sipariş formunda görünmez</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>İl</th><th>Arşiv Tarihi</th><th>Arşivleyen</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr style="opacity:.75"><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b>${x.bayiId?` <span style="font-size:9px;font-weight:700;background:#FEF3C7;color:#92400E;border-radius:6px;padding:1px 6px;white-space:nowrap">BAYİ MÜŞTERİSİ</span>`:''}</td><td>${x.phone?esc(x.phone):'—'}</td><td>${esc(x.city||'—')}</td><td>${x.arsivTarih?fmtDate(x.arsivTarih):'—'}</td><td>${x.arsivEden?esc(x.arsivEden):'<span style="color:var(--slate-400)">—</span>'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap">${canEdit()?`<button class="btn btn-gray btn-sm" onclick="unarsivCust('${x.id}')">Geri Al</button>`:''} ${isAdmin()?`<button class="btn btn-gray btn-sm" style="color:var(--red-700)" onclick="delCust('${x.id}')">Kalıcı Sil</button>`:''}</td></tr>`).join(''):`<tr><td colspan="6" class="tbl-empty">Arşivde müşteri yok</td></tr>`}</tbody></table></div>`;
   return `<div class="card-hd"><h3>${arr.length} Müşteri</h3></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Telefon</th><th>Adres</th><th>İl</th><th>Bayi / Danışman</th><th>Plasiyer</th><th>Firma</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${arr.length?arr.map(x=>`<tr><td onclick="openCust('${x.id}')" style="cursor:pointer"><b>${esc(x.name)}</b>${x.kaynak==='yem'?' <span class="tip-chip tip-cross" title="Yem tarafından çapraz siparişle eklendi">YEM</span>':''}${x.tip?'<div style="font-size:10px;color:var(--slate-400)">'+esc(x.tip)+'</div>':''}</td><td style="white-space:nowrap">${x.phone?`<a href="tel:${esc(String(x.phone).replace(/\\s/g,''))}" style="color:var(--blue-700);text-decoration:none;font-weight:600">${esc(x.phone)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px;max-width:180px">${x.adres?`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.adres+(x.city?' '+x.city:''))}" target="_blank" title="Google Haritalar'da aç" style="color:var(--slate-600);text-decoration:underline dotted">${esc(x.adres)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11.5px"><span onclick="ilEdit(event,this,'${x.id}')" title="İl seç / düzelt" style="cursor:pointer;border-bottom:1px dashed var(--slate-300);color:${x.city?(ilMatch(x.city)?'var(--slate-600)':'#B45309'):'var(--slate-300)'}">${esc(x.city||'— il seç —')} ▾</span></td><td>${custBagHTML(x)}</td><td>${custPlasHTML(x)}</td><td>${x.firma?`<span class="firma-${x.firma}">${x.firma}</span>`:'—'}</td><td class="num">${x.orderCount||0}</td><td style="white-space:nowrap"><button class="btn-ic" onclick="openCust('${x.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${x.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(x.phone)}','_blank')" style="color:#25D366"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td></tr>`).join(''):`<tr><td colspan="9" class="tbl-empty">Müşteri yok</td></tr>`}</tbody></table></div>`;
 }
-function refreshCust(){const el=document.getElementById('custCard');if(el)el.innerHTML=custTableHTML()}
+function refreshCust(){const el=document.getElementById('custCard');if(el){el.innerHTML=custTableHTML();try{if(window.tabloArac)tabloArac.bagla(el,{view:VIEW});}catch(e){}}}
 function exportExcel(){
   if(typeof XLSX==='undefined'){toast('Excel kütüphanesi yükleniyor, birkaç saniye sonra tekrar deneyin');return;}
   var wb=XLSX.utils.book_new();
@@ -3117,7 +3119,7 @@ function bayiMusTableHTML(){
   return `<div class="card-hd"><h3>${arr.length} Bayi Müşterisi</h3><span style="font-size:11px;color:var(--slate-400)">normal müşteri listesinde görünmez</span></div>
   <div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th>Bağlı Bayi</th><th>Telefon</th><th>Şehir</th><th class="num">Sipariş</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
-function refreshBayiMus(){const el=document.getElementById('bmCard');if(el)el.innerHTML=bayiMusTableHTML();}
+function refreshBayiMus(){const el=document.getElementById('bmCard');if(el){el.innerHTML=bayiMusTableHTML();try{if(window.tabloArac)tabloArac.bagla(el,{view:VIEW});}catch(e){}}}
 let editBayiMus=null;
 function openBayiMus(id){
   if(!canEdit()){toast('Yetkiniz yok');return}
@@ -3382,7 +3384,7 @@ function komTableHTML(){
   const assignCount={};DB.customers.forEach(c=>{if(c.bayiId)assignCount[c.bayiId]=(assignCount[c.bayiId]||0)+1;if(c.danismanId)assignCount[c.danismanId]=(assignCount[c.danismanId]||0)+1});
   return `<div class="card-hd"><h3>${arr.length} Kayıt</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ad</th><th>Tip</th><th>Şehir</th><th>Danışman</th><th>Plasiyer</th>${canSeeKomisyon()?'<th class="num">Oran</th>':''}<th>Ödeme</th><th>Telefon</th><th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${arr.length?arr.map(k=>`<tr><td><b>${esc(k.name)}</b>${k.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(k.note)}</div>`:''}</td><td>${k.type==='bayi'?'<span class="tip-chip tip-bayi">BAYİ</span>':'<span class="tip-chip tip-danisman">DANIŞMAN</span>'}</td><td style="font-size:11.5px;color:var(--slate-600)">${k.city?esc(k.city):'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11px">${k.type==='bayi'&&k.danismanId?(function(){var d=(DB.komisyoncular||[]).find(x=>x.id===k.danismanId);return d?'<span class="kom-chip kom-danisman">'+esc(d.name)+'</span>':'<span style="color:var(--slate-300)">—</span>';})():'<span style="color:var(--slate-300)">—</span>'}</td><td style="font-size:11px">${(k.type==='bayi'&&k.plasiyerId)?(function(){var p=plasById(k.plasiyerId);return p?'<span class="kom-chip kom-plasiyer">'+esc(p.name)+'</span>':'<span style="color:var(--slate-300)">—</span>';})():'<span style="color:var(--slate-300)">—</span>'}</td>${canSeeKomisyon()?`<td class="num"><b>${k.type==='danisman'?'%'+fmtN((DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT)+' iskonto':(k.rate?'%'+fmtN(k.rate)+' iskonto':'<span style=\"color:var(--slate-300)\">—</span>')}</b></td>`:''}<td>${k.odemeTipi==='dbs'?`<span class="tip-chip tip-dbs" title="DBS — iskontonun üzerine %${fmtN(dbsOranAyar())} ek indirim, her siparişte otomatik">DBS</span>`:'<span style="color:var(--slate-300)">—</span>'}</td><td>${k.phone?esc(k.phone):'<span style="color:var(--slate-300)">—</span>'}</td><td>${k.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td style="white-space:nowrap">${k.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/'+'${phoneClean(k.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>`:''}</tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Kayıt yok</td></tr>`}</tbody></table></div>`;
 }
-function refreshKom(){const el=document.getElementById('komCard');if(el)el.innerHTML=komTableHTML()}
+function refreshKom(){const el=document.getElementById('komCard');if(el){el.innerHTML=komTableHTML();try{if(window.tabloArac)tabloArac.bagla(el,{view:VIEW});}catch(e){}}}
 function renderKomisyoncular(c,tb){
   const _pl=isPlasiyer(),_me=_pl?myPlasiyer():null;
   if(_pl){   // Bayilerim: yalnız kendisine bağlı bayiler; Excel/tip filtresi yok
