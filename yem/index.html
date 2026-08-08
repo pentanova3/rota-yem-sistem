@@ -3355,7 +3355,7 @@ const cref=doc(fdb,"apps","cross");
 window.__crossSend=async function(rec){rec.targetId=rec.targetId||('cx'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));const qid='q'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);await setDoc(cref,{q:{[qid]:rec}},{merge:true});return qid;};
 window.__crossMark=async function(qid,patch){try{await setDoc(cref,{q:{[qid]:patch}},{merge:true});}catch(e){console.warn('cross mark',e);}};
 window.__crossPeek=async function(app){const s=await getDoc(doc(fdb,"apps",app));return s.exists()?((s.data()||{}).data||null):null;};
-window.__pushNow=function(){if(!hydrated)return;clearTimeout(timer);push();};  // çapraz işleme debounce beklemeden bloba yazsın
+window.__pushNow=function(){if(!hydrated)return Promise.resolve(false);clearTimeout(timer);return push();};  // güncelleme öncesi senkron için Promise döner
 // ── BAKIM köprüleri (yalnız Ayarlar → Sipariş Verilerini Sıfırla kullanır) ──
 window.__pushForce=async function(){if(!hydrated)throw new Error('senkron oturmadı — sayfayı yenileyip tekrar deneyin');clearTimeout(timer);return await push(true);};
 window.__crossClear=async function(){await setDoc(cref,{q:{}});};   // çapraz kuyruğu TAMAMEN boşalt (merge YOK) — sıfırlamadan sonra bayat kayıt kalmasın

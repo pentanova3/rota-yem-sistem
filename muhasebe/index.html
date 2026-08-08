@@ -562,6 +562,7 @@ const _set=localStorage.setItem.bind(localStorage);
 localStorage.setItem=function(k,v){_set(k,v);if(!suppress&&isKey(k))schedulePush();};
 function schedulePush(){if(!hydrated)return;clearTimeout(timer);timer=setTimeout(push,800);}
 async function push(){try{lastUpdated=Date.now();await setDoc(dref,{data:collectLocal(),updated:lastUpdated,metaUpdated:localMeta()});fbDot('#16A34A','Senkron');}catch(e){console.warn('mh push',e);fbDot('#EF4444','Hata');}}
+window.__pushNow=function(){if(!hydrated)return Promise.resolve(false);clearTimeout(timer);return push();};
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isKey(k))_set(k,d[k]);});}finally{suppress=false;}}
 let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div');dotEl.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px 10px;font:600 11px Inter,system-ui,sans-serif;color:#475569;box-shadow:0 2px 8px rgba(0,0,0,.1)';document.body.appendChild(dotEl);}dotEl.innerHTML='<span style="width:8px;height:8px;border-radius:50%;background:'+c+'"></span> '+t;}
 (async function(){

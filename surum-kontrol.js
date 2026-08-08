@@ -9,15 +9,19 @@
    yapılmış demektir → ekran kilitlenir, yenilemeden devam edilemez.
    Böylece sayfaya gömülü sürüm numarası tutmaya gerek kalmaz.
 
-   VERİ KAYBI KORUMASI: açık bir form/modal varsa ekran KİLİTLENMEZ; üstte şerit uyarı
-   çıkar ve form kapanana kadar beklenir (yarım kalan sipariş kaybolmasın).
+   VERİ KAYBI KORUMASI:
+   1) Açık form/modal varsa ekran KİLİTLENMEZ; üstte şerit uyarı çıkar.
+   2) Yenilemeden ÖNCE: tüm rota_* localStorage anahtarları acil yedeğe alınır
+      (rota_guncelleme_yedek) ve varsa __pushNow ile sunucuya senkron zorlanır.
 */
 (function () {
   'use strict';
   var DOSYA = '/surum.json';
+  var YEDEK_KEY = 'rota_guncelleme_yedek';
   var ARALIK = 90000;      // düzenli kontrol (ms)
   var GERI_SAYIM = 30;     // kilit sonrası otomatik yenilemeye kalan sn
-  var benim = null, kilitli = false, seritVar = false, sayac = null;
+  var PUSH_MAX_MS = 4500;  // senkron için en fazla bekle
+  var benim = null, kilitli = false, seritVar = false, sayac = null, yedekAlindi = false;
 
   function oku(cb) {
     try {
@@ -39,13 +43,51 @@
     return false;
   }
 
+  /* Güncelleme anında yerel acil yedek — sunucu yedeğinden bağımsız, tarayıcıda durur. */
+  function yerelYedekAl(surum) {
+    try {
+      var snap = { ts: Date.now(), surum: surum || '', path: location.pathname || '', keys: {} };
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf('rota_') !== 0) continue;
+        if (k === YEDEK_KEY) continue;   // kendini yedekleme
+        try { snap.keys[k] = localStorage.getItem(k); } catch (e) {}
+      }
+      localStorage.setItem(YEDEK_KEY, JSON.stringify(snap));
+      yedekAlindi = true;
+      return true;
+    } catch (e) {
+      console.warn('surum yerel yedek', e);
+      return false;
+    }
+  }
+
+  function senkronZorla(cb) {
+    var bitti = false;
+    function bitir() {
+      if (bitti) return; bitti = true;
+      try { cb(); } catch (e) { location.reload(); }
+    }
+    var p = null;
+    try {
+      if (typeof window.__pushNow === 'function') p = window.__pushNow();
+    } catch (e) { /* yok */ }
+    if (p && typeof p.then === 'function') {
+      var t = setTimeout(bitir, PUSH_MAX_MS);
+      p.then(function () { clearTimeout(t); bitir(); })
+        .catch(function () { clearTimeout(t); bitir(); });
+    } else {
+      setTimeout(bitir, 700);   // schedulePush debounce'una kısa şans
+    }
+  }
+
   function seritGoster() {
     if (seritVar) return; seritVar = true;
     var d = document.createElement('div');
     d.id = 'surumSerit';
     d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#B45309;color:#fff;' +
       'font:600 13px/1.4 Inter,system-ui,sans-serif;padding:9px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-    d.textContent = 'Yeni sürüm yayınlandı — açık işleminizi tamamlayın, sonra sayfa otomatik yenilenecek.';
+    d.textContent = 'Yeni sürüm yayınlandı — açık işleminizi kaydedin; yenilemeden önce otomatik yedek alınır.';
     document.body.appendChild(d);
   }
   function seritKaldir() {
@@ -57,6 +99,8 @@
   function kilitle() {
     if (kilitli) return; kilitli = true;
     seritKaldir();
+    // Kilit anında da yedek (form yoksa hemen; form varken zaten erken alınmış olabilir)
+    yerelYedekAl(benim);
     var o = document.createElement('div');
     o.id = 'surumKilit';
     o.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:rgba(12,35,64,.97);color:#fff;' +
@@ -67,7 +111,8 @@
       '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8DC2F2;margin-bottom:12px">Sistem Güncellendi</div>' +
       '<div style="font-size:21px;font-weight:700;margin-bottom:10px">Yeni sürüm yayınlandı</div>' +
       '<div style="font-size:14px;line-height:1.6;color:#C1D9F0;margin-bottom:22px">' +
-      'Çalışmaya devam edebilmek için sayfayı yenilemeniz gerekiyor. Kayıtlı verileriniz etkilenmez.' +
+      'Yenilemeden önce <b style="color:#fff">otomatik yedek</b> alınıp bekleyen kayıtlar sunucuya yazılır. ' +
+      'Ardından sayfa yenilenir — kayıtlı verileriniz korunur.' +
       '</div>' +
       '<button id="surumYenileBtn" style="background:#fff;color:#0C2340;border:0;border-radius:9px;padding:12px 26px;' +
       'font:700 14px Inter,system-ui,sans-serif;cursor:pointer">Şimdi Yenile</button>' +
@@ -89,17 +134,25 @@
     }
     var kalan = GERI_SAYIM;
     var g = document.getElementById('surumGeri');
-    if (g) g.textContent = kalan + ' saniye içinde otomatik yenilenecek';
+    if (g) g.textContent = kalan + ' saniye içinde yedeklenip yenilenecek';
     sayac = setInterval(function () {
       kalan--;
-      if (g) g.textContent = kalan + ' saniye içinde otomatik yenilenecek';
+      if (g) g.textContent = kalan + ' saniye içinde yedeklenip yenilenecek';
       if (kalan <= 0) { clearInterval(sayac); yenile(); }
     }, 1000);
   }
 
   function yenile() {
-    try { sessionStorage.setItem('rota_surum_yenileme', String(Date.now())); } catch (e) {}
-    location.reload();
+    if (sayac) { try { clearInterval(sayac); } catch (e) {} sayac = null; }
+    var g = document.getElementById('surumGeri');
+    if (g) g.textContent = 'Yedek alınıyor ve senkron yapılıyor…';
+    var btn = document.getElementById('surumYenileBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Hazırlanıyor…'; }
+    yerelYedekAl(benim);
+    senkronZorla(function () {
+      try { sessionStorage.setItem('rota_surum_yenileme', String(Date.now())); } catch (e) {}
+      location.reload();
+    });
   }
 
   function kontrol() {
@@ -108,6 +161,8 @@
       if (!v) return;                      // dosya yok / ağ hatası → sessizce geç
       if (benim === null) { benim = v; return; }   // ilk okuma: kendi sürümüm
       if (v === benim) { if (seritVar) seritKaldir(); return; }
+      // Yeni sürüm: hemen yerel yedek (form açıksa bile — yarım iş + mevcut blob korunur)
+      if (!yedekAlindi) yerelYedekAl(v);
       if (formAcikMi()) { seritGoster(); setTimeout(kontrol, 8000); return; }  // form bitsin
       kilitle();
     });

@@ -866,6 +866,7 @@ async function push(){   // Faz 0.4: yazma doğrudan setDoc yerine yaz() ucundan
     if(r.status===401||r.status===403){t=await __pAuth.currentUser.getIdToken(true);r=await fetch('https://us-central1-rota-yem.cloudfunctions.net/yaz',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});}   // bayat claim → zorla-yenile + retry
     if(!r.ok)throw new Error('yaz '+r.status);
   }catch(e){console.warn('saha push',e);}}
+window.__pushNow=function(){if(!hydrated)return Promise.resolve(false);clearTimeout(timer);return push();};
 function applyRemote(d){suppress=true;try{Object.keys(d||{}).forEach(k=>{if(isKey(k))_set(k,d[k]);});}finally{suppress=false;}}
 (async function(){
   try{const snap=await getDoc(zref);

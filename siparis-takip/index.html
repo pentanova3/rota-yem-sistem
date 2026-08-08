@@ -5721,11 +5721,12 @@ function renderSettings(c,tb){
   <div class="card"><div class="card-hd"><h3>Seçenek Listeleri</h3><span style="font-size:11px;color:var(--slate-400)">Sipariş formundaki açılır menüleri yönet</span></div><div class="card-bd" style="padding:18px" id="optsCard">${optsManagerHTML()}</div></div>
   <div class="card"><div class="card-hd"><h3>Kayıtlı Şoförler</h3><button class="btn btn-pri btn-sm" onclick="openDriver()">+ Şoför</button></div><div class="card-bd">${driversTableHTML()}</div></div>
   <div class="card"><div class="card-hd"><h3>Veri Yedekleme</h3></div><div class="card-bd" style="padding:18px">
-    <p style="font-size:12.5px;color:var(--slate-600);margin-bottom:14px">Tüm verileri (siparişler, müşteriler, ürünler) JSON dosyası olarak yedekleyin veya geri yükleyin. <b>Düzenli yedek alın</b> — tarayıcı verisi silinirse yedekten geri yüklenebilir.</p>
+    <p style="font-size:12.5px;color:var(--slate-600);margin-bottom:14px">Tüm verileri (siparişler, müşteriler, ürünler) JSON dosyası olarak yedekleyin veya geri yükleyin. <b>Düzenli yedek alın</b> — tarayıcı verisi silinirse yedekten geri yüklenebilir. Zorunlu sürüm güncellemesinde de otomatik yerel yedek alınır.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-grn" onclick="exportData()">Yedek İndir (JSON)</button>
       <button class="btn btn-gray" onclick="document.getElementById('importFile').click()">⬆ Yedek Yükle</button>
       <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(this)">
+      ${acilYedekButonHTML()}
     </div>
     <div style="margin-top:16px;font-size:11.5px;color:var(--slate-500)">Veri kaynağı: ${esc(DB.meta.source||'manuel')} · İçe aktarım: ${esc(DB.meta.imported||'—')} · ${DB.orders.length} sipariş, ${DB.customers.length} müşteri</div>
   </div></div>
@@ -5796,6 +5797,9 @@ function delDriver(id){
   logAct('Şoför silindi: '+(d?d.name:id));saveDB();closeModal();toast('Silindi');render()
 }
 function exportData(){const blob=new Blob([JSON.stringify(DB)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='rota_siparis_yedek_'+todayISO()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},800);toast('Yedek indirildi')}
+function acilYedekOku(){try{const raw=localStorage.getItem('rota_guncelleme_yedek');if(!raw)return null;const d=JSON.parse(raw);if(!d||!d.keys)return null;return d;}catch(e){return null}}
+function acilYedekButonHTML(){const d=acilYedekOku();if(!d)return '';const t=d.ts?new Date(d.ts).toLocaleString('tr-TR'):'—';return `<button class="btn btn-gray" onclick="exportAcilYedek()" title="Son zorunlu güncelleme öncesi alınan tarayıcı yedeği">Acil Yedek İndir (${esc(t)})</button>`}
+function exportAcilYedek(){const d=acilYedekOku();if(!d){toast('Güncelleme yedeği yok');return}const blob=new Blob([JSON.stringify(d)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='rota_guncelleme_yedek_'+(d.ts?new Date(d.ts).toISOString().slice(0,10):todayISO())+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},800);toast('Acil yedek indirildi')}
 function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.orders||!d.customers)throw 0;if(!confirm('Mevcut veriler bu yedekle değiştirilecek. Emin misiniz?'))return;yedekFarkiniSil(DB,d);DB=d;DB.users=DB.users||[{username:'admin',role:'admin',name:'Yönetici'}];saveDB();toast('Yedek yüklendi');render()}catch(err){toast('Geçersiz yedek dosyası')}};r.readAsText(f);inp.value=''}
 // ============ INIT ============
 loadDB();
@@ -5980,7 +5984,7 @@ const cref=doc(fdb,"apps","cross");
 window.__crossSend=async function(rec){rec.targetId=rec.targetId||('cx'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));const qid='q'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);await setDoc(cref,{q:{[qid]:rec}},{merge:true});return qid;};
 window.__crossMark=async function(qid,patch){try{await setDoc(cref,{q:{[qid]:patch}},{merge:true});}catch(e){console.warn('cross mark',e);}};
 window.__crossPeek=async function(app){const s=await getDoc(doc(fdb,"apps",app));return s.exists()?((s.data()||{}).data||null):null;};
-window.__pushNow=function(){if(!hydrated)return;clearTimeout(timer);push();};  // çapraz işleme debounce beklemeden bloba yazsın
+window.__pushNow=function(){if(!hydrated)return Promise.resolve(false);clearTimeout(timer);return push();};  // güncelleme öncesi senkron için Promise döner
 // ── BAKIM köprüleri (yalnız Ayarlar → Sipariş Verilerini Sıfırla kullanır) ──
 window.__pushForce=async function(){if(!hydrated)throw new Error('senkron oturmadı — sayfayı yenileyip tekrar deneyin');clearTimeout(timer);return await push(true);};
 window.__crossClear=async function(){await setDoc(cref,{q:{}});};   // çapraz kuyruğu TAMAMEN boşalt (merge YOK) — sıfırlamadan sonra bayat kayıt kalmasın
