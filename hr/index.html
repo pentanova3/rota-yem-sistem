@@ -5265,7 +5265,7 @@ function sozGovde(text){
 //  • Yan marjlar @page'de DEĞİL içerik hücresinde → bantlar kenardan kenara, metin 14mm içeride
 //  • print-color-adjust:exact → bordo/altın bant baskıda solmaz
 //  • Başlıklarda page-break-after:avoid → başlık sayfa sonunda yalnız kalmaz
-//  • @page margin:0 → tarayıcının kendi üst/alt bilgisi (tarih-saat, başlık, about:blank) BASILMAZ
+//  • @page üst/yan 0; altta 6.5mm sayfa-no şeridi (içeriği taşırmaz). Tarayıcı tarih/URL basılmaz.
 // o: {baslik, icerik | sayfalar[], css, bar, pad, otoYazdir}
 function antetBelge(o){
   o=o||{};
@@ -5277,7 +5277,8 @@ function antetBelge(o){
   const govde=sf.map((x,i)=>{const ic=(x&&typeof x==='object')?(x.ic||''):x, sinif=(x&&typeof x==='object'&&x.sinif)?' '+x.sinif:'';
     return `<table class="sheet${sinif}"${i?' style="page-break-before:always"':''}>${headCell}${footCell}<tbody><tr><td class="icerik">${ic}</td></tr></tbody></table>`;}).join('');
   return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>${esc(o.baslik||'Belge')}</title><style>
-@page{size:A4;margin:0}
+@page{size:A4;margin:0 0 6.5mm 0;
+  @bottom-center{content:counter(page) " / " counter(pages);font-family:Calibri,Carlito,'Segoe UI',sans-serif;font-size:8pt;font-weight:600;color:#2A3A70;vertical-align:middle;letter-spacing:.04em}}
 *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 html,body{margin:0;padding:0;background:#fff}
 body{font-family:Calibri,Carlito,'Segoe UI',Candara,sans-serif;color:#111;font-size:11pt;line-height:1.45}

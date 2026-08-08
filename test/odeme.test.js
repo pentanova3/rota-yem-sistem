@@ -2031,7 +2031,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       const yasak = (portal.ignore || []).some((p) => /antet/i.test(p));
       dogru('antet dosyaları hosting ignore listesinde DEĞİL', !yasak);
 
-      dogru('@page A4 + sıfır marj (marj içerik hücresinde)', /@page\{size:A4;margin:0\}/.test(AB));
+      dogru('@page A4 — üst/yan 0, altta sayfa-no şeridi',
+        /@page\{size:A4;margin:0 0 \$\{SAYFA_NO_MM\}mm 0/.test(AB) && /@bottom-center\{/.test(AB) && /counter\(page\)/.test(AB) && /counter\(pages\)/.test(AB));
       dogru('yan marj içerik hücresinde (bantlar kenardan kenara)', /td\.icerik\{padding:0 \$\{YAN_MM\}mm/.test(AB));
       dogru('baskıda renk korunuyor (lacivert bantlar solmasın)', /print-color-adjust:exact/.test(AB));
       dogru('alt bant baskıda fixed (yarım sayfada dibe otursun)', /@media print\{[\s\S]*?\.alt\{position:fixed\}/.test(AB));

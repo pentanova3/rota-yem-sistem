@@ -14,8 +14,10 @@
           fiziksel dibine oturur.
      Tek parça yapılırsa ya metin antedin üstüne biner ya da son sayfada
      bant ortada asılı kalır.
-   • @page{margin:0} + yan marjlar İÇERİK HÜCRESİNDE (td.icerik padding).
-     Marj @page'e verilirse bantlar kenardan kopar, antet ortada yüzer.
+   • @page üst/yan marj = 0 (bantlar kenardan kenara). YALNIZ altta küçük
+     sayfa-no şeridi (SAYFA_NO_MM) — @bottom-center ile "n / N". Bu şerit
+     sayfa kutusunun DIŞINDA olduğu için içeriği ve alt bandı taşırmaz.
+   • Yan marjlar İÇERİK HÜCRESİNDE (td.icerik padding).
    • print-color-adjust:exact → lacivert bantlar/başlıklar baskıda solmaz.
    • Görseller MUTLAK yolla verilir: belge window.open('','_blank') ile açılan
      about:blank penceresine yazılıyor; göreli yol orada ÇÖZÜLMEZ (sessizce
@@ -29,6 +31,7 @@
   var UST_MM = 34.55;   // üst bandın basılı yüksekliği (3307×544 px @400dpi)
   var ALT_MM = 28.33;   // alt bandın basılı yüksekliği (3307×446 px @400dpi)
   var YAN_MM = 15;      // sol/sağ marj — antet bantları kenardan kenara gider
+  var SAYFA_NO_MM = 6.5; // @page alt şerit — sayfa numarası (Chrome 131+ margin box)
 
   function kok() {
     // about:blank penceresinde location.origin yok sayılır; opener'ınki kullanılır.
@@ -41,7 +44,16 @@
   }
 
   var STIL = `
-  @page{size:A4;margin:0}
+  /* Üst/yan 0 → antet kenardan kenara. Alt şerit yalnız sayfa no için;
+     içerik alanını kısaltır, altyer/alt bant rezervini bozmaz (taşırmaz). */
+  @page{size:A4;margin:0 0 ${SAYFA_NO_MM}mm 0;
+    @bottom-center{
+      content:counter(page) " / " counter(pages);
+      font-family:"Segoe UI",Calibri,Carlito,"Helvetica Neue",Arial,sans-serif;
+      font-size:8pt;font-weight:600;color:#2A3A70;vertical-align:middle;
+      letter-spacing:.04em;
+    }
+  }
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
     --lac:#2A3A70;          /* antet laciverti */
@@ -251,6 +263,7 @@
 
   window.antetBelge.UST_MM = UST_MM;
   window.antetBelge.ALT_MM = ALT_MM;
+  window.antetBelge.SAYFA_NO_MM = SAYFA_NO_MM;
 
   /** Belgeyi yeni sekmede açar. Pop-up engelliyse null döner. */
   window.antetBelgeAc = function (html) {
