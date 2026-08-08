@@ -2830,9 +2830,125 @@ function delProd(id){
 let repYil='';let _repChart=null;let repTab='genel';let repMusteriQ='';
 function repSekmeler(){
   const b=(k,l)=>`<button class="btn ${repTab===k?'':'btn-gray'}" style="${repTab===k?'background:var(--blue-800);color:#fff':''}" onclick="repTab='${k}';render()">${l}</button>`;
-  return `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${b('genel','Genel Rapor')}${b('musteri','Müşteri Raporu')}${isAdmin()?b('plasiyer','Plasiyer Raporu'):''}</div>`;
+  return `<div class="rep-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${b('genel','Genel Rapor')}${b('musteri','Müşteri Raporu')}${isAdmin()?b('plasiyer','Plasiyer Raporu'):''}</div>`;
 }
-function renderReports(c){
+// ---- RAPORLAR → ANTETLİ ÇIKTI (TMR ile aynı antet-belge.js) ----
+function raporYazdir(){
+  if(!window.antetBelge||!window.antetBelgeAc){window.print();return}
+  var src=document.getElementById('content');
+  if(!src){window.print();return}
+  var cl=src.cloneNode(true);
+  var cs=src.querySelectorAll('canvas'),cc=cl.querySelectorAll('canvas');
+  for(var i=0;i<cc.length;i++){
+    var img=document.createElement('img');img.className='prn-chart';
+    try{img.src=cs[i].toDataURL('image/png');}catch(e){}
+    if(img.src&&img.src.length>200){
+      var host=cc[i].parentNode;
+      host.replaceChild(img,cc[i]);
+      host.style.height='auto';host.style.minHeight='0';host.style.overflow='visible';host.style.position='relative';
+    }else{var kb=cc[i].closest('.card');if(kb)kb.remove();}
+  }
+  cl.querySelectorAll('.rep-tabs,.rep-filter,.filters,.ta-bar,button,.ta-filt,.ta-handle,.no-print').forEach(function(el){el.remove();});
+  cl.querySelectorAll('select').forEach(function(s){var sp=document.createElement('span');sp.textContent=(s.options[s.selectedIndex]||{}).text||'';sp.style.fontWeight='600';s.parentNode.replaceChild(sp,s);});
+  cl.querySelectorAll('input').forEach(function(inp){var sp=document.createElement('span');sp.textContent=(inp.value!==''&&inp.value!=null)?inp.value:'—';sp.style.fontWeight='600';inp.parentNode.replaceChild(sp,inp);});
+  // Açıklama/dipnot kartları (· Brüt …) yönetim PDF'ine girmez
+  cl.querySelectorAll('.card').forEach(function(k){
+    var bd=k.querySelector('.card-bd'); if(!bd||k.querySelector('.card-hd'))return;
+    var t=(bd.textContent||'').trim(); if(/^·\s*Brüt|^·\s*Her sipariş/.test(t))k.remove();
+  });
+  var yillar=typeof orderYears==='function'?orderYears():[];
+  var yil=repYil||yillar[0]||String(new Date().getFullYear());
+  var adlar={genel:'Genel Rapor',musteri:'Müşteri Raporu',plasiyer:'Plasiyer Raporu'};
+  var ad=adlar[repTab]||'Rapor';
+  var alt=yil+' · Yem siparişleri';
+  var kunye=[{k:'Yıl',v:yil},{k:'Sekme',v:ad},{k:'Hazırlayan',v:(USER&&USER.name)||'—'}];
+  if(repTab==='musteri'&&repMusteriQ)kunye.splice(2,0,{k:'Arama',v:repMusteriQ});
+  var stil='<style>'+
+    '.prnrap{--slate-50:#F8FAFC;--slate-100:#F1F5F9;--slate-200:#E2E8F0;--slate-300:#CBD5E1;--slate-400:#94A3B8;--slate-500:#64748B;--slate-600:#475569;--slate-700:#334155;--slate-900:#0F172A;--blue-50:#EFF6FF;--blue-100:#DBEAFE;--blue-600:#2563EB;--blue-700:#1D4ED8;--blue-800:#1E40AF;--blue-900:#1E3A8A;--green-700:#15803D;--red-700:#B91C1C;--amber-700:#B45309}'+
+    '.prnrap .report-grid,.prnrap .report-grid3{display:block}'+
+    '.prnrap .report-grid>.card,.prnrap .report-grid3>.card{display:block;width:100%;clear:both;margin-top:6mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}'+
+    '.prnrap .card{margin-top:5mm;overflow:hidden}'+
+    '.prnrap .card-hd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:1mm 4mm;border-bottom:1px solid #DCE1EE;padding-bottom:1.2mm;margin-bottom:2mm;break-after:avoid;page-break-after:avoid}'+
+    '.prnrap .card-hd h3{font-size:8.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2A3A70;width:100%}'+
+    '.prnrap .card-hd h3 span,.prnrap .card-hd>span{display:block;width:100%;text-transform:none;letter-spacing:0;font-weight:500;color:#6A7288;font-size:7.5pt;margin-top:.5mm}'+
+    '.prnrap .card-bd{overflow:visible!important;padding:0!important}'+
+    '.prnrap .kpis{display:flex;flex-wrap:wrap;gap:2mm;margin-top:3mm}'+
+    '.prnrap .kpi{flex:1 1 30%;min-width:46mm;border:1px solid #DCE1EE;border-top:2px solid #2A3A70;background:#F2F4FA;padding:2mm 3mm;break-inside:avoid}'+
+    '.prnrap .kpi .kl,.prnrap .kpi-l{font-size:6.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6A7288;margin:0}'+
+    '.prnrap .kpi .kl::before,.prnrap .kpi-l::before{display:none}'+
+    '.prnrap .kpi .kv,.prnrap .kpi-n{font-size:12pt!important;font-weight:700;color:#1F2C57;font-variant-numeric:tabular-nums}'+
+    '.prnrap .kpi .ks,.prnrap .kpi>div[style*="font-size:10"]{font-size:7pt;color:#6A7288}'+
+    '.prnrap table.tbl{width:100%;border-collapse:collapse;font-size:7.5pt!important}'+
+    '.prnrap table.tbl thead{display:table-header-group}'+
+    '.prnrap table.tbl th{background:#2A3A70;color:#fff;font-size:6.3pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1.3mm 1.5mm;text-align:left;position:static!important}'+
+    '.prnrap table.tbl th.num{text-align:right}'+
+    '.prnrap table.tbl td{padding:1.1mm 1.5mm;border-bottom:1px solid #EDEFF6;vertical-align:top;position:static!important}'+
+    '.prnrap table.tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+    '.prnrap table.tbl tbody tr:nth-child(even) td{background:#F8F9FD}'+
+    '.prnrap table.tbl tr{break-inside:avoid;page-break-inside:avoid}'+
+    '.prnrap table.tbl tfoot{display:table-row-group}'+
+    '.prnrap table.tbl tfoot td{background:#E7EBF6;font-weight:700;border-top:1.5px solid #2A3A70}'+
+    '.prnrap .prn-chart{width:100%;height:auto;max-height:95mm;object-fit:contain;display:block;break-inside:avoid;margin:0 0 2mm}'+
+    '.prnrap .chart-cv,.prnrap .chart-cv.pareto,.prnrap [style*="height"]{height:auto!important;min-height:0!important;overflow:visible!important}'+
+    '.prnrap .badge{display:inline-block;font-size:6.3pt;font-weight:700;border-radius:2px;padding:0 1mm;background:#E7EBF6;color:#1F2C57}'+
+    '.prnrap .tbl-empty{text-align:center;color:#9AA1B4;font-style:italic;padding:4mm}'+
+    '.prnrap .sub-hd{font-size:8pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2A3A70;margin:4mm 0 2mm;border-bottom:1px solid #DCE1EE;padding-bottom:1mm}'+
+    '</style>';
+  var html=window.antetBelge({
+    tip:'Rota Yem — Yem Raporları',
+    ad:ad,
+    altad:alt,
+    kunye:kunye,
+    govde:stil+'<div class="prnrap">'+cl.innerHTML+'</div>',
+    araclar:'<button class="bp" onclick="window.print()">Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button>',
+    imzaSol:'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş. — yem sipariş sisteminden üretilmiştir.',
+    imzaSag:'Belge tarihi: '+new Date().toLocaleString('tr-TR'),
+    baslikEtiket:ad+(alt?' · '+alt:'')
+  });
+  if(!window.antetBelgeAc(html)){toast('Pop-up engellendi — tarayıcıda izin verin');return}
+  toast('Antetli rapor hazır');
+}
+function raporModalYazdir(){
+  if(!window.antetBelge||!window.antetBelgeAc){window.print();return}
+  var modal=document.querySelector('#modalRoot .modal');
+  if(!modal){window.print();return}
+  var hd=modal.querySelector('.modal-hd h2');
+  var bd=modal.querySelector('.modal-bd');
+  if(!bd){window.print();return}
+  var cl=bd.cloneNode(true);
+  cl.querySelectorAll('button,.no-print').forEach(function(el){el.remove();});
+  var ad=(hd&&hd.textContent||'Detay').trim();
+  var stil='<style>'+
+    '.prnrap .kpis{display:flex;flex-wrap:wrap;gap:2mm;margin-top:2mm}'+
+    '.prnrap .kpi{flex:1 1 28%;min-width:40mm;border:1px solid #DCE1EE;border-top:2px solid #2A3A70;background:#F2F4FA;padding:2mm 3mm}'+
+    '.prnrap .kpi-l{font-size:6.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6A7288;margin:0}'+
+    '.prnrap .kpi-l::before{display:none}'+
+    '.prnrap .kpi-n{font-size:11pt;font-weight:700;color:#1F2C57}'+
+    '.prnrap .sub-hd{font-size:8pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#2A3A70;margin:4mm 0 2mm;border-bottom:1px solid #DCE1EE;padding-bottom:1mm}'+
+    '.prnrap table.tbl{width:100%;border-collapse:collapse;font-size:7.5pt!important}'+
+    '.prnrap table.tbl thead{display:table-header-group}'+
+    '.prnrap table.tbl th{background:#2A3A70;color:#fff;font-size:6.3pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1.3mm 1.5mm;text-align:left}'+
+    '.prnrap table.tbl th.num,.prnrap table.tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+    '.prnrap table.tbl td{padding:1.1mm 1.5mm;border-bottom:1px solid #EDEFF6}'+
+    '.prnrap table.tbl tbody tr:nth-child(even) td{background:#F8F9FD}'+
+    '.prnrap .badge{display:inline-block;font-size:6.3pt;font-weight:700;border-radius:2px;padding:0 1mm;background:#E7EBF6;color:#1F2C57}'+
+    '</style>';
+  var html=window.antetBelge({
+    tip:'Rota Yem — Yem Raporları',
+    ad:ad,
+    altad:'Detay döküm',
+    kunye:[{k:'Hazırlayan',v:(USER&&USER.name)||'—'}],
+    govde:stil+'<div class="prnrap">'+cl.innerHTML+'</div>',
+    araclar:'<button class="bp" onclick="window.print()">Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button>',
+    imzaSol:'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş. — yem sipariş sisteminden üretilmiştir.',
+    imzaSag:'Belge tarihi: '+new Date().toLocaleString('tr-TR'),
+    baslikEtiket:ad
+  });
+  if(!window.antetBelgeAc(html)){toast('Pop-up engellendi — tarayıcıda izin verin');return}
+  toast('Antetli detay hazır');
+}
+function renderReports(c,tb){
+  if(tb)tb.innerHTML=`<button class="btn btn-gray" onclick="raporYazdir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   if(repTab==='musteri'){renderMusteriRaporu(c);return;}
   if(repTab==='plasiyer'&&isAdmin()){renderPlasiyerRaporu(c);return;}
   renderGenelRapor(c);
@@ -2950,7 +3066,7 @@ function musteriDetay(id,ad,yil){
       <td>${statusBadge(o.status)}</td></tr>`).join('')}
     </tbody></table>
   </div>
-  <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-gray" onclick="window.print()">Yazdır</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+  <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-gray" onclick="raporModalYazdir()">Yazdır</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
 }
 
@@ -3046,7 +3162,7 @@ function plasiyerDetay(id,yil){
     ${sip.map(o=>`<tr><td><b>#Y${o.no}</b></td><td style="white-space:nowrap">${fmtDate(o.date)}</td><td>${esc(o.customer||'—')}</td><td class="num">${fmtN(orderCuval(o))}</td>${showPrice?`<td class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}<td>${statusBadge(o.status)}</td></tr>`).join('')||`<tr><td colspan="${showPrice?6:5}" class="tbl-empty">—</td></tr>`}
     </tbody></table>
   </div>
-  <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-gray" onclick="window.print()">Yazdır</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
+  <div class="modal-ft"><div></div><div style="display:flex;gap:8px"><button class="btn btn-gray" onclick="raporModalYazdir()">Yazdır</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
   </div></div>`;
 }
 
@@ -3398,6 +3514,7 @@ window.__crossClaim=async function(qid,claimer){
 })();
 
 </script>
+<script src="/antet-belge.js"></script>
 <script src="/tablo-arac.js"></script>
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}</script>
 <script defer src="/surum-kontrol.js"></script>

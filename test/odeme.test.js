@@ -2019,6 +2019,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       const KOK = require('path').join(__dirname, '..');
       const AB = fsx.readFileSync(KOK + '/antet-belge.js', 'utf8');
       dogru('antet-belge.js siparis-takip sayfasına bağlı', /<script src="\/antet-belge\.js"><\/script>/.test(H));
+      const YEMH = fsx.readFileSync(KOK + '/yem/index.html', 'utf8');
+      dogru('antet-belge.js yem sayfasına bağlı', /<script src="\/antet-belge\.js"><\/script>/.test(YEMH));
+      dogru('yem raporYazdir antetli çıktı kullanıyor', /function raporYazdir\(\)/.test(YEMH) && /antetBelge\(/.test(YEMH) && /onclick="raporYazdir\(\)"/.test(YEMH));
+      dogru('yem rapor sekmeleri rep-tabs sınıfı taşıyor', /class="rep-tabs"/.test(YEMH));
       dogru('antet görselleri depoda duruyor',
         fsx.existsSync(KOK + '/antet-ust.png') && fsx.existsSync(KOK + '/antet-alt.png'));
       dogru('antet görselleri gerçek (>40 KB, boş yer tutucu değil)',
