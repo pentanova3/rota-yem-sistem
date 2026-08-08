@@ -3525,10 +3525,16 @@ function openPlasDetay(id,tip){
   let body='';
   if(tip==='bayi'){
     const list=plasBayilerOf(id);
-    body=list.length?`<table class="tbl"><thead><tr><th>Bayi</th><th>Şehir</th><th class="num">İskonto</th><th>Danışman</th><th class="num">Müşteri</th></tr></thead><tbody>${list.map(k=>{
-      const dan=k.danismanId?komById(k.danismanId):null;
+    // Plasiyerin danışmanı olmaz — Danışman sütunu yok. Bayi adına tıklayınca bayi kartı açılır.
+    body=list.length?`<table class="tbl"><thead><tr><th>Bayi</th><th>Şehir</th><th class="num">İskonto</th><th class="num">Müşteri</th><th></th></tr></thead><tbody>${list.map(k=>{
       const mus=(DB.customers||[]).filter(x=>!x.arsiv&&x.bayiId===k.id).length;
-      return `<tr><td><b>${esc(k.name)}</b></td><td style="font-size:11.5px">${esc(k.city||'—')}</td><td class="num">${(+k.ozelIskonto||+k.rate)?bayiIskEtiket(k.ozelIskonto,k.rate,{kisa:1}):'—'}</td><td style="font-size:11.5px">${dan?esc(dan.name):'—'}</td><td class="num">${mus}</td></tr>`;
+      return `<tr style="cursor:pointer" onclick="closeModal();openKom('bayi','${k.id}')" title="Bayi kartını aç">
+        <td><b style="color:var(--blue-800);text-decoration:underline dotted">${esc(k.name)}</b></td>
+        <td style="font-size:11.5px">${esc(k.city||'—')}</td>
+        <td class="num">${(+k.ozelIskonto||+k.rate)?bayiIskEtiket(k.ozelIskonto,k.rate,{kisa:1}):'—'}</td>
+        <td class="num">${mus}</td>
+        <td><button class="btn btn-gray btn-sm" onclick="event.stopPropagation();closeModal();openKom('bayi','${k.id}')">Kart</button></td>
+      </tr>`;
     }).join('')}</tbody></table>`:'<div class="tbl-empty" style="padding:28px">Bağlı bayi yok — Saha → Bayi kartı → Bağlı Plasiyer</div>';
   }else{
     const list=plasMusterilerOf(id);
