@@ -2096,6 +2096,62 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('B rozeti dipnotta açıklanıyor', /<b class="kk">B<\/b> işaretli satırlar bayi üzerinden/.test(H));
     }
 
+    // ══ 35 · CSP × DIŞ SCRIPT — "XLSX is not defined" sınıfı sessiz arıza ═══════════════
+    // Sayfa CSP'de izinli olmayan bir hosttan script çekerse tarayıcı onu ENGELLER;
+    // sayfa açılır, özellik kullanılana kadar da kimse fark etmez. Excel yüklemede
+    // tam bunu yaşadık (jsdelivr script-src'de yok → XLSX tanımsız).
+    {
+      const fsx = require('fs'), pth = require('path');
+      const KOK = pth.join(__dirname, '..');
+      const FB = JSON.parse(fsx.readFileSync(KOK + '/firebase.json', 'utf8'));
+      const portal = FB.hosting.find((x) => x.target === 'portal');
+      const csp = (portal.headers || []).flatMap((h) => h.headers || [])
+        .find((h) => /content-security-policy/i.test(h.key)).value;
+      const izinli = (csp.match(/script-src ([^;]+)/) || [])[1].split(/\s+/)
+        .filter((x) => /^https?:\/\//.test(x));
+      dogru('CSP script-src okunabildi', izinli.length > 0);
+
+      // portal hedefinin YAYIMLADIĞI html'ler (ignore listesindekiler hariç)
+      const HARIC = /node_modules|\/functions\/|musteri-site|bayi-site|\/onay\/|\/bilgi\/|\/test\/|sizma-provasi|\/\./;
+      const html = [];
+      (function tara(d) {
+        fsx.readdirSync(d, {withFileTypes: true}).forEach((e) => {
+          const p = pth.join(d, e.name);
+          if (HARIC.test(p + '/')) return;
+          if (e.isDirectory()) tara(p); else if (/\.html$/.test(e.name)) html.push(p);
+        });
+      })(KOK);
+      dogru('taranan sayfa var', html.length > 3, html.length + ' sayfa');
+
+      const ihlal = [];
+      html.forEach((p) => {
+        const src = fsx.readFileSync(p, 'utf8');
+        (src.match(/<script[^>]+src="(https?:\/\/[^"]+)"/g) || []).forEach((tag) => {
+          const url = tag.match(/src="([^"]+)"/)[1];
+          const host = url.match(/^https?:\/\/[^/]+/)[0];
+          if (!izinli.some((a) => a === host)) ihlal.push(pth.relative(KOK, p) + ' → ' + host);
+        });
+      });
+      // Bilinen, HÂLÂ AÇIK olanlar: bu kütüphanelerin yerel kopyası depoda yok.
+      // Liste KÜÇÜLMELİ; büyürse test patlar (yeni bir sessiz arıza eklenmiş demektir).
+      const BILINEN = [
+        'muhasebe/index.html → https://cdn.jsdelivr.net',            // Chart.js
+        'haftalik-toplanti/index.html → https://cdnjs.cloudflare.com', // docx
+        'saha/index.html → https://cdnjs.cloudflare.com',            // jszip
+        'saha/index.html → https://cdn.jsdelivr.net',                // pizzip
+        'saha/index.html → https://cdn.jsdelivr.net',                // docxtemplater
+      ];
+      const yeni = ihlal.filter((x) => {
+        const i = BILINEN.indexOf(x); if (i < 0) return true; BILINEN.splice(i, 1); return false;
+      });
+      dogru('CSP’nin engelleyeceği YENİ dış script yok', !yeni.length, yeni.join(' | ') || '—');
+      dogru('sipariş takip xlsx’i yerelden yüklüyor (CSP’yi geçsin)',
+        /<script src="\/vendor\/xlsx\/xlsx\.full\.min\.js"><\/script>/.test(H));
+      dogru('yerel xlsx kopyası depoda ve gerçek boyutta',
+        fsx.existsSync(KOK + '/vendor/xlsx/xlsx.full.min.js') &&
+        fsx.statSync(KOK + '/vendor/xlsx/xlsx.full.min.js').size > 500000);
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
