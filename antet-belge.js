@@ -121,7 +121,10 @@
   table.t.sik td{padding:3px 4px}
   table.t.sik tfoot td{padding:5px 4px}
   .ad{font-weight:600}
-  .kk{font-weight:700;color:var(--lac);padding-left:2px}   /* † bayi üzerinden işareti */
+  /* "B" = bayi üzerinden. Düz harf bırakılırsa bayi ADININ parçası sanılır
+     ("Altınova Yem B"); rozet olarak basılıyor. */
+  .kk{display:inline-block;font-size:6.5pt;font-weight:700;line-height:1.5;color:#fff;background:var(--lac);
+      border-radius:2px;padding:0 3px;margin-left:3px;vertical-align:1px}
 
   /* ── kutucuklar (çeyrek vb.) ───────────────────────────────────────── */
   .kutular{display:flex;gap:6px;break-inside:avoid}

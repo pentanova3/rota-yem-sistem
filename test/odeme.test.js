@@ -2077,8 +2077,19 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /onclick="tariffPDF\('\$\{pl\.id\}',1\)"/.test(H));
       dogru('bayi dökümünde ilave iskontonun İÇERİDE olduğu yazıyor',
         /İlave iskonto ayrıca eklenmez/.test(H));
-      dogru('bayi üzerinden satış hançerle işaretli (satırı ikiye katlayan etiket değil)',
-        /r\.viaBayi\?'<span class="kk">&dagger;<\/span>':''/.test(H));
+      // &nbsp; ŞART: rozet bayi adının son kelimesine bağlı değilse alt satıra düşüyor,
+      // satır yüksekliği ikiye katlanıyor (kaldırılan "BAYİ ÜZERİNDEN" etiketinin aynı hatası).
+      dogru('bayi üzerinden satış B rozetiyle işaretli',
+        /r\.viaBayi\?'&nbsp;<span class="kk">B<\/span>':''/.test(H));
+      dogru('rozet bayi adına bağlı (alt satıra düşmesin)',
+        /viaBayi\?'&nbsp;<span class="kk">B/.test(H));
+      dogru('11 sütunlu döküm A4 içerik genişliğine (180 mm) sığıyor', (function () {
+        var m = H.match(/<colgroup>((?:<col style="width:[\d.]+mm">)+)<\/colgroup>/);
+        if (!m) return false;
+        var t = (m[1].match(/[\d.]+(?=mm)/g) || []).reduce(function (s2, x) { return s2 + parseFloat(x); }, 0);
+        return t > 175 && t <= 180.5;
+      })());
+      dogru('B rozeti dipnotta açıklanıyor', /<b class="kk">B<\/b> işaretli satırlar bayi üzerinden/.test(H));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
