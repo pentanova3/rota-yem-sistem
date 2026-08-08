@@ -5249,8 +5249,8 @@ function yoneticiRaporuHTML(){
   const kucukC=kucuk.reduce((a,p)=>a+(H.urunCur[p]||0),0),kucukV=kucuk.reduce((a,p)=>a+(H.urunPrev[p]||0),0);
   const paretoSatir=ana.length+(kucuk.length?1:0);
   h+=`<div class="report-grid">
-  <div class="card"><div class="card-hd"><h3>Ürün Karışımı — ${H.YCUR} YTD (Pareto)</h3></div><div class="card-bd" style="padding:14px"><div style="height:${paretoSatir*32+40}px;position:relative"><canvas id="ycUrun"></canvas></div></div></div>
-  <div class="card"><div class="card-hd"><h3>Ürün Performansı (eş dönem)</h3><span style="font-size:11px;color:var(--slate-400)">Oca–${sonAyAdi} · &quot;Değişime Payı&quot;: ${(H.ytdCur-H.ytdPrev)<0?'+ açığı büyüten, − açığı kapatan':'+ büyümeyi taşıyan, − büyümeyi frenleyen'} (toplam %100)</span></div><div class="card-bd" style="overflow-x:auto">
+  <div class="card"><div class="card-hd"><h3>Ürün Karışımı — ${H.YCUR} YTD (Pareto)</h3></div><div class="card-bd" style="padding:14px"><div class="chart-cv pareto" style="height:${Math.max(220,paretoSatir*48+56)}px;position:relative;overflow:hidden"><canvas id="ycUrun"></canvas></div></div></div>
+  <div class="card"><div class="card-hd" style="flex-wrap:wrap"><h3>Ürün Performansı (eş dönem)</h3><span style="font-size:11px;color:var(--slate-400);width:100%;margin-top:4px">Oca–${sonAyAdi} · &quot;Değişime Payı&quot;: ${(H.ytdCur-H.ytdPrev)<0?'+ açığı büyüten, − açığı kapatan':'+ büyümeyi taşıyan, − büyümeyi frenleyen'} (toplam %100)</span></div><div class="card-bd" style="overflow-x:auto">
   <table class="tbl"><thead><tr><th>Ürün</th><th class="num">${H.YPREV} (t)</th><th class="num">${H.YCUR} (t)</th><th class="num">Fark (t)</th><th class="num">Fark %</th><th class="num">Pay %</th><th class="num">Pay Δ</th><th class="num" title="Toplam değişimin yüzde kaçını bu ürün açıklıyor. + = değişimi aynı yönde derinleştirdi, − = ters yönde dengeledi. Sütun toplamı %100'dür.">Değişime Payı</th></tr></thead>
   <tbody>${ana.map(uRow).join('')}
   ${kucuk.length?`<tr style="color:var(--slate-500)"><td>Diğer (${kucuk.length} ürün, pay &lt; %2)</td><td class="num">${t(kucukV)}</td><td class="num">${t(kucukC)}</td><td class="num">${(kucukC-kucukV>=0?'+':'−')+t(Math.abs(kucukC-kucukV))}</td><td class="num">${kucukV>0?fmtPct((kucukC-kucukV)/kucukV*100):'—'}</td><td class="num">%${fmtN(kucukC/Math.max(1,H.ytdCur)*100)}</td><td class="num">${(H.ytdPrev>0&&H.ytdCur>0)?fmtPp(kucukC/H.ytdCur*100-kucukV/H.ytdPrev*100):'—'}</td><td class="num" style="font-weight:600">${katkiPay(kucukC-kucukV)}</td></tr>`:''}
@@ -5378,8 +5378,12 @@ function raporYazdir(){
   for(var i=0;i<cc.length;i++){
     var img=document.createElement('img');img.className='prn-chart';
     try{img.src=cs[i].toDataURL('image/png');}catch(e){}
-    if(img.src&&img.src.length>200)cc[i].parentNode.replaceChild(img,cc[i]);
-    else{var kb=cc[i].closest('.card');if(kb)kb.remove();}   // çizilmemiş grafik → boş kart basma
+    if(img.src&&img.src.length>200){
+      var host=cc[i].parentNode;
+      host.replaceChild(img,cc[i]);
+      // Sabit yükseklik + taşan Chart.js çizimi alttaki kartın üstüne biniyordu — baskıda kutuyu serbest bırak.
+      host.style.height='auto';host.style.minHeight='0';host.style.overflow='visible';host.style.position='relative';
+    }else{var kb=cc[i].closest('.card');if(kb)kb.remove();}   // çizilmemiş grafik → boş kart basma
   }
   // Etkileşimli / ekrana özgü öğeler
   cl.querySelectorAll('.rep-tabs,.rep-filter,.ta-bar,button,.ta-filt,.ta-handle,.no-print').forEach(function(el){el.remove();});
@@ -5409,10 +5413,11 @@ function raporYazdir(){
   var stil='<style>'+
     '.prnrap{--slate-50:#F8FAFC;--slate-100:#F1F5F9;--slate-200:#E2E8F0;--slate-300:#CBD5E1;--slate-400:#94A3B8;--slate-500:#64748B;--slate-600:#475569;--slate-700:#334155;--slate-900:#0F172A;--blue-50:#EFF6FF;--blue-100:#DBEAFE;--blue-600:#2563EB;--blue-700:#1D4ED8;--blue-800:#1E40AF;--blue-900:#1E3A8A;--green-700:#15803D;--red-700:#B91C1C;--amber-700:#B45309}'+
     '.prnrap .report-grid,.prnrap .report-grid3{display:block}'+
-    '.prnrap .card{margin-top:5mm;break-inside:auto}'+
-    '.prnrap .card-hd{display:flex;justify-content:space-between;align-items:baseline;gap:4mm;border-bottom:1px solid #DCE1EE;padding-bottom:1.2mm;margin-bottom:2mm;break-after:avoid;page-break-after:avoid}'+
-    '.prnrap .card-hd h3{font-size:8.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2A3A70}'+
-    '.prnrap .card-hd h3 span,.prnrap .card-hd>span{text-transform:none;letter-spacing:0;font-weight:500;color:#6A7288;font-size:7.5pt}'+
+    '.prnrap .report-grid>.card,.prnrap .report-grid3>.card{display:block;width:100%;clear:both;margin-top:6mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}'+
+    '.prnrap .card{margin-top:5mm;overflow:hidden}'+
+    '.prnrap .card-hd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:1mm 4mm;border-bottom:1px solid #DCE1EE;padding-bottom:1.2mm;margin-bottom:2mm;break-after:avoid;page-break-after:avoid}'+
+    '.prnrap .card-hd h3{font-size:8.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2A3A70;width:100%}'+
+    '.prnrap .card-hd h3 span,.prnrap .card-hd>span{display:block;width:100%;text-transform:none;letter-spacing:0;font-weight:500;color:#6A7288;font-size:7.5pt;margin-top:.5mm}'+
     '.prnrap .card-bd{overflow:visible!important;padding:0!important}'+
     '.prnrap .kpis{display:flex;flex-wrap:wrap;gap:2mm;margin-top:3mm}'+
     '.prnrap .kpi{flex:1 1 30%;min-width:46mm;border:1px solid #DCE1EE;border-top:2px solid #2A3A70;background:#F2F4FA;padding:2mm 3mm;break-inside:avoid}'+
@@ -5429,8 +5434,8 @@ function raporYazdir(){
     '.prnrap table.tbl tr{break-inside:avoid;page-break-inside:avoid}'+
     '.prnrap table.tbl tfoot{display:table-row-group}'+
     '.prnrap table.tbl tfoot td{background:#E7EBF6;font-weight:700;border-top:1.5px solid #2A3A70}'+
-    '.prnrap .prn-chart{width:100%;max-height:80mm;object-fit:contain;display:block;break-inside:avoid}'+
-    '.prnrap .chart-cv{height:auto!important}'+
+    '.prnrap .prn-chart{width:100%;height:auto;max-height:95mm;object-fit:contain;display:block;break-inside:avoid;margin:0 0 2mm}'+
+    '.prnrap .chart-cv,.prnrap .chart-cv.pareto,.prnrap [style*="height"]{height:auto!important;min-height:0!important;overflow:visible!important}'+
     '.prnrap .badge{display:inline-block;font-size:6.3pt;font-weight:700;border-radius:2px;padding:0 1mm;background:#E7EBF6;color:#1F2C57}'+
     '.prnrap .kom-chip{font-size:6.3pt;font-weight:700}'+
     '.prnrap .tbl-empty{text-align:center;color:#9AA1B4;font-style:italic;padding:4mm}'+
