@@ -15,6 +15,9 @@
       '.ta-meta{font-size:11px;color:var(--slate-400,#9CA2AA);white-space:nowrap;font-weight:600}',
       '.ta-clear{font-size:11px;padding:5px 9px;border:1px solid var(--slate-300,#D0D5DA);border-radius:6px;background:#fff;color:var(--slate-600,#535A65);cursor:pointer;font-weight:600}',
       '.ta-clear:hover{background:var(--slate-50,#FAFBFD)}',
+      /* Kaydırırken sütun başlığı görünür kalsın — overflow-x:auto sticky\'yi kırdığı için tablo ayrı kutuda kayar */
+      '.tbl-scroll{max-height:calc(100vh - 168px);overflow:auto;-webkit-overflow-scrolling:touch}',
+      '.tbl-scroll > table.tbl > thead > tr > th,.tbl-scroll > table.t > thead > tr > th{position:sticky;top:0;z-index:3;background:var(--slate-50,#F8FAFC);box-shadow:0 1px 0 var(--slate-300,#D0D5DA)}',
       'table.tbl.ta-on{table-layout:fixed}',
       'table.tbl.ta-on th{position:sticky;top:0;z-index:3;overflow:visible}',
       '.ta-th{display:flex;align-items:center;gap:4px;min-width:0;position:relative;padding-right:8px}',
@@ -308,6 +311,24 @@
     return true;
   }
 
+  /** Sticky thead için tabloyu kaydırılabilir .tbl-scroll kutusuna alır (arama çubuğu üstte kalır). */
+  function ensureTblScroll(table) {
+    var host = table.parentElement;
+    if (!host || host.classList.contains('tbl-scroll')) return;
+    if (table.closest('.modal-bd, .modal, #modal, #modalRoot, .line-tbl, .overlay, .sz')) return;
+    try {
+      var st = window.getComputedStyle(host);
+      if (st.maxHeight && st.maxHeight !== 'none' && (st.overflowY === 'auto' || st.overflowY === 'scroll')) {
+        host.classList.add('tbl-scroll');
+        return;
+      }
+    } catch (e) { /* ignore */ }
+    var wrap = document.createElement('div');
+    wrap.className = 'tbl-scroll';
+    host.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  }
+
   function enhance(table, view) {
     if (!table || !table.tHead) return;
     if (table.closest('.modal-bd, .modal, #modal, .line-tbl, .overlay, .sz')) return;
@@ -316,6 +337,7 @@
     var rows = dataRows(table);
     if (!rows.length) return;
     table.dataset.taBound = '1';
+    ensureTblScroll(table);
     /* ta-on (table-layout:fixed) burada EKLENMEZ: fixed layout tüm sütunları eşit
        sıkıştırıp başlıkları kesiyordu ve işlem butonları kart dışına taşıyordu.
        Fixed layout yalnız kullanıcı sütun sürüklerse (enableResize) veya kayıtlı
