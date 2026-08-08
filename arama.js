@@ -95,8 +95,10 @@ function orderKomisyon(o,kom){
     let prim=0;
     if(o.aliciBayi){
       const bayi=ordBayi(o);if(!bayi)return {tutar:0};
+      const bOzel=(o.ozelIskonto!=null&&o.ozelIskonto!=='')?+o.ozelIskonto:(+bayi.ozelIskonto||0);
       const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPL(o);
-      (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);if(fab>0&&torb>0)prim+=(fab*(1-bRate/100)-torb*(1-isk/100))*(+l.qty||0);});
+      const bCarpan=(1-bOzel/100)*(1-bRate/100);
+      (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);if(fab>0&&torb>0)prim+=(fab*bCarpan-torb*(1-isk/100))*(+l.qty||0);});
       return {tutar:prim,viaBayi:true};
     }
     (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const liste=p?(+p.danismanListe||0):0;const satis=lineUnit(l,o.fiyatKademe);if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);});
@@ -516,7 +518,7 @@ function ansBayiDanisman(q){
     const musSay=D().customers.filter(c=>tip==='bayi'?c.bayiId===k.id:c.danismanId===k.id).length;
     return card((tip==='bayi'?'Bayi':'Teknik Danışman')+' — '+esc(k.name),
       row('Şehir',esc(k.city||'—'))+row('Telefon',telLink(k.phone))+row('Adres',mapsLink({adres:k.adres||(k.sz&&k.sz.adres)||'',city:k.city}))+
-      (tip==='bayi'?row('İskonto Oranı','%'+fmtN(k.rate||0)):'')+(dan?row('Bağlı Danışman',esc(dan.name)):'')+row('Atanmış Müşteri',musSay+' müşteri')+
+      (tip==='bayi'?row('İskonto Oranı',(+k.ozelIskonto>0?('%'+fmtN(k.ozelIskonto)+' özel + %'+fmtN(k.rate||0)+' iskonto'):('%'+fmtN(k.rate||0)))):'')+(dan?row('Bağlı Danışman',esc(dan.name)):'')+row('Atanmış Müşteri',musSay+' müşteri')+
       `<a class="ka-link" href="saha/">Saha modülünde aç →</a>`);}
   if(/kimler|listesi|hepsi|tum|kac (tane )?bayi|kac (tane )?danisman/.test(n)||qt.length<=1){
     const rows=list.slice(0,30).map(k=>`<tr><td><b>${esc(k.name)}</b></td><td>${esc(k.city||'—')}</td><td>${esc(k.phone||'—')}</td></tr>`).join('');
@@ -600,7 +602,7 @@ function ansKomisyon(q){
   if(mt){const k=mt.item;
     if(k.type==='danisman'){const h=danismanHakedis(k.id);return card('Danışman Hakedişi — '+esc(k.name),row('Hak Edilen (toplam)',fmtTL(h.hak))+row('Ödenen',fmtTL(h.odenen))+row('Kalan Bakiye',`<span class="ka-big" style="color:${h.bakiye>0?'#B91C1C':'#15803d'}">${fmtTL(h.bakiye)}</span>`)+row('Sipariş',h.adet+' adet')+`<div class="ka-note">Prim fatura karşılığı ödenir · <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
     const yil=new Date().getFullYear();const A=bayiAlimOzet(k.id,yil);
-    return card('Bayi İskonto Raporu — '+esc(k.name)+' ('+yil+')',row('Alım',A.adet+' sipariş · '+fmtTL(A.fatura))+row('Yararlanılan İskonto (%'+fmtN(k.rate||0)+')',`<span class="ka-big" style="color:#B45309">${fmtTL(A.iskonto)}</span>`)+`<div class="ka-sub">Çeyrek kırılımı</div>`+['Ç1 (Oca–Mar)','Ç2 (Nis–Haz)','Ç3 (Tem–Eyl)','Ç4 (Eki–Ara)'].map((cl,i)=>row(cl,fmtTL(A.ceyrek[i]))).join('')+`<div class="ka-note">Bayi iskontosu fatura anında uygulanır; birikme yoktur. <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
+    return card('Bayi İskonto Raporu — '+esc(k.name)+' ('+yil+')',row('Alım',A.adet+' sipariş · '+fmtTL(A.fatura))+row('Yararlanılan İskonto'+(+k.ozelIskonto>0?(' (%'+fmtN(k.ozelIskonto)+' özel + %'+fmtN(k.rate||0)+')'):(' (%'+fmtN(k.rate||0)+')')),`<span class="ka-big" style="color:#B45309">${fmtTL(A.iskonto)}</span>`)+`<div class="ka-sub">Çeyrek kırılımı</div>`+['Ç1 (Oca–Mar)','Ç2 (Nis–Haz)','Ç3 (Tem–Eyl)','Ç4 (Eki–Ara)'].map((cl,i)=>row(cl,fmtTL(A.ceyrek[i]))).join('')+`<div class="ka-note">Bayi iskontosu fatura anında uygulanır; birikme yoktur. <a href="siparis-takip/#komisyon">İskonto &amp; Komisyon</a></div>`);}
   const ds=D().koms.filter(k=>k.type==='danisman').map(k=>({k,h:danismanHakedis(k.id)})).filter(x=>x.h.adet>0);
   if(!ds.length)return null;
   const rows=ds.sort((a,b)=>b.h.bakiye-a.h.bakiye).map(({k,h})=>`<tr><td>${esc(k.name)}</td><td class="n">${fmtTL(h.hak)}</td><td class="n">${fmtTL(h.odenen)}</td><td class="n" style="font-weight:700">${fmtTL(h.bakiye)}</td></tr>`).join('');

@@ -2478,7 +2478,9 @@ exports.komisyoncuYonet = onRequest({region: "us-central1", cors: true, secrets:
         name: ad.slice(0, 160), type: tip,
         city: String(k.city || "").slice(0, 80), phone: String(k.phone || "").slice(0, 40),
         adres: String(k.adres || "").slice(0, 300), note: String(k.note || "").slice(0, 300),
-        rate: Math.max(0, Math.min(100, +k.rate || 0)), active: k.active !== false,
+        rate: Math.max(0, Math.min(100, +k.rate || 0)),
+        ozelIskonto: tip === "bayi" ? Math.max(0, Math.min(100, +k.ozelIskonto || 0)) : 0,
+        active: k.active !== false,
         // Ödeme tipi: "" normal | "dbs" (iskonto üzerine ek indirim) | "imece" (vadeli, kredi kartı fiyatından).
         // TEK alan → DBS ve İMECE aynı bayide birlikte olamaz. Bilinmeyen değer normale düşer.
         // İMECE artık kart özelliği DEĞİL, sipariş kararı → komisyoncu kartında yalnız "dbs" kabul edilir.
@@ -2563,13 +2565,15 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
     if (!DB) { res.status(500).json({hata: "veri yok"}); return; }
     const bayiKaydi = (DB.komisyoncular || []).find((k) => k.id === bayiId && k.type === "bayi");
     const rate = (bayiKaydi && +bayiKaydi.rate) || 0;
-    // Bayi net birim fiyatı = fabrika × (1 − bayi iskontosu). Fabrika aktif tarifeden, yoksa üründen.
+    const ozelIskonto = (bayiKaydi && +bayiKaydi.ozelIskonto) || 0;
+    // Bayi net = fabrika × (1−özel) × (1−iskonto). Fabrika aktif tarifeden, yoksa üründen.
     const aktifPL = (DB.priceLists || []).find((x) => x.id === (DB.meta && DB.meta.activePriceListId)) || (DB.priceLists || []).find((x) => x.active) || null;
     const fabOf = (code) => {
       if (aktifPL) { const it = (aktifPL.items || []).find((x) => String(x.code || "").toLowerCase() === String(code).toLowerCase()); if (it && +it.fabrika) return +it.fabrika; }
       const p = (DB.products || []).find((x) => x.code === code); return p ? (+p.fabrika || 0) : 0;
     };
-    const bayiNet = (code) => Math.round(fabOf(code) * (1 - rate / 100) * 100) / 100;
+    const bayiCarpan = (1 - ozelIskonto / 100) * (1 - rate / 100);
+    const bayiNet = (code) => Math.round(fabOf(code) * bayiCarpan * 100) / 100;
 
     // ---- POST: yeni bayi siparişi (KENDİSİ için, 'beklemede' → iç onaya düşer) ----
     if (req.method === "POST") {
@@ -2706,7 +2710,7 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
       const yeni = {
         id: "o" + Date.now().toString(36) + Math.floor(Math.random() * 1000),
         no: 0, date: nowISO.slice(0, 10), createdAt: nowISO, teslimTarihi,
-        aliciBayi: true, bayiId, fiyatKademe: "bayi", komisyonRate: rate,
+        aliciBayi: true, bayiId, fiyatKademe: "bayi", komisyonRate: rate, ozelIskonto: ozelIskonto,
         danismanId: (bayiKaydi && bayiKaydi.danismanId) || "",
         komisyoncuId: (bayiKaydi && bayiKaydi.danismanId) || bayiId,
         plasiyerId: (bayiKaydi && bayiKaydi.plasiyerId) || "",
@@ -2767,9 +2771,11 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         // kredi kartı tabanını, elle girilen fiyatı ve tarifeyi doğru görür). Damga yoksa (damga
         // öncesi eski kayıt) tersine hesaba düşülür; tersine hesap İMECE/elle fiyatta yanılabilir.
         const r2 = +o.komisyonRate || 0;
+        const oz2 = +o.ozelIskonto || 0;
+        const carpan2 = (1 - oz2 / 100) * (1 - r2 / 100);
         let brut = 0;
         (o.lines || []).forEach((l) => {
-          const liste = (+l.liste) || ((r2 > 0 && r2 < 100 && +l.price) ? (+l.price) / (1 - r2 / 100) : (+l.price || 0));
+          const liste = (+l.liste) || ((carpan2 > 0 && carpan2 < 1 && +l.price) ? (+l.price) / carpan2 : (+l.price || 0));
           brut += liste * (+l.qty || 0);
         });
         out.brut = Math.round((+o.brutListe > 0) ? (+o.brutListe) : brut);

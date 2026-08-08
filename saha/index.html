@@ -258,7 +258,7 @@ function detailHtml(plate,m){
   return `<div class="detail"><div class="detail-hd"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span class="dt">${esc(PROV[plate].ad)}</span><span class="dc">${list.length} bayi</span></div>
     <div class="detail-bd">${list.map(b=>`<div class="dealer"><div class="dn">${esc(b.name)}</div><div class="dm">
       <span class="tag tag-bayi">BAYİ</span>
-      ${b.rate?`<span class="rate">%${esc(b.rate)} iskonto</span>`:''}
+      ${(+b.ozelIskonto>0&&+b.rate>0)?`<span class="rate">%${esc(b.ozelIskonto)} özel + %${esc(b.rate)} iskonto</span>`:(b.ozelIskonto?`<span class="rate">%${esc(b.ozelIskonto)} özel iskonto</span>`:(b.rate?`<span class="rate">%${esc(b.rate)} iskonto</span>`:''))}
       ${b.city?`<span>📍 ${esc(b.city)}</span>`:''}
       ${b.phone?`<a href="tel:${esc(String(b.phone).replace(/\s/g,''))}" style="color:#174B82;text-decoration:none;font-weight:700">📞 ${esc(b.phone)}</a>`:''}
       <span class="badge ${b.active!==false?'b-on':'b-off'}">${b.active!==false?'Aktif':'Pasif'}</span>
@@ -373,7 +373,7 @@ function renderListe(){
     <td>${esc(k.city||'—')}</td>
     <td>${k.type==='bayi'&&k.danismanId?(function(){var d=(DB.komisyoncular||[]).find(x=>x.id===k.danismanId);return d?`<span class="tag tag-dan" style="font-size:10px">${esc(d.name)}</span>`:'<span style="color:var(--slate-400)">—</span>';})():'<span style="color:var(--slate-300)">—</span>'}</td>
     <td>${k.type==='bayi'&&k.plasiyerId?(function(){var p=plasAdi(k.plasiyerId);return p?`<span class="tag" style="font-size:10px;background:#ECFEFF;color:#0E7490;border:1px solid #A5F3FC">${esc(p)}</span>`:'<span style="color:var(--slate-400)">—</span>';})():'<span style="color:var(--slate-400)">—</span>'}</td>
-    <td>${k.rate?`<span class="rate">%${esc(k.rate)} iskonto</span>`:'<span style="color:var(--slate-400)">—</span>'}</td>
+    <td>${(+k.ozelIskonto>0&&+k.rate>0)?`<span class="rate">%${esc(k.ozelIskonto)} özel + %${esc(k.rate)}</span>`:(k.ozelIskonto?`<span class="rate">%${esc(k.ozelIskonto)} özel</span>`:(k.rate?`<span class="rate">%${esc(k.rate)} iskonto</span>`:'<span style="color:var(--slate-400)">—</span>'))}</td>
     <td>${esc(k.phone||'—')}</td>
     <td><span class="badge ${k.active!==false?'b-on':'b-off'}">${k.active!==false?'Aktif':'Pasif'}</span></td>
     <td style="white-space:nowrap">${(k.type==='bayi'||k.type==='danisman')?`<button class="btn btn-sm" style="${bayiPortalDurum(k.id).acik?'background:#059669;color:#fff':''}" onclick="bayiPortalModal('${k.id}')" title="Portal (giriş) erişimi">Portal</button> `:''}<button class="btn btn-sm" onclick="sozlesmeIndir('${k.id}')" title="Sözleşme paketini otomatik doldurup indir">Sözleşme</button> <button class="btn btn-sm" onclick="openKom(null,'${k.id}')">Düzenle</button></td>
@@ -500,7 +500,8 @@ function renderKomModal(){
       </div>
       <div class="fld"><label>Adres <span style="font-weight:500;color:var(--slate-400)">— aramada ve haritada Google Haritalar bağlantısı olur</span></label><input id="k_adres" value="${esc(o.adres||'')}" placeholder="Mahalle, cadde, no, ilçe..."></div>
       <div class="fld-row">
-        <div class="fld"><label>İskonto Oranı (%)</label><input id="k_rate" type="number" step="0.1" value="${o.rate||''}" placeholder="Örn. 3"></div>
+        <div class="fld"><label>Özel İskonto (%)</label><input id="k_ozel" type="number" step="0.1" min="0" max="100" value="${o.ozelIskonto||''}" placeholder="Örn. 6"><div style="font-size:10.5px;color:var(--slate-400);margin-top:3px">Alım tutarından önce uygulanır</div></div>
+        <div class="fld"><label>İskonto Oranı (%)</label><input id="k_rate" type="number" step="0.1" value="${o.rate||''}" placeholder="Örn. 4"><div style="font-size:10.5px;color:var(--slate-400);margin-top:3px">Özel varsa kalan tutardan; yoksa düz iskonto</div></div>
         <div class="fld"><label>Ödeme Tipi</label><select id="k_odemeTipi">
           <option value="" ${!o.odemeTipi?'selected':''}>Normal</option>
           <option value="dbs" ${o.odemeTipi==='dbs'?'selected':''}>DBS</option>
@@ -528,6 +529,7 @@ async function saveKom(){
   o.phone=V('k_phone');
   o.adres=V('k_adres');
   o.rate=parseFloat(document.getElementById('k_rate').value)||0;
+  var _oz=document.getElementById('k_ozel');o.ozelIskonto=(o.type==='bayi'&&_oz)?(parseFloat(_oz.value)||0):0;
   var _ot=document.getElementById('k_odemeTipi');   // '' normal · dbs · imece (tek alan → ikisi birlikte seçilemez)
   o.odemeTipi=(_ot&&['dbs','imece'].indexOf(_ot.value)>=0)?_ot.value:'';
   o.note=V('k_note');
@@ -546,7 +548,7 @@ async function saveKom(){
   }
   o.sz=sz;
   // ÇEKİRDEK → ANA liste (apps/siparis, tek kaynak). sz/belgeler yerelde (apps/saha) kalır. Yeni kayıtta id'yi sunucu verir.
-  const core={id:o.id||undefined,name:o.name,type:o.type,city:o.city,phone:o.phone,adres:o.adres,note:o.note,rate:o.rate,active:o.active,danismanId:o.danismanId,plasiyerId:o.plasiyerId,odemeTipi:o.odemeTipi||''};   // odemeTipi ŞART: gönderilmezse sunucu beyaz listesi boş sayıp DBS/İMECE seçimini siler
+  const core={id:o.id||undefined,name:o.name,type:o.type,city:o.city,phone:o.phone,adres:o.adres,note:o.note,rate:o.rate,ozelIskonto:o.type==='bayi'?(+o.ozelIskonto||0):0,active:o.active,danismanId:o.danismanId,plasiyerId:o.plasiyerId,odemeTipi:o.odemeTipi||''};   // odemeTipi ŞART: gönderilmezse sunucu beyaz listesi boş sayıp DBS/İMECE seçimini siler
   try{
     const j=await window.__komYonet({islem:'kaydet',kom:core});
     const id=j.id;
@@ -799,7 +801,7 @@ async function komOrphanGoc(list){
   window.__komGocBusy=true; var hepOk=true;
   try{
     for(var i=0;i<list.length;i++){ var k=list[i];
-      try{ await window.__komYonet({islem:'kaydet',kom:{id:k.id,name:k.name,type:k.type,city:k.city||'',phone:k.phone||'',adres:k.adres||'',note:k.note||'',rate:+k.rate||0,active:k.active!==false,danismanId:k.danismanId||'',plasiyerId:k.plasiyerId||'',odemeTipi:k.odemeTipi||''}}); }
+      try{ await window.__komYonet({islem:'kaydet',kom:{id:k.id,name:k.name,type:k.type,city:k.city||'',phone:k.phone||'',adres:k.adres||'',note:k.note||'',rate:+k.rate||0,ozelIskonto:+k.ozelIskonto||0,active:k.active!==false,danismanId:k.danismanId||'',plasiyerId:k.plasiyerId||'',odemeTipi:k.odemeTipi||''}}); }
       catch(e){ hepOk=false; console.warn('kom göç',k.id,e); }
     }
     if(hepOk){ DB.komMigrated=true; saveSaha(); }   // hepsi başarılı → göç tamam; değilse (ör. saha-kullan yetkisi) sonraki yüklemede tekrar dene
@@ -834,7 +836,7 @@ let dotEl=null;function fbDot(c,t){if(!dotEl){dotEl=document.createElement('div'
 const sref=doc(fdb,"apps","siparis");
 function extractSiparis(d){
   try{const raw=d&&d.data&&d.data['rota_so_v1'];if(!raw)return {bayiler:[],musteriler:[]};const o=JSON.parse(raw);
-    const komRaw=(o.komisyoncular||[]).map(k=>({id:k.id,name:k.name,type:k.type,city:k.city||'',rate:+k.rate||0,phone:k.phone||'',note:k.note||'',active:k.active!==false,adres:k.adres||'',danismanId:k.danismanId||'',plasiyerId:k.plasiyerId||'',odemeTipi:k.odemeTipi||''}));
+    const komRaw=(o.komisyoncular||[]).map(k=>({id:k.id,name:k.name,type:k.type,city:k.city||'',rate:+k.rate||0,ozelIskonto:+k.ozelIskonto||0,phone:k.phone||'',note:k.note||'',active:k.active!==false,adres:k.adres||'',danismanId:k.danismanId||'',plasiyerId:k.plasiyerId||'',odemeTipi:k.odemeTipi||''}));
     const musteriler=(o.customers||[]).map(c=>({id:c.id||'',name:c.name,city:c.city||'',firma:c.firma||'',phone:c.phone||'',adres:c.adres||'',irtibat:c.irtibat||'',bayiId:c.bayiId||'',danismanId:c.danismanId||'',kaynak:c.kaynak||'',arsiv:!!c.arsiv,orderCount:+c.orderCount||0}));
     const plasiyerler=(o.plasiyerler||[]).map(p=>({id:p.id,name:p.name,username:p.username||'',active:p.active!==false}));
     return {komRaw,musteriler,plasiyerler};
