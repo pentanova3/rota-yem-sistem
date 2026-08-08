@@ -627,6 +627,7 @@ function sozTarihDoldur(html,t){
 }
 function sozBlokHTML(b,V){
   switch(b.t){
+    case 'ust':return '<div class="usty">'+sozDoldur(b.x,V)+'</div>';
     case 'h1': return '<div class="h1">'+sozDoldur(b.x,V)+'</div>';
     case 'h2': return '<div class="h2">'+sozDoldur(b.x,V)+'</div>';
     case 'h3': return '<div class="h3">'+sozDoldur(b.x,V)+'</div>';

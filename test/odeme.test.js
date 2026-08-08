@@ -2263,6 +2263,12 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       esit('danışmanlık sözleşmesi 16 madde', madde('danismanSozlesme'), 16);
       dogru('KVKK metni tam (>90 blok, 3 tablo)', M.kvkk.bloklar.length > 90 &&
         M.kvkk.bloklar.filter((b) => b.t === 'tbl').length === 3);
+      // Belge adı TEK h1 olmalı: Word'de üç satıra bölünmüş başlık üç ayrı h1 basılınca
+      // sayfanın tepesi dev bir blok oluyordu. Numaralı bölümler de h1 DEĞİL h2.
+      Object.entries(M).forEach(([ad, doc]) =>
+        esit(ad + ': tek belge başlığı', doc.bloklar.filter((b) => b.t === 'h1').length, 1));
+      dogru('KVKK numaralı bölümleri h2 (9 bölüm)', M.kvkk.bloklar.filter((b) => b.t === 'h2').length === 9);
+      dogru('KVKK firma satırı küçük üst yazı', M.kvkk.bloklar[0].t === 'ust');
       dogru('imza blokları iki sözleşmede de var',
         M.bayiSozlesme.bloklar.some((b) => b.t === 'imza') &&
         M.danismanSozlesme.bloklar.some((b) => b.t === 'imza'));

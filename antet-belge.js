@@ -138,7 +138,12 @@
      Rapor değil hukuki belge: iki yana yaslı, 9.5 pt, madde başlığı sayfa
      sonunda yalnız kalmasın diye break-after:avoid. */
   .sz{font-size:9.5pt;line-height:1.5;text-align:justify}
-  .sz .h1{font-size:14pt;font-weight:800;color:var(--lac2);text-align:center;margin:0 0 10px;text-wrap:balance}
+  .sz .h1{font-size:12.5pt;font-weight:800;color:var(--lac2);text-align:center;margin:0 0 9px;
+          line-height:1.28;letter-spacing:.01em;text-wrap:balance}
+  /* Belge adının üstündeki firma satırı — başlık boyunda basılırsa sayfanın tepesi
+     dört sıra dev metin oluyordu (KVKK vakası). */
+  .sz .usty{font-size:8pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+            color:var(--soluk);text-align:center;margin:0 0 3px}
   .sz .h2{font-size:10pt;font-weight:800;color:var(--lac);margin:11px 0 4px;text-align:left;
           break-after:avoid;page-break-after:avoid}
   .sz .h3{font-size:9.5pt;font-weight:800;color:var(--lac2);margin:9px 0 3px;text-align:left;

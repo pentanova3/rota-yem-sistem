@@ -1294,23 +1294,15 @@ window.SOZ_METIN = {
   "ad": "KVKK Aydınlatma Metni",
   "bloklar": [
    {
-    "t": "p",
+    "t": "ust",
     "x": "ROTA SMI TARIM VE HAYVANCILIK SAN. TİC. A.Ş."
    },
    {
     "t": "h1",
-    "x": "TEKNİK DANIŞMAN / BAYİ / MÜŞTERİ"
+    "x": "TEKNİK DANIŞMAN / BAYİ / MÜŞTERİ KİŞİSEL VERİLERİN KORUNMASI KANUNU KAPSAMINDA AYDINLATMA METNİ"
    },
    {
-    "t": "h1",
-    "x": "KİŞİSEL VERİLERİN KORUNMASI KANUNU KAPSAMINDA"
-   },
-   {
-    "t": "h1",
-    "x": "AYDINLATMA METNİ"
-   },
-   {
-    "t": "h1",
+    "t": "h2",
     "x": "1. VERİ SORUMLUSUNUN KİMLİĞİ"
    },
    {
@@ -1523,7 +1515,7 @@ window.SOZ_METIN = {
     "bas": true
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "3. KİŞİSEL VERİ TOPLAMANIN YÖNTEMİ VE HUKUKİ SEBEBİ"
    },
    {
@@ -1575,7 +1567,7 @@ window.SOZ_METIN = {
     "x": "Açık rıza gerektiren durumlarda (pazarlama amaçlı elektronik ileti gönderimi, referans olarak kullanım, fotoğraf/video kullanımı vb.) ayrıca açık rızanız talep edilecektir."
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "4. KİŞİSEL VERİLERİN AKTARILMASI"
    },
    {
@@ -1655,7 +1647,7 @@ window.SOZ_METIN = {
     "x": "Aktarımın yapıldığı ülkeler ve hizmet sağlayıcıları hakkında güncel bilgi, Şirketimize başvuru yoluyla temin edilebilir."
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "5. TEKNİK DANIŞMANLARA ÖZEL BİLGİLENDİRME"
    },
    {
@@ -1675,7 +1667,7 @@ window.SOZ_METIN = {
     "x": "c) Hizmet sözleşmesinin sona ermesi halinde, elinizdeki tüm müşteri bilgilerini, belgeleri ve elektronik verileri Şirkete iade etmeniz veya imha etmeniz gerekmektedir."
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "6. VERİ SAKLAMA SÜRELERİ HAKKINDA GENEL BİLGİ"
    },
    {
@@ -1706,7 +1698,7 @@ window.SOZ_METIN = {
     "x": "Saklama süresinin dolmasının ardından kişisel verileriniz, Kişisel Verilerin Silinmesi, Yok Edilmesi veya Anonim Hale Getirilmesi Hakkında Yönetmelik uyarınca en geç 180 gün içinde silinecek, yok edilecek veya anonim hale getirilecektir."
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "7. KİŞİSEL VERİ SAHİBİ OLARAK HAKLARINIZ"
    },
    {
@@ -1760,7 +1752,7 @@ window.SOZ_METIN = {
     "t": "bos"
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "8. BAŞVURU YÖNTEMİ"
    },
    {
@@ -1813,7 +1805,7 @@ window.SOZ_METIN = {
     "x": "Başvurular, talebin niteliğine göre en kısa sürede ve en geç 30 (otuz) gün içinde ücretsiz olarak sonuçlandırılacaktır. İşlemin ayrıca bir maliyet gerektirmesi halinde, Kişisel Verileri Koruma Kurulu tarafından belirlenen tarife uygulanacaktır."
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "9. AYDINLATMA METNİNDE DEĞİŞİKLİK"
    },
    {
@@ -1831,7 +1823,7 @@ window.SOZ_METIN = {
     "t": "bos"
    },
    {
-    "t": "h1",
+    "t": "h2",
     "x": "AYDINLATMA BEYANI"
    },
    {
