@@ -718,6 +718,16 @@ function tumAyarlamalar(){
   });
   return list.sort(function(a,b){return (b.tarih||'').localeCompare(a.tarih||'');});
 }
+function ayarlamalarCSV(){
+  var list=tumAyarlamalar();
+  if(!list.length){toast('İndirilecek ayarlama yok');return}
+  var sep=';';var nf=function(n){return (n===''||n==null)?'':String(Math.round((+n)*100)/100).replace('.',',');};
+  var q=function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"';};
+  var lines=[['Tarih','Tür','Kişi','Sipariş','Ham','Net','Düşülen','Yapan','Ayar Tarihi','Sebep'].map(q).join(sep)];
+  list.forEach(function(a){lines.push([fmtDate(a.tarih),a.tip,a.kisi,'#'+(a.no||''),nf(a.ham),nf(a.net),nf(a.dusen),(a.ay&&a.ay.by)||'',(a.ay&&a.ay.ts)?fmtDateShort(a.ay.ts):'',(a.ay&&a.ay.sebep)||''].map(q).join(sep));});
+  lines.push(['','','','','','TOPLAM DÜŞÜLEN',nf(list.reduce(function(s,a){return s+a.dusen},0)),'','',''].map(q).join(sep));
+  var csv='\uFEFF'+lines.join('\r\n');var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='Ayarlamalar_'+todayISO()+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(url);a.remove()},800);toast('Excel (CSV) indirildi');
+}
 function applyPriceList(){
   PRICE_LIST.forEach(pl=>{
     const key=trNorm(pl.match);
@@ -3851,7 +3861,7 @@ function renderKomisyon(c,tb){
   h+=musteriIskontoKartHTML();   // Müşteri İskonto Raporu (müşteri iskontosu + ilave indirimler)
   h+=imeceFarkKartHTML();        // İMECE Fark Faturaları — muhasebenin keseceği 2. faturalar
   if(isAdmin()){var _ayl=tumAyarlamalar();if(_ayl.length){var _tot=_ayl.reduce(function(s,a){return s+a.dusen;},0);
-    h+=`<div class="card" style="margin-top:16px"><div class="card-hd"><h3>Yapılan Ayarlamalar <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— yalnız burada görünür; bayi/danışman dökümlerinde gizlidir</span></h3><span style="font-weight:700;color:var(--amber-700);white-space:nowrap">Toplam düşülen: ${fmtTL(_tot)}</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Tarih</th><th>Tür</th><th>Kişi</th><th class="num">Sipariş</th><th class="num">Ham</th><th class="num">Net</th><th class="num">Düşülen</th><th>Yapan</th><th>Sebep</th></tr></thead><tbody>${_ayl.map(function(a){return '<tr><td style="white-space:nowrap">'+fmtDate(a.tarih)+'</td><td><span class="badge" style="background:'+(a.tip==='Prim'?'#F5F3FF;color:#6D28D9':'#FFFBEB;color:#B45309')+'">'+a.tip+'</span></td><td><b>'+esc(a.kisi)+'</b></td><td class="num">#'+(a.no||'')+'</td><td class="num" style="color:var(--slate-500)">'+fmtTL(a.ham)+'</td><td class="num">'+fmtTL(a.net)+'</td><td class="num" style="color:var(--amber-700);font-weight:700">−'+fmtTL(a.dusen)+'</td><td style="font-size:11px">'+esc((a.ay&&a.ay.by)||'—')+((a.ay&&a.ay.ts)?'<div style="color:var(--slate-400)">'+fmtDateShort(a.ay.ts)+'</div>':'')+'</td><td style="font-size:11px;color:var(--slate-500);max-width:200px">'+esc((a.ay&&a.ay.sebep)||'—')+'</td></tr>';}).join('')}</tbody></table></div></div>`;
+    h+=`<div class="card" style="margin-top:16px"><div class="card-hd"><h3>Yapılan Ayarlamalar <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— yalnız burada görünür; bayi/danışman dökümlerinde gizlidir</span></h3><div style="display:flex;gap:10px;align-items:center"><span style="font-weight:700;color:var(--amber-700);white-space:nowrap">Toplam düşülen: ${fmtTL(_tot)}</span><button class="btn btn-doc btn-sm" onclick="ayarlamalarCSV()" title="Ayarlama listesini Excel (CSV) olarak indir"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> İndir</button></div></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Tarih</th><th>Tür</th><th>Kişi</th><th class="num">Sipariş</th><th class="num">Ham</th><th class="num">Net</th><th class="num">Düşülen</th><th>Yapan</th><th>Sebep</th></tr></thead><tbody>${_ayl.map(function(a){return '<tr><td style="white-space:nowrap">'+fmtDate(a.tarih)+'</td><td><span class="badge" style="background:'+(a.tip==='Prim'?'#F5F3FF;color:#6D28D9':'#FFFBEB;color:#B45309')+'">'+a.tip+'</span></td><td><b>'+esc(a.kisi)+'</b></td><td class="num">#'+(a.no||'')+'</td><td class="num" style="color:var(--slate-500)">'+fmtTL(a.ham)+'</td><td class="num">'+fmtTL(a.net)+'</td><td class="num" style="color:var(--amber-700);font-weight:700">−'+fmtTL(a.dusen)+'</td><td style="font-size:11px">'+esc((a.ay&&a.ay.by)||'—')+((a.ay&&a.ay.ts)?'<div style="color:var(--slate-400)">'+fmtDateShort(a.ay.ts)+'</div>':'')+'</td><td style="font-size:11px;color:var(--slate-500);max-width:200px">'+esc((a.ay&&a.ay.sebep)||'—')+'</td></tr>';}).join('')}</tbody></table></div></div>`;
   }}
   c.innerHTML=h;
 }
