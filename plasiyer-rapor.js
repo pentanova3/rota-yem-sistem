@@ -68,6 +68,17 @@
   }
 
   function g() { return global; }
+  /* Ana sayfa `let DB` kullanır → window.DB yok. __rotaDb köprüsü şart. */
+  function db() {
+    var w = g();
+    try {
+      if (typeof w.__rotaDb === 'function') {
+        var d = w.__rotaDb();
+        if (d) return d;
+      }
+    } catch (e) { /* ignore */ }
+    return w.DB || { orders: [], plasiyerler: [], customers: [], komisyoncular: [], products: [], meta: {} };
+  }
   function esc(x) { return (g().esc || function (t) { return String(t == null ? '' : t); })(x); }
   function fmtTL(n) { return g().fmtTL(n); }
   function fmtN(n) { return g().fmtN(n); }
@@ -184,7 +195,7 @@
 
   function firstSaleMap() {
     var map = {};
-    (g().DB.orders || []).forEach(function (o) {
+    (db().orders || []).forEach(function (o) {
       if (!g().satisMi(o) || o.tarihsel) return;
       var cid = o.customerId;
       if (!cid) return;
@@ -196,7 +207,7 @@
   }
 
   function plasOrdersInScope(P) {
-    var DB = g().DB;
+    var DB = db();
     var from = P.from, to = P.to;
     var out = [];
     (DB.orders || []).forEach(function (o) {
@@ -479,7 +490,7 @@
 
   function yearsAvailable() {
     var ys = {};
-    (g().DB.orders || []).forEach(function (o) {
+    (db().orders || []).forEach(function (o) {
       try {
         if (!g().satisMi(o)) return;
         if (!safePlas(o)) return;
@@ -525,7 +536,7 @@
       h += '</select>';
     }
     h += '<select onchange="plasiyerRapor.set(\'plasId\',this.value)" title="Plasiyer" style="min-width:160px"><option value="">Tüm plasiyerler</option>';
-    (g().DB.plasiyerler || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'tr'); }).forEach(function (p) {
+    (db().plasiyerler || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'tr'); }).forEach(function (p) {
       h += '<option value="' + esc(p.id) + '"' + (S.plasId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     });
     h += '</select>';

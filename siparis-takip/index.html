@@ -721,6 +721,8 @@ function applyPriceList(){
   DB.meta=DB.meta||{};DB.meta.priceVersion=PRICE_VERSION;DB.meta.priceDate='23.03.2026';if(DB.meta.tdIskonto==null)DB.meta.tdIskonto=TD_ISKONTO_DEFAULT;if(DB.meta.dbsOran==null)DB.meta.dbsOran=DBS_ORAN_DEFAULT;
 }
 let DB=null, USER=null, VIEW='panel';
+// let DB window'a çıkmaz — harici scriptler (plasiyer-rapor.js) için köprü
+window.__rotaDb=function(){return DB;};
 let filt={q:'',status:'',firma:'',from:'',to:'',kom:'',plasiyer:'',year:'',month:''};
 let ordSub='normal';   // sipariş görünümü alt-sekmesi: 'normal' | 'cross' (verilen çapraz siparişler ayrı sekmede)
 function setOrdSub(v){ordSub=v;render();}
