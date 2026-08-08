@@ -780,11 +780,270 @@
     return h;
   }
 
+  /* ── Antetli kağıt çıktısı (antet-belge.js) ─────────────────────────── */
+  function donemEtiket() {
+    return ({ ay: 'Aylık', '3ay': '3 Aylık', '6ay': '6 Aylık', yil: 'Yıllık' })[S.donem] || S.donem;
+  }
+
+  function plasAdFilt() {
+    if (!S.plasId) return 'Tüm plasiyerler';
+    var p = g().plasById ? g().plasById(S.plasId) : null;
+    return (p && p.name) || S.plasId;
+  }
+
+  function printCss() {
+    return '<style>' +
+      '.pr-skor{display:inline-block;padding:1px 7px;border-radius:999px;font-size:8pt;font-weight:700}' +
+      '.pr-skor.s1{background:#FEF2F2;color:#991B1B}.pr-skor.s2{background:#FFF7ED;color:#C2410C}' +
+      '.pr-skor.s3{background:#FEF9C3;color:#A16207}.pr-skor.s4{background:#ECFDF5;color:#047857}' +
+      '.pr-skor.s5{background:#EEF2FF;color:#3730A3}' +
+      '.pr-mc.a{color:var(--kirmizi)}.pr-mc.d{color:var(--yesil)}.pr-mc.n{color:var(--soluk)}' +
+      '.seyir{margin-top:6px;border:1px solid var(--cizgi);padding:4px 6px;break-inside:avoid}' +
+      '.seyir svg{display:block;width:100%;height:auto;max-height:55mm}' +
+      'table.t.isi td{font-variant-numeric:tabular-nums}' +
+      '</style>';
+  }
+
+  function printAyTablo(D) {
+    var T = D.tot, nAy = D.P.months.length || 1;
+    var h = '<div class="blok"><h2>Aylık Performans<span>' + esc(D.P.label) + '</span></h2>';
+    h += '<table class="t sik"><thead><tr>';
+    h += '<th>Ay</th><th class="num">Tonaj</th><th class="num">Ciro</th><th class="num">Sipariş</th><th class="num">Çuval</th>';
+    h += '<th class="num">Müşteri</th><th class="num">Ürün</th><th class="num">Yeni</th><th class="num">Ort. Sip.</th><th class="num">Δ Tonaj</th></tr></thead><tbody>';
+    var onceki = null;
+    D.P.months.forEach(function (ym) {
+      var b = D.byAy[ym] || emptyBucket();
+      var ort = b.siparis ? b.tonaj / b.siparis : 0;
+      var dlt = onceki != null && onceki > 0 ? ((b.tonaj - onceki) / onceki * 100) : null;
+      h += '<tr><td class="ad">' + esc(ayAd(ym)) + '</td>';
+      h += '<td class="num">' + fmtTon(b.tonaj) + ' t</td>';
+      h += '<td class="num">' + fmtTL(b.ciro) + '</td>';
+      h += '<td class="num">' + fmtN(b.siparis) + '</td>';
+      h += '<td class="num">' + fmtN(b.cuval) + '</td>';
+      h += '<td class="num">' + fmtN(countKeys(b.musteri)) + '</td>';
+      h += '<td class="num">' + fmtN(countKeys(b.urun)) + '</td>';
+      h += '<td class="num">' + fmtN(countKeys(b.yeni)) + '</td>';
+      h += '<td class="num">' + fmtTon(ort) + ' t</td>';
+      h += '<td class="num">' + (dlt == null ? '<span class="pr-mc n">—</span>'
+        : '<span class="pr-mc ' + (dlt > 0 ? 'a' : dlt < 0 ? 'd' : 'n') + '">' +
+          (dlt > 0 ? '▲' : dlt < 0 ? '▼' : '') + ' %' + fmtN(Math.abs(Math.round(dlt))) + '</span>') + '</td></tr>';
+      onceki = b.tonaj;
+    });
+    h += '<tr style="background:var(--tint2);font-weight:700"><td>DÖNEM TOPLAMI (' + nAy + ' ay)</td>';
+    h += '<td class="num">' + fmtTon(T.tonaj) + ' t</td><td class="num">' + fmtTL(T.ciro) + '</td>';
+    h += '<td class="num">' + fmtN(T.siparis) + '</td><td class="num">' + fmtN(T.cuval) + '</td>';
+    h += '<td class="num">' + fmtN(T.musteri) + '</td><td class="num">' + fmtN(T.urun) + '</td>';
+    h += '<td class="num">' + fmtN(T.yeni) + '</td><td class="num">' + fmtTon(T.siparis ? T.tonaj / T.siparis : 0) + ' t</td><td class="num">—</td></tr>';
+    h += '<tr style="font-weight:600"><td>AYLIK ORTALAMA (n=' + nAy + ')</td>';
+    h += '<td class="num">' + fmtTon(T.tonaj / nAy) + ' t</td><td class="num">' + fmtTL(T.ciro / nAy) + '</td>';
+    h += '<td class="num">' + fmtN(Math.round(T.siparis / nAy * 10) / 10) + '</td>';
+    h += '<td class="num">' + fmtN(Math.round(T.cuval / nAy)) + '</td>';
+    h += '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>';
+    h += '</tbody></table></div>';
+    return h;
+  }
+
+  function printSkorTablo(D) {
+    var h = '<div class="blok"><h2>Aktüerya Skoru &amp; Prim Önerisi<span>' + D.list.length + ' plasiyer</span></h2>';
+    h += '<table class="t sik"><thead><tr>';
+    h += '<th>Plasiyer</th><th class="num">Tonaj</th><th class="num">Ciro</th><th class="num">Sipariş</th>';
+    h += '<th class="num">Müşteri</th><th class="num">Yeni</th><th class="num">Ürün</th><th class="num">Ort. Ton</th>';
+    h += '<th class="num">Teslim %</th><th class="num">Skor</th><th>Öneri</th><th class="num">Kayıtlı %</th></tr></thead><tbody>';
+    if (!D.list.length) {
+      h += '<tr><td colspan="12" class="bos">Bu dönemde plasiyer satışı yok</td></tr>';
+    } else {
+      D.list.forEach(function (r) {
+        h += '<tr><td class="ad">' + esc(r.plas.name) +
+          (r.plas.city ? '<div style="font-size:7pt;color:var(--soluk)">' + esc(r.plas.city) + '</div>' : '') + '</td>';
+        h += '<td class="num">' + fmtTon(r.tonaj) + ' t</td><td class="num">' + fmtTL(r.ciro) + '</td>';
+        h += '<td class="num">' + fmtN(r.siparis) + '</td><td class="num">' + fmtN(r.musteri) + '</td>';
+        h += '<td class="num">' + fmtN(r.yeni) + '</td><td class="num">' + fmtN(r.urun) + '</td>';
+        h += '<td class="num">' + fmtTon(r.ortSipTon) + ' t</td>';
+        h += '<td class="num">%' + fmtN(Math.round(r.teslimOran * 100)) + '</td>';
+        h += '<td class="num"><span class="pr-skor ' + skorSinif(r.skor) + '">' + r.skor + '</span></td>';
+        h += '<td><b>%' + esc(r.primOneri) + '</b><div style="font-size:7pt;color:var(--soluk)">' + esc(r.band.ad) + '</div></td>';
+        h += '<td class="num">' + (r.primKayit != null ? '%' + fmtN(r.primKayit) : '—') + '</td></tr>';
+      });
+    }
+    h += '</tbody></table>';
+    h += '<p class="not">Skor ağırlıkları: Tonaj %25 · Ciro %20 · Müşteri %15 · Yeni müşteri %10 · Ürün çeşitliliği %10 · Sipariş sıklığı %10 · Teslim oranı %5 · Ort. sipariş tonajı %5. Önerilen prim bandı karar destek amaçlıdır; kayıtlı oran yönetim kararıdır.</p></div>';
+    return h;
+  }
+
+  function printMatris(D, tip) {
+    var months = D.P.months;
+    var max = 0;
+    D.list.forEach(function (r) {
+      months.forEach(function (ym) {
+        var v = metrikDeg(r.ay[ym], tip.k);
+        if (v > max) max = v;
+      });
+    });
+    var h = '<div class="blok"><h2>Plasiyer × Ay Kıyaslaması<span>' + esc(tip.l) + '</span></h2>';
+    h += '<table class="t sik isi"><thead><tr><th>Plasiyer</th>';
+    months.forEach(function (ym) { h += '<th class="num">' + esc(ay3(ym)) + '</th>'; });
+    h += '<th class="num">TOPLAM</th><th class="num">Ort./Ay</th></tr></thead><tbody>';
+    if (!D.list.length) {
+      h += '<tr><td colspan="' + (months.length + 3) + '" class="bos">Veri yok</td></tr>';
+    } else {
+      D.list.forEach(function (r) {
+        var rowTot = tip.k === 'musteri' ? r.musteri : tip.k === 'urun' ? r.urun
+          : tip.k === 'tonaj' ? r.tonaj : tip.k === 'ciro' ? r.ciro : r.siparis;
+        h += '<tr><td class="ad">' + esc(r.plas.name) + '</td>';
+        months.forEach(function (ym) {
+          var v = metrikDeg(r.ay[ym], tip.k);
+          var bg = isiRenk(v, max);
+          var fg = (v / (max || 1)) > 0.55 ? '#fff' : '#141A2B';
+          h += '<td class="num" style="background:' + bg + ';color:' + fg + '">' + (v ? bicim(v, tip.tip) : '—') + '</td>';
+        });
+        h += '<td class="num"><b>' + bicim(rowTot, tip.tip) + '</b></td>';
+        h += '<td class="num">' + ((tip.k === 'musteri' || tip.k === 'urun') ? '—' : bicim(rowTot / (months.length || 1), tip.tip)) + '</td></tr>';
+      });
+      h += '<tr style="background:var(--tint);font-weight:700"><td>GENEL</td>';
+      months.forEach(function (ym) {
+        var v = metrikDeg(D.byAy[ym], tip.k);
+        h += '<td class="num">' + (v ? bicim(v, tip.tip) : '—') + '</td>';
+      });
+      var gTot = tip.k === 'tonaj' ? D.tot.tonaj : tip.k === 'ciro' ? D.tot.ciro
+        : tip.k === 'siparis' ? D.tot.siparis : tip.k === 'musteri' ? D.tot.musteri : D.tot.urun;
+      h += '<td class="num">' + bicim(gTot, tip.tip) + '</td>';
+      h += '<td class="num">' + ((tip.k === 'musteri' || tip.k === 'urun') ? '—' : bicim(gTot / (months.length || 1), tip.tip)) + '</td></tr>';
+    }
+    h += '</tbody></table>';
+    h += '<p class="not">Isı haritası seçili metrikte dönemin en yüksek hücresine göre boyanır. Müşteri/ürün sütun toplamları benzersiz sayıdır.</p></div>';
+    return h;
+  }
+
+  function printUrun(D) {
+    var rows = Object.keys(D.byUrun).map(function (c) {
+      var u = D.byUrun[c];
+      var p = g().prodByCode(c);
+      return {
+        code: c, ad: (p && p.name) || c,
+        tonaj: u.tonaj, cuval: u.cuval, ciro: u.ciro, siparis: u.siparis, musteri: countKeys(u.musteri)
+      };
+    }).sort(function (a, b) { return b.tonaj - a.tonaj; });
+    var h = '<div class="blok"><h2>Ürün Bazlı Kırılım<span>' + rows.length + ' ürün</span></h2>';
+    if (!rows.length) { h += '<p class="not">Ürün satışı yok.</p></div>'; return h; }
+    var tonSum = rows.reduce(function (s, r) { return s + r.tonaj; }, 0) || 1;
+    h += '<table class="t"><thead><tr><th>Ürün</th><th class="num">Tonaj</th><th class="num">Çuval</th><th class="num">Ciro</th><th class="num">Sipariş</th><th class="num">Müşteri</th><th class="num">Pay</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      h += '<tr><td class="ad">' + esc(r.code) + '<div style="font-size:7pt;color:var(--soluk)">' + esc(r.ad) + '</div></td>';
+      h += '<td class="num">' + fmtTon(r.tonaj) + ' t</td><td class="num">' + fmtN(r.cuval) + '</td>';
+      h += '<td class="num">' + fmtTL(r.ciro) + '</td><td class="num">' + fmtN(r.siparis) + '</td>';
+      h += '<td class="num">' + fmtN(r.musteri) + '</td>';
+      h += '<td class="num">%' + fmtN(Math.round(r.tonaj / tonSum * 1000) / 10) + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    return h;
+  }
+
+  function printMusteri(D) {
+    var rows = Object.keys(D.byMusteri).map(function (k) { return D.byMusteri[k]; })
+      .sort(function (a, b) { return b.tonaj - a.tonaj; });
+    var h = '<div class="blok"><h2>Müşteri Bazlı Kırılım<span>' + rows.length + ' müşteri</span></h2>';
+    if (!rows.length) { h += '<p class="not">Müşteri satışı yok.</p></div>'; return h; }
+    var show = rows.slice(0, 200);
+    h += '<table class="t sik"><thead><tr><th>Müşteri</th><th>Plasiyer</th><th class="num">Tonaj</th><th class="num">Ciro</th><th class="num">Sipariş</th><th class="num">Ürün</th><th class="num">Ort. Sip.</th></tr></thead><tbody>';
+    show.forEach(function (r) {
+      var pl = g().plasById(r.plasId);
+      h += '<tr><td class="ad">' + esc(r.ad) + '</td><td>' + esc(pl ? pl.name : '—') + '</td>';
+      h += '<td class="num">' + fmtTon(r.tonaj) + ' t</td><td class="num">' + fmtTL(r.ciro) + '</td>';
+      h += '<td class="num">' + fmtN(r.siparis) + '</td><td class="num">' + fmtN(countKeys(r.urun)) + '</td>';
+      h += '<td class="num">' + fmtTL(r.siparis ? r.ciro / r.siparis : 0) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    if (rows.length > 200) h += '<p class="not">İlk 200 müşteri gösteriliyor (tonaj sırası; toplam ' + rows.length + ').</p>';
+    h += '</div>';
+    return h;
+  }
+
+  function printOzetKirilim(D) {
+    var h = '<div class="blok"><h2>Kanal &amp; Operasyon Özeti</h2>';
+    if (!D.list.length) { h += '<p class="not">Veri yok.</p></div>'; return h; }
+    h += '<table class="t"><thead><tr><th>Plasiyer</th><th class="num">Direkt</th><th class="num">Bayi Aracılı</th><th class="num">Açık Sip.</th><th class="num">İptal</th><th class="num">Çuval</th><th class="num">Ciro/Ton</th></tr></thead><tbody>';
+    D.list.forEach(function (r) {
+      h += '<tr><td class="ad">' + esc(r.plas.name) + '</td>';
+      h += '<td class="num">' + fmtN(r.direkt) + '</td><td class="num">' + fmtN(r.bayiAracili) + '</td>';
+      h += '<td class="num">' + fmtN(r.acik) + '</td><td class="num">' + fmtN(r.iptal) + '</td>';
+      h += '<td class="num">' + fmtN(r.cuval) + '</td>';
+      h += '<td class="num">' + (r.tonaj ? fmtTL(r.ciro / r.tonaj) + '/t' : '—') + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    return h;
+  }
+
+  function yazdir() {
+    if (!g().antetBelge || !g().antetBelgeAc) {
+      if (g().toast) g().toast('Antet modülü yüklenmedi — sayfayı yenileyin');
+      return;
+    }
+    ensureYil();
+    var D;
+    try { D = build(); }
+    catch (e) {
+      console.error('plasiyerRapor.yazdir', e);
+      if (g().toast) g().toast('Rapor oluşturulamadı');
+      return;
+    }
+    var tip = METRIK.find(function (m) { return m.k === S.metrik; }) || METRIK[0];
+    var T = D.tot;
+    var nAy = D.P.months.length || 1;
+    var metrikLbl = tip.l + (S.grafMod === 'kum' ? ' (kümülatif)' : '');
+
+    var govde = printCss();
+    govde += '<div class="blok"><h2>Performans Seyri<span>' + esc(metrikLbl) + '</span></h2>';
+    govde += '<div class="seyir">' + svgSeyir(D) + '</div></div>';
+    govde += printAyTablo(D);
+    govde += printSkorTablo(D);
+    govde += printMatris(D, tip);
+    govde += printOzetKirilim(D);
+    govde += printUrun(D);
+    govde += printMusteri(D);
+    govde += '<div class="blok"><h2>Yöntem Notu</h2>';
+    govde += '<p class="not"><b>1.</b> Satış = teslim edilen sipariş; tarih = fiili teslim tarihi.<br>';
+    govde += '<b>2.</b> Plasiyer eşlemesi: sipariş damgası → bayiPlasiyerId → müşteri.plasiyerId → bayinin plasiyeri → Alıcı:Bayi.<br>';
+    govde += '<b>3.</b> Ciro yalnız canlı siparişlerden; tarihsel arşiv tonaj/çuvala girer, ciroya girmez.<br>';
+    govde += '<b>4.</b> Yeni müşteri = dönem içinde ilk teslimini yapan müşteri.<br>';
+    govde += '<b>5.</b> Önerilen prim bandı ciro üzerinden % aralığıdır — bağlayıcı değildir.</p></div>';
+
+    var html = g().antetBelge({
+      tip: 'Plasiyer Aktüerya Raporu',
+      ad: plasAdFilt(),
+      altad: donemEtiket() + ' · ' + D.P.label + ' · Seyir: ' + metrikLbl,
+      kunye: [
+        { k: 'Dönem tipi', v: donemEtiket() },
+        { k: 'Yıl', v: S.yil },
+        { k: 'Plasiyer', v: plasAdFilt() },
+        { k: 'Ay sayısı', v: String(nAy) }
+      ],
+      ozet: [
+        { k: 'Toplam Tonaj', v: fmtTon(T.tonaj) + ' t', n: 'aylık ort. ' + fmtTon(T.tonaj / nAy) + ' t' },
+        { k: 'Toplam Ciro', v: fmtTL(T.ciro), n: 'canlı sipariş' },
+        { k: 'Sipariş', v: fmtN(T.siparis), n: fmtN(T.cuval) + ' çuval' },
+        { k: 'Aktif Müşteri', v: fmtN(T.musteri), n: 'yeni ' + fmtN(T.yeni) + ' · çeşit ' + fmtN(T.urun) },
+        { k: 'Kanal', v: fmtN(T.direkt) + ' / ' + fmtN(T.bayiAracili), n: 'direkt · bayi' },
+        { k: 'Plasiyer', v: fmtN(D.list.length), n: 'dönemde satışı olan', vurgu: true }
+      ],
+      govde: govde,
+      araclar: '<button class="bp" onclick="window.print()">Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button>',
+      imzaSol: 'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş. — sipariş takip sisteminden üretilmiştir.',
+      imzaSag: 'Belge tarihi: ' + new Date().toLocaleString('tr-TR'),
+      baslikEtiket: 'Aktüerya Raporu · ' + plasAdFilt() + ' · ' + D.P.label
+    });
+    if (!g().antetBelgeAc(html)) {
+      if (g().toast) g().toast('Pop-up engellendi — tarayıcıda izin verin');
+      return;
+    }
+    if (g().toast) g().toast('Antetli aktüerya raporu hazır');
+  }
+
   global.plasiyerRapor = {
     state: S,
     set: set,
     html: html,
     build: build,
-    savePrim: savePrim
+    savePrim: savePrim,
+    yazdir: yazdir
   };
 })(typeof window !== 'undefined' ? window : globalThis);
