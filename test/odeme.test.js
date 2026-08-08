@@ -2068,6 +2068,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /function openKomDetay\(komId\)\{[\s\S]{0,14000}?antetBelgeAc\(antetBelge\(o\)\)/.test(H));
       dogru('tariffPDF antetli iskeleti kullanıyor',
         /function tariffPDF\(id,bayiNusha\)\{[\s\S]{0,3000}?antetBelge\(\{/.test(H));
+      dogru('müşteri sipariş geçmişi antetli iskeleti kullanıyor',
+        /function musteriSiparisGecmisiYazdir\(custId\)\{[\s\S]{0,4000}?antetBelgeAc\(html\)/.test(H));
       dogru('antet modülü yoksa belge üretilmiyor (sessiz bozuk çıktı yerine uyarı)',
         (H.match(/if\(!window\.antetBelge\)\{toast\(/g) || []).length >= 2);
       dogru('bayi nüshasında danışman liste fiyatı ÜRETİLMİYOR',
