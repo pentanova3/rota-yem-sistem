@@ -2344,6 +2344,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /_yeniKayit&&confirm\([\s\S]{0,80}?sozlesmePdf\(id\)/.test(SAHA));
       dogru('evrak takibinde Hazırla düğmesi var', /onclick="sozlesmePdf\('\$\{o\.id\}'\)"/.test(SAHA));
       dogru('sözleşme tarihi alanı kaydediliyor', /sz\.sozTarih=V\('s_tarih'\)/.test(SAHA));
+      dogru('bayi/danışman kartında e-posta alanı var', /id="k_eposta"/.test(SAHA));
+      dogru('sözleşme Mail ve WA gönderimi var',
+        /function sozlesmeGonder\(id,kanal\)/.test(SAHA) && /sozlesmeGonder\([^)]*'mail'\)/.test(SAHA) && /sozlesmeGonder\([^)]*'wa'\)/.test(SAHA));
+      dogru('liste Sözleşme düğmesi sozlesmeIndir ile bağlı', /function sozlesmeIndir\(id\)/.test(SAHA));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
