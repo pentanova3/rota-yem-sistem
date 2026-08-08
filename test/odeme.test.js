@@ -2081,6 +2081,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       // satır yüksekliği ikiye katlanıyor (kaldırılan "BAYİ ÜZERİNDEN" etiketinin aynı hatası).
       dogru('bayi üzerinden satış B rozetiyle işaretli',
         /r\.viaBayi\?'&nbsp;<span class="kk">B<\/span>':''/.test(H));
+      // .not b{color:#4A5266} özgüllüğü .kk'nın beyaz yazısını eziyordu → dipnottaki
+      // rozet tablodakinden SOLUK basılıyordu. Aynı işaret iki yerde aynı görünmeli.
+      dogru('dipnottaki B rozeti tablodakiyle aynı (özgüllük çakışması kapalı)',
+        /\.not \.kk\{color:#fff\}/.test(AB));
       dogru('rozet bayi adına bağlı (alt satıra düşmesin)',
         /viaBayi\?'&nbsp;<span class="kk">B/.test(H));
       dogru('11 sütunlu döküm A4 içerik genişliğine (180 mm) sığıyor', (function () {

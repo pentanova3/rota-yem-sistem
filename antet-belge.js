@@ -136,6 +136,7 @@
 
   .not{font-size:7.5pt;color:var(--soluk);line-height:1.5;margin-top:5px}
   .not b{color:#4A5266}
+  .not .kk{color:#fff}
   .imza{margin-top:12px;font-size:7.5pt;color:#98A0B2;border-top:1px solid var(--cizgi);padding-top:5px;
         display:flex;justify-content:space-between;break-inside:avoid}
 
