@@ -624,8 +624,28 @@ function ordDanisman(o){
 }
 // Danışman DAMGALI mı (sipariş anında kilitlenmiş mi) — ekranda kaynağını dürüstçe söylemek için.
 function ordDanismanDamgali(o){return !!(o&&(o.danismanId||(o.komisyoncuId&&(komById(o.komisyoncuId)||{}).type==='danisman')));}
-// Siparişin plasiyeri: sipariş anında kilitlenen plasiyerId, yoksa müşterinin güncel plasiyeri
-function ordPlasiyer(o){var pid=(o&&o.plasiyerId)||((o&&o.customerId)?(custById(o.customerId)||{}).plasiyerId:'')||((o&&o.bayiId)?(komById(o.bayiId)||{}).plasiyerId:'');return pid?plasById(pid):null;}
+// Siparişin plasiyeri (canlı fallback — Saha'daki bayi→plasiyer ataması burada da çözülür):
+// 1) sipariş damgası  2) bayiPlasiyerId damgası  3) müşteri.plasiyerId
+// 4) müşterinin bayisinin plasiyeri  5) siparişteki bayiId'nin plasiyeri (Alıcı: Bayi)
+function ordPlasiyer(o){
+  if(!o)return null;
+  var pid=o.plasiyerId||o.bayiPlasiyerId||'';
+  if(!pid&&o.customerId){
+    var c=custById(o.customerId)||{};
+    pid=c.plasiyerId||'';
+    if(!pid&&c.bayiId){var cb=komById(c.bayiId);pid=(cb&&cb.plasiyerId)||'';}
+  }
+  if(!pid&&o.bayiId){var b=komById(o.bayiId);pid=(b&&b.plasiyerId)||'';}
+  return pid?plasById(pid):null;
+}
+// Müşterinin (doğrudan veya bayisi üzerinden) plasiyeri — liste/rozet için
+function custPlas(c){
+  if(!c)return null;
+  if(c.plasiyerId){var p=plasById(c.plasiyerId);if(p)return p;}
+  if(c.bayiId){var b=komById(c.bayiId);if(b&&b.plasiyerId)return plasById(b.plasiyerId);}
+  return null;
+}
+function custMine(c){var me=myPlasiyer();if(!me||!c)return false;var p=custPlas(c);return !!(p&&p.id===me.id);}
 function orderKomisyon(o,komOverride){
   // Komisyoncu çözümü: açık override → sipariş anında damgalanan komisyoncuId → ordDanisman/ordBayi
   // (bunlar damga yoksa müşteri/bayi kartına düşer). Son iki adım OLMADAN Excel'den aktarılıp ataması
@@ -814,10 +834,8 @@ function canSeeKomisyon(){return isAdmin()}
 function isPlasiyer(){return USER&&USER.role==='plasiyer'}
 function plasById(id){return (DB.plasiyerler||[]).find(p=>p.id===id)}
 function myPlasiyer(){if(!isPlasiyer())return null;const un=String(USER.username||'').toLowerCase();return (DB.plasiyerler||[]).find(p=>String(p.username||'').toLowerCase()===un)||null;}
-function orderMine(o){const me=myPlasiyer();if(!me)return false;
-  return o.plasiyerId===me.id
-    ||(!!o.customerId&&(custById(o.customerId)||{}).plasiyerId===me.id)
-    ||(!!o.bayiId&&(komById(o.bayiId)||{}).plasiyerId===me.id);}   // bayiye satışta bayinin plasiyeri
+function orderMine(o){const me=myPlasiyer();if(!me||!o)return false;
+  var p=ordPlasiyer(o);return !!(p&&p.id===me.id);}
 function visibleOrders(){return isPlasiyer()?DB.orders.filter(orderMine):DB.orders;}
 function statusLabel(v){const s=optDurum().find(x=>x.v===v);return s?s.l:v}
 function statusBadge(v){const lbl=statusLabel(v);if(CORE_ST.includes(v))return `<span class="badge st-${v}">${esc(lbl)}</span>`;return `<span class="badge" style="background:#E0E7FF;color:#3730A3">${esc(lbl)}</span>`}
@@ -1882,7 +1900,7 @@ function renderOrderModal(){
   const noShip=o.fiyatKademe==='fabrika'&&!o.aliciBayi;   // Fabrika tesliminde sevkiyat girilmez (bayi satışında girilir)
   const shipRO=ro||noShip;
   const _pm=isPlasiyer()?myPlasiyer():null;
-  const custItems=DB.customers.filter(c=>(!c.arsiv||c.id===o.customerId)&&!c.bayiId&&(!isPlasiyer()||(_pm&&c.plasiyerId===_pm.id))).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>({v:c.id,l:c.name+(c.arsiv?' (ARŞİV)':''),s:c.city||''}));
+  const custItems=DB.customers.filter(c=>(!c.arsiv||c.id===o.customerId)&&!c.bayiId&&(!isPlasiyer()||custMine(c))).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(c=>({v:c.id,l:c.name+(c.arsiv?' (ARŞİV)':''),s:c.city||''}));
   const driverItems=(DB.drivers||[]).filter(d=>d.active!==false||d.id===o.soforId).sort((a,b)=>a.name.localeCompare(b.name,'tr')).map(d=>({v:d.id,l:d.name,s:d.plate||d.phone||''}));
   let lines=(o.lines||[]).map((l,i)=>orderLineRow(l,i,ro)).join('');
   const showPrice=canSeePrice();
@@ -2439,7 +2457,7 @@ function saveOrder(){
     if(!me){toast('Plasiyer kaydınız bulunamadı — yöneticinizle görüşün');return}
     if(o.aliciBayi){toast('Plasiyer bayiye satış giremez');return}
     const c=custById(o.customerId);
-    if(!c||c.plasiyerId!==me.id){toast('Yalnız size atanmış müşterilere sipariş girebilirsiniz');return}
+    if(!custMine(c)){toast('Yalnız size atanmış müşterilere sipariş girebilirsiniz');return}
     o.fiyatKademe='fabrika';
     if(o.id){const eski=DB.orders.find(x=>x.id===o.id);if(eski)o.status=eski.status;}else{o.status='beklemede';}
     if(!o.alan)o.alan=me.name;
@@ -2455,7 +2473,13 @@ function saveOrder(){
     o.iskontoMahsup='';
     if(!o.customerId){toast('Müşteri seçiniz');return}
   }
-  o.plasiyerId=o.customerId?((custById(o.customerId)||{}).plasiyerId||''):(o.bayiPlasiyerId||'');   // plasiyer izi: müşteriden ya da bayiden
+  // Plasiyer damgası: müşteri → müşterinin bayisi → bayi satışı (Saha ataması canlı fallback ile de okunur)
+  (function(){
+    var _pid='';
+    if(o.customerId){var _c=custById(o.customerId)||{};_pid=_c.plasiyerId||'';if(!_pid&&_c.bayiId)_pid=((komById(_c.bayiId)||{}).plasiyerId)||'';}
+    else if(o.aliciBayi)_pid=o.bayiPlasiyerId||((komById(o.bayiId)||{}).plasiyerId)||'';
+    o.plasiyerId=_pid;
+  })();
   if(!o.teslimTarihi){toast('Teslim tarihi seçiniz (zorunlu)');return}
   if(o.date&&o.teslimTarihi<o.date){toast('Teslim tarihi, sipariş alım tarihinden önce olamaz');return}
   // Boş satırları AT. DİKKAT: bundan sonraki her erken return, modalı YENİDEN ÇİZMELİ —
@@ -3087,13 +3111,15 @@ function arsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Y
 function unarsivCust(id){const c=custById(id);if(!c)return;if(!canEdit()){toast('Yetkiniz yok');return}
   c.arsiv=false;delete c.arsivTarih;delete c.arsivEden;delete c.arsivTs;logAct('Müşteri arşivden çıkarıldı: '+c.name);saveDB();closeModal();toast(c.name+' aktif listeye döndü');render();}
 function custPlasHTML(x){
-  const p=x.plasiyerId?plasById(x.plasiyerId):null;
-  return p?'<span style="font-size:9px;font-weight:700;color:#0E7490">PLS.</span> <span style="font-size:11.5px;white-space:nowrap">'+esc(p.name)+'</span>':'<span style="color:var(--slate-300)">—</span>';
+  const p=custPlas(x);
+  if(!p)return '<span style="color:var(--slate-300)">—</span>';
+  const viaBayi=!x.plasiyerId&&x.bayiId;   // Saha'daki bayi→plasiyer atamasından miras
+  return '<span style="font-size:9px;font-weight:700;color:#0E7490">PLS.</span> <span style="font-size:11.5px;white-space:nowrap" title="'+(viaBayi?'Bayi üzerinden':'Doğrudan atama')+'">'+esc(p.name)+(viaBayi?' <span style="font-size:9px;color:#0E7490;opacity:.7">(bayi)</span>':'')+'</span>';
 }
 function custTableHTML(){
   const arsivMode=custTab==='arsiv';
   let arr=DB.customers.filter(x=>!!x.arsiv===arsivMode&&(arsivMode||!x.bayiId));   // bayiId dolu = bayi müşterisi → aktif listede gizli; arşivde görünür (geri alınabilsin)
-  if(isPlasiyer()){const me=myPlasiyer();arr=arr.filter(x=>me&&x.plasiyerId===me.id);}   // plasiyer yalnız kendi müşterileri
+  if(isPlasiyer()){arr=arr.filter(x=>custMine(x));}   // doğrudan veya bayisi üzerinden atanmış
   if(custQ){const q=trNorm(custQ);arr=arr.filter(x=>{
     const b=x.bayiId?komById(x.bayiId):null, d=x.danismanId?komById(x.danismanId):null;
     return trNorm(x.name).includes(q)||trNorm(x.city||'').includes(q)||trNorm(x.adres||'').includes(q)||(x.phone||'').includes(custQ)||(b&&trNorm(b.name).includes(q))||(d&&trNorm(d.name).includes(q));})}
@@ -3316,7 +3342,7 @@ function custRaporHTML(){
   return h;
 }
 function openCust(id){
-  if(id&&isPlasiyer()){const _c=custById(id),_me=myPlasiyer();if(!_c||!_me||_c.plasiyerId!==_me.id){toast('Bu müşteri size atanmamış');return}}
+  if(id&&isPlasiyer()){const _c=custById(id);if(!custMine(_c)){toast('Bu müşteri size atanmamış');return}}
   if(id)editCust=JSON.parse(JSON.stringify(custById(id)));
   else{if(!canEdit()){toast('Yetkiniz yok');return}editCust={id:null,name:'',phone:'',adres:'',city:'',firma:'',tip:'',note:'',bayiId:'',danismanId:'',plasiyerId:(isPlasiyer()&&myPlasiyer())?myPlasiyer().id:''}}
   const o=editCust;const ro=!canEdit();
@@ -3367,7 +3393,7 @@ function saveCust(){const o=editCust;if(!o.name.trim()){toast('İsim giriniz');r
   // İMECE artık kart özelliği DEĞİL (sipariş kararı) → eski 'imece' kalıntısını temizle.
   if(editCust&&editCust.odemeTipi!=='dbs')editCust.odemeTipi='';
   if(isPlasiyer()){const me=myPlasiyer();if(!me){toast('Plasiyer kaydınız bulunamadı — yöneticinizle görüşün');return}
-    if(o.id){const eski=custById(o.id);if(!eski||eski.plasiyerId!==me.id){toast('Bu müşteri size atanmamış');return}}
+    if(o.id){const eski=custById(o.id);if(!custMine(eski)){toast('Bu müşteri size atanmamış');return}}
     o.plasiyerId=me.id;}   // plasiyerin eklediği/düzenlediği müşteri kendine bağlı kalır
   if(o.id){const i=DB.customers.findIndex(x=>x.id===o.id);DB.customers[i]=o;}else{o.id=uid('c');o.orderCount=0;DB.customers.push(o);}logAct('Müşteri kaydı: '+o.name);saveDB();closeModal();toast('Müşteri kaydedildi');render()}
 function delCust(id){const c=custById(id);if(!confirm((c?c.name:'Müşteri')+' KALICI olarak silinsin mi?\n\nBu işlem geri alınamaz (siparişleri silinmez). Genellikle arşive almak yeterlidir.'))return;DB.customers=DB.customers.filter(x=>x.id!==id);silKaydet('customers',id);logAct('Müşteri kalıcı silindi: '+(c?c.name:id));saveDB();closeModal();toast('Kalıcı silindi');render()}
@@ -3388,7 +3414,10 @@ function renderPlasiyerler(c,tb){
   }
   tb.innerHTML=`<button class="btn btn-pri" onclick="openPlas()">+ Yeni Plasiyer</button>`;
   const arr=(DB.plasiyerler||[]).slice().sort((a,b)=>a.name.localeCompare(b.name,'tr'));
-  const say=id=>DB.customers.filter(x=>x.plasiyerId===id&&!x.arsiv).length;
+  const say=id=>{
+    const bayiler=(DB.komisyoncular||[]).filter(k=>k.type==='bayi'&&k.plasiyerId===id).map(k=>k.id);
+    return DB.customers.filter(x=>!x.arsiv&&(x.plasiyerId===id||(x.bayiId&&bayiler.indexOf(x.bayiId)>=0))).length;
+  };
   const rows=arr.length?arr.map(p=>`<tr>
     <td onclick="openPlas('${p.id}')" style="cursor:pointer"><b>${esc(p.name)}</b>${p.note?`<div style="font-size:10px;color:var(--slate-400)">${esc(p.note)}</div>`:''}</td>
     <td style="white-space:nowrap">${p.phone?`<a href="tel:${esc(String(p.phone).replace(/\s/g,''))}" style="color:var(--blue-700);text-decoration:none;font-weight:600">${esc(p.phone)}</a>`:'<span style="color:var(--slate-300)">—</span>'}</td>
@@ -3399,13 +3428,13 @@ function renderPlasiyerler(c,tb){
     <td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>
     <td style="white-space:nowrap"><button class="btn-ic" onclick="openPlas('${p.id}')" title="Düzenle"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>${p.phone?`<button class="btn-ic" onclick="window.open('https://wa.me/${phoneClean(p.phone)}','_blank')" style="color:#25D366" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>`:''}</td>
   </tr>`).join(''):`<tr><td colspan="8" class="tbl-empty">Henüz plasiyer yok — sağ üstten ekleyin</td></tr>`;
-  c.innerHTML=tabs+`<div class="card"><div class="card-hd"><h3>${arr.length} Plasiyer</h3><span style="font-size:11px;color:var(--slate-400)">plasiyer yalnız kendine atanmış müşterileri görür · fabrika fiyatıyla sipariş girer · prim kararı Aktüerya Raporu’nda</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Plasiyer</th><th>Telefon</th><th>İl / Bölge</th><th>Portal Kullanıcısı</th><th class="num">Müşteri</th><th class="num">Prim %</th><th>Durum</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  c.innerHTML=tabs+`<div class="card"><div class="card-hd"><h3>${arr.length} Plasiyer</h3><span style="font-size:11px;color:var(--slate-400)">müşteri sayısı = doğrudan + Saha’da bağlı bayinin müşterileri · prim kararı Aktüerya’da</span></div><div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Plasiyer</th><th>Telefon</th><th>İl / Bölge</th><th>Portal Kullanıcısı</th><th class="num">Müşteri</th><th class="num">Prim %</th><th>Durum</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
   <div class="card"><div class="card-hd"><h3>Plasiyer Nasıl Devreye Alınır?</h3></div><div class="card-bd" style="padding:18px;font-size:12.5px;color:var(--slate-600);line-height:1.8">
     <b>1.</b> Portal ana sayfası → çark (Erişim Yönetimi) → <b>+ Kullanıcı Ekle</b>: kullanıcı adı ve şifre verin, <b>Sipariş Takip = Plasiyer</b> seçin (diğer modüller Girmez kalsın, "Fiyat Görür" ve "Portal Yön." işaretlenmesin).<br>
     <b>2.</b> Burada plasiyer kartı açın ve <b>Portal Kullanıcısı</b> alanına o kullanıcı adını yazın — giriş eşleşmesi bununla yapılır.<br>
-    <b>3.</b> Müşteriler sayfasında ilgili müşterilerin kartından <b>Plasiyer</b> ataması yapın.<br>
+    <b>3.</b> Atama iki yoldan yapılır: <b>Müşteriler</b> kartından doğrudan Plasiyer, veya <b>Saha / Bayi &amp; Danışman</b>’da bayiye <b>Bağlı Plasiyer</b> (bayiye satışlar ve o bayinin müşterileri aktüeryaya düşer).<br>
     <b>4.</b> <b>Aktüerya Raporu</b> sekmesinden dönem/ürün/müşteri performansına bakıp prim oranına karar verin; oranı kaydedin.<br>
-    Plasiyer girişinde: yalnız kendi müşterileri, kendi siparişleri ve fabrika fiyat listesi görünür; teslim noktası "Fabrika Teslim" olarak kilitlenir.
+    Plasiyer girişinde: yalnız kendi (veya bağlı bayisinin) müşterileri/siparişleri ve fabrika fiyat listesi görünür.
   </div></div>`;
 }
 let editPlas=null;
@@ -5373,7 +5402,7 @@ async function excelSiparisYukle(){
   var ekle=0,atla=0,yeniMus=0,yeniBM=0;var eksik=[];var sifirFiyat=[];
   var notTemiz=0,danDuzelt=0;(DB.orders||[]).forEach(function(o){
     if(o.excelId&&o.not){o.not='';notTemiz++;}   // eski 'NOT VAR' etiketini temizle
-    if(o.excelId&&o.aliciBayi&&o.bayiId){var b=komById(o.bayiId);var yd=(b&&b.danismanId)||'';if(o.danismanId!==yd){o.danismanId=yd;o.bayiPlasiyerId=(b&&b.plasiyerId)||'';o.komisyoncuId=o.danismanId||o.bayiId||'';var _r=orderKomisyon(o);o.komisyonType=_r.type;o.komisyonTutar=_r.tutar;danDuzelt++;}}   // bayinin danışmanı → prim dökümde görünür (fiyata DOKUNMA, yalnız komisyon)
+    if(o.excelId&&o.aliciBayi&&o.bayiId){var b=komById(o.bayiId);var yd=(b&&b.danismanId)||'';var yp=(b&&b.plasiyerId)||'';if(o.danismanId!==yd||o.bayiPlasiyerId!==yp||o.plasiyerId!==yp){o.danismanId=yd;o.bayiPlasiyerId=yp;o.plasiyerId=yp;o.komisyoncuId=o.danismanId||o.bayiId||'';var _r=orderKomisyon(o);o.komisyonType=_r.type;o.komisyonTutar=_r.tutar;danDuzelt++;}}   // bayinin danışmanı/plasiyeri → dökümde görünür (fiyata DOKUNMA)
   });
   try{
     for(var i=0;i<EXCEL_SIPARIS.length;i++){
@@ -5391,10 +5420,11 @@ async function excelSiparisYukle(){
         var c=_custBul(s.musteri);
         if(!c){c={id:uid('c'),name:s.musteri,phone:'',adres:'',city:s.il||'',firma:'',tip:'Müşteri',note:'',iskonto:0,bayiId:'',danismanId:'',plasiyerId:'',orderCount:0,arsiv:false,createdAt:new Date().toISOString()};DB.customers.push(c);yeniMus++;}
         o.customerId=c.id;o.customer=c.name;o.firma=c.firma||'';o.danismanId=c.danismanId||'';o.fiyatKademe=detectKademe(c.city||s.il);
+        o.plasiyerId=c.plasiyerId||((c.bayiId&&(komById(c.bayiId)||{}).plasiyerId)||'');
       }else{
         var bayi=komByType('bayi').find(function(k){return _norm(k.name)===_norm(s.bayi)});
         if(!bayi){eksik.push(s.tarih+' bayi:'+s.bayi);continue;}
-        o.aliciBayi=true;o.bayiId=bayi.id;o.fiyatKademe='bayi';o.customer='Bayi: '+bayi.name;o.danismanId=(bayi.danismanId)||'';o.bayiPlasiyerId=(bayi.plasiyerId)||'';
+        o.aliciBayi=true;o.bayiId=bayi.id;o.fiyatKademe='bayi';o.customer='Bayi: '+bayi.name;o.danismanId=(bayi.danismanId)||'';o.bayiPlasiyerId=(bayi.plasiyerId)||'';o.plasiyerId=o.bayiPlasiyerId||'';
         if(s.sinif==='bayimus'){
           var sv=_bayiMusBul(bayi.id,s.sevkAd,s.sevkIl);
           if(!sv){sv={id:uid('c'),name:s.sevkAd||'',phone:'',adres:'',city:s.sevkIl||'',firma:'',tip:'Bayi Müşterisi',note:s.sevkIl&&!s.sevkAd?(s.sevkIl+' — isim girilecek'):'',iskonto:0,bayiId:bayi.id,danismanId:'',plasiyerId:'',orderCount:0,arsiv:false,createdAt:new Date().toISOString()};DB.customers.push(sv);yeniBM++;}

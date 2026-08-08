@@ -629,7 +629,7 @@
     /* yöntem */
     h += '<div class="card" style="margin-top:16px"><div class="card-hd"><h3>Yöntem Notu</h3></div><div class="card-bd" style="padding:16px;font-size:12.5px;color:var(--slate-600);line-height:1.75">';
     h += '<b>1.</b> Satış = <b>teslim</b> edilen sipariş; tarih = fiili teslim tarihi (yoksa teslim/sipariş tarihi).<br>';
-    h += '<b>2.</b> Plasiyer eşlemesi siparişteki <code>plasiyerId</code> → müşteri → bayi zincirinden (<code>ordPlasiyer</code>).<br>';
+    h += '<b>2.</b> Plasiyer eşlemesi: sipariş damgası → <code>bayiPlasiyerId</code> → müşteri.plasiyerId → <b>müşterinin bayisinin plasiyeri</b> (Saha ataması) → Alıcı:Bayi.<br>';
     h += '<b>3.</b> Ciro yalnız canlı siparişlerden; tarihsel arşiv tonaj/çuvala girer, ciroya girmez.<br>';
     h += '<b>4.</b> Yeni müşteri = dönem içinde ilk teslimini yapan müşteri.<br>';
     h += '<b>5.</b> Önerilen prim bandı ciro üzerinden % aralığıdır — bağlayıcı değildir. Kararınızı <b>Kayıtlı Prim %</b> alanına yazın.<br>';
