@@ -2152,6 +2152,29 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         fsx.statSync(KOK + '/vendor/xlsx/xlsx.full.min.js').size > 500000);
     }
 
+    // ══ 36 · YENİ SİPARİŞ "BEKLEMEDE" BAŞLAR (firma kararı 08.08) ═══════════════════════
+    {
+      dogru('kilit kuralı tanımlı: yeni + geçmiş DEĞİL',
+        /function durumYeniKilit\(o\)\{return !!\(o&&!o\.id&&!o\.gecmisKayit\);\}/.test(H));
+      dogru('ileri durumlar yeni siparişte seçilemiyor',
+        /durumYeniKilit\(o\)&&s\.v!=='beklemede'&&s\.v!==o\.status\)\?'disabled':''/.test(H));
+      dogru('yeni sipariş varsayılanı zaten Beklemede', /status:'beklemede',lines:\[/.test(H));
+      dogru('geçmiş modu kapanınca ileri durum sızmıyor',
+        /if\(!on&&!editOrder\.id&&editOrder\.status!=='beklemede'\)editOrder\.status='beklemede';/.test(H));
+      dogru('geçmiş kutusu yeni işleyiciye bağlı',
+        /onchange="gecmisKayitDegisti\(this\.checked\)"/.test(H) &&
+        !/editOrder\.gecmisKayit=this\.checked;renderOrderModal\(\)/.test(H));
+      dogru('kullanıcıya durumun sonradan ilerletileceği söyleniyor', /— sonradan ilerletilir/.test(H));
+      // Kuralı koştur: dört senaryo
+      const kilit = new Function('return ' + (H.match(/function durumYeniKilit\(o\)\{[^}]*\}/) || [])[0] +
+        ';durumYeniKilit')();
+      dogru('YENİ sipariş → kilitli', kilit({id: null}) === true);
+      dogru('KAYITLI sipariş → serbest (sonradan ilerletilebilsin)', kilit({id: 'o1'}) === false);
+      dogru('GEÇMİŞ girişi → serbest (son durum doğrudan girilir)',
+        kilit({id: null, gecmisKayit: true}) === false);
+      dogru('boş girdi çökertmiyor', kilit(null) === false && kilit(undefined) === false);
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
