@@ -874,15 +874,11 @@ async function sozlesmeGonder(id,kanal){
     var file=new File([html],ad,{type:'text/html;charset=utf-8'});
     var up=await window.__sahaUpload(id,'sozlesme-paylas',file);
     if(!up||!up.url)throw new Error('bağlantı alınamadı');
-    var link=up.url;
-    try{
-      if(window.__sozKisaLink){
-        var k=await window.__sozKisaLink({url:up.url,path:up.path,komId:id,ad:o.name||''});
-        if(k&&k.link)link=k.link;
-      }
-    }catch(ke){console.warn('kisa link',ke);toast('Kısa link oluşmadı — uzun link kullanıldı');}
-    sozlesmeKanalAc(id,kanal,link);
-    toast(kanal==='wa'?'WhatsApp açıldı — mesajda kısa sözleşme linki var':'E-posta taslağı açıldı — mesajda kısa sözleşme linki var');
+    if(typeof window.__sozKisaLink!=='function')throw new Error('kısa link servisi hazır değil — sayfayı yenileyin');
+    var k=await window.__sozKisaLink({url:up.url,path:up.path,komId:id,ad:o.name||''});
+    if(!k||!k.link||k.link.indexOf('rota-yem.web.app/s/')<0)throw new Error('kısa link alınamadı');
+    sozlesmeKanalAc(id,kanal,k.link);
+    toast(kanal==='wa'?'WhatsApp açıldı — kısa link: '+k.link:'E-posta açıldı — kısa link: '+k.link);
   }catch(e){
     alert('Sözleşme paylaşılamadı: '+(e.message||e)+'\n\nİsterseniz «Sözleşme İndir» ile PDF alıp elle ekleyebilirsiniz.');
   }
@@ -1216,6 +1212,17 @@ window.__komYonet=async function(payload){
   if(r.status===401||r.status===403){t=await __pAuth.currentUser.getIdToken(true);r=await fetch(U,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});}
   let j={};try{j=await r.json();}catch(e){}
   if(!r.ok||!j.ok)throw new Error((j&&j.hata)||('sunucu '+r.status));
+  return j;
+};
+window.__sozKisaLink=async function(payload){
+  if(!__pAuth.currentUser)throw new Error('oturum yok — çıkıp tekrar girin');
+  const body=JSON.stringify(payload||{});
+  const U='https://us-central1-rota-yem.cloudfunctions.net/sozPaylas';
+  let t=await __pAuth.currentUser.getIdToken();
+  let r=await fetch(U,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});
+  if(r.status===401||r.status===403){t=await __pAuth.currentUser.getIdToken(true);r=await fetch(U,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body});}
+  let j={};try{j=await r.json();}catch(e){}
+  if(!r.ok||!j.ok||!j.link)throw new Error((j&&j.hata)||('kısa link '+r.status));
   return j;
 };
 </script>

@@ -2362,7 +2362,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('kısa link sozPaylas + /s/ rewrite var',
         /exports\.sozPaylas\s*=/.test(fsx.readFileSync(KOK + '/functions/index.js', 'utf8')) &&
         /"source":\s*"\/s\/\*\*"/.test(fsx.readFileSync(KOK + '/firebase.json', 'utf8')) &&
-        /window\.__sozKisaLink/.test(SAHA));
+        /window\.__sozKisaLink=async function/.test(SAHA));
 
       dogru('bayi paketi bayiSozlesme + atama içerir',
         /bayiSozlesme/.test(SAHA) && /function sozBelgeler\(type\)[\s\S]*?bayiAtama/.test(SAHA));
