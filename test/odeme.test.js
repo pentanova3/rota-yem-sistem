@@ -2138,9 +2138,6 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       const BILINEN = [
         'muhasebe/index.html → https://cdn.jsdelivr.net',            // Chart.js
         'haftalik-toplanti/index.html → https://cdnjs.cloudflare.com', // docx
-        'saha/index.html → https://cdnjs.cloudflare.com',            // jszip
-        'saha/index.html → https://cdn.jsdelivr.net',                // pizzip
-        'saha/index.html → https://cdn.jsdelivr.net',                // docxtemplater
       ];
       const yeni = ihlal.filter((x) => {
         const i = BILINEN.indexOf(x); if (i < 0) return true; BILINEN.splice(i, 1); return false;
@@ -2245,6 +2242,100 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('SUNUCU: kart payı içerik alanı — değişirse müşteri onayı tazelenir',
         /"imeceAy", "imeceKartTutar",/.test(FN));
       dogru('SUNUCU: değişiklik mesajında adı var', /imeceKartTutar: "İMECE karta işlenecek tutar"/.test(FN));
+    }
+
+    // ══ 38 · SÖZLEŞME PAKETİ — antetli PDF (bayi + teknik danışman) ════════════════════
+    // Bunlar İMZALANAN belgeler: eksik yer tutucu, kırpılmış madde ya da yanlış doldurulan
+    // boşluk doğrudan hukuki sonuç doğurur. Metin saha/sozlesme-metin.js'te; kaynağı
+    // saha/sozlesme-sablonlari/*.docx (firmanın Rev1 dosyaları).
+    {
+      const fsx = require('fs'), pth = require('path');
+      const KOK = pth.join(__dirname, '..');
+      const SAHA = fsx.readFileSync(KOK + '/saha/index.html', 'utf8');
+      const w = {};
+      new Function('window', fsx.readFileSync(KOK + '/saha/sozlesme-metin.js', 'utf8'))(w);
+      const M = w.SOZ_METIN;
+      dogru('dört belge de yüklü', Object.keys(M).length === 4 &&
+        M.bayiSozlesme && M.bayiAtama && M.danismanSozlesme && M.kvkk);
+      // Madde sayıları: metin kırpılırsa/bozulursa buradan görülür
+      const madde = (k) => M[k].bloklar.filter((b) => b.t === 'h2').length;
+      esit('bayilik sözleşmesi 28 madde', madde('bayiSozlesme'), 28);
+      esit('danışmanlık sözleşmesi 16 madde', madde('danismanSozlesme'), 16);
+      dogru('KVKK metni tam (>90 blok, 3 tablo)', M.kvkk.bloklar.length > 90 &&
+        M.kvkk.bloklar.filter((b) => b.t === 'tbl').length === 3);
+      dogru('imza blokları iki sözleşmede de var',
+        M.bayiSozlesme.bloklar.some((b) => b.t === 'imza') &&
+        M.danismanSozlesme.bloklar.some((b) => b.t === 'imza'));
+
+      // EN KRİTİK: metindeki HER {alan} sozVeri() çıktısında karşılık bulmalı.
+      // Bulamayan alan sözleşmede noktalı çizgi olarak basılır — sessiz eksik.
+      const al = (ad) => {
+        const i = SAHA.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < SAHA.length; k++) {
+          const c = SAHA[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return SAHA.slice(i, k + 1); }
+        }
+        throw new Error(ad + ' yok');
+      };
+      const API = new Function('esc',
+        [al('sozVeri'), al('sozDoldur'), al('sozTarafDoldur'), al('sozTarihDoldur'), al('sozZorunlu'),
+          al('sozAlan'), al('sozEksikler'), al('sozBelgeler')].join('\n') +
+        ';return {sozVeri,sozDoldur,sozTarafDoldur,sozTarihDoldur,sozEksikler,sozBelgeler};')(
+        (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c])));
+      const kayit = {id: 'x', type: 'bayi', name: 'A', phone: '1', adres: '',
+        sz: {adres: 'a', vergiDairesi: 'v', vergiNo: 'n', ticaretSicil: 't', yetkili: 'y', eposta: 'e',
+          tcKimlik: 'tc', iban: 'ib', mersis: 'm', isTel: 'i', faks: 'f', gsm2: 'g', teminat: 'te',
+          odemeSatis: 'o', dusunceler: 'd', yetkililer: [{ad: '1', tc: '2', gorev: '3', tel: '4'},
+            {ad: '5', tc: '6', gorev: '7', tel: '8'}]}};
+      const V = API.sozVeri(kayit);
+      const tutucular = new Set();
+      Object.values(M).forEach((doc) => doc.bloklar.forEach((b) => {
+        const met = [b.x, b.k, b.v].concat(b.rows ? b.rows.flat() : [])
+          .concat(b.sol || []).concat(b.sag || []).filter(Boolean).join(' ');
+        (met.match(/\{([a-zA-Z0-9_]+)\}/g) || []).forEach((m2) => tutucular.add(m2.slice(1, -1)));
+      }));
+      const karsiliksiz = [...tutucular].filter((k) => !(k in V));
+      dogru('metindeki HER yer tutucusunun karşılığı var', !karsiliksiz.length,
+        tutucular.size + ' yer tutucu' + (karsiliksiz.length ? ' · KARŞILIKSIZ: ' + karsiliksiz.join(', ') : ''));
+
+      // Doldurma davranışı
+      dogru('dolu alan basılıyor ve KAÇIRILIYOR (XSS)',
+        API.sozDoldur('{unvan}', {unvan: '<b>X</b>'}) === '&lt;b&gt;X&lt;/b&gt;');
+      dogru('boş alan noktalı çizgi olur (yanlış değer basmaktansa boşluk)',
+        /class="bosluk"/.test(API.sozDoldur('{unvan}', {unvan: ''})));
+      dogru('tanımsız alan da noktalı çizgi', /class="bosluk"/.test(API.sozDoldur('{yok}', {})));
+      // TUZAK: taraf boşluğu deseni tarih boşluğunu YUTMAMALI
+      const tarihBos = 'tarihinde […./…./………] iki nüsha';
+      esit('taraf doldurma TARİH boşluğuna dokunmuyor', API.sozTarafDoldur(tarihBos, 'ADEM'), tarihBos);
+      dogru('taraf boşluğu doluyor',
+        API.sozTarafDoldur('yazılı […………………..] (bundan', 'ADEM').includes('<b>ADEM</b>'));
+      dogru('tarih boşluğu gg.aa.yyyy oluyor',
+        API.sozTarihDoldur('....../....../.............. tarihinde', '2026-08-08').startsWith('08.08.2026'));
+      dogru('köşeli tarih boşluğu da doluyor',
+        API.sozTarihDoldur('[…./…./………]', '2026-08-08').indexOf('08.08.2026') >= 0);
+      esit('tarih yoksa boşluk KORUNUR (elle yazılsın)',
+        API.sozTarihDoldur('....../....../..............', ''), '....../....../..............');
+
+      // Eksik alan uyarısı
+      esit('tam kayıtta eksik yok', API.sozEksikler(kayit).length, 0);
+      dogru('eksik alan yakalanıyor',
+        API.sozEksikler({type: 'bayi', name: '', phone: '', sz: {}}).length >= 6);
+      esit('bayi paketi 3 belge', API.sozBelgeler('bayi').length, 3);
+      esit('danışman paketi 2 belge', API.sozBelgeler('danisman').length, 2);
+
+      // Kod kapıları
+      dogru('sayfa sonu seçicisi BİRLEŞİK (.sz.yeni) — torun seçici sayfa sonunu hiç uygulamıyordu',
+        /\.sz\.yeni\{break-before:page/.test(fsx.readFileSync(KOK + '/antet-belge.js', 'utf8')));
+      dogru('saha antetli belge iskeletini kullanıyor',
+        /<script src="\/antet-belge\.js"><\/script>/.test(SAHA) &&
+        /<script src="\/saha\/sozlesme-metin\.js"><\/script>/.test(SAHA));
+      dogru('ölü docx/zip CDN kütüphaneleri saha\'dan söküldü',
+        !/<script[^>]*(docxtemplater|pizzip|jszip)/i.test(SAHA));   // yorumda adı geçebilir, SCRIPT etiketi olmamalı
+      dogru('yeni kayıttan sonra sözleşme teklif ediliyor',
+        /_yeniKayit&&confirm\([\s\S]{0,80}?sozlesmePdf\(id\)/.test(SAHA));
+      dogru('evrak takibinde Hazırla düğmesi var', /onclick="sozlesmePdf\('\$\{o\.id\}'\)"/.test(SAHA));
+      dogru('sözleşme tarihi alanı kaydediliyor', /sz\.sozTarih=V\('s_tarih'\)/.test(SAHA));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────

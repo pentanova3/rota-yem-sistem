@@ -130,9 +130,10 @@ table.t tbody tr:hover .rowact{opacity:1}
 .dur.dok{background:#dcfce7;color:#16a34a}
 .dur.dno{background:#fef3c7;color:#b45309}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.50.0/build/docxtemplater.js"></script>
+<!-- docx üretimi kaldırıldı: sözleşmeler artık firmanın antetli kağıdına PDF basılıyor.
+     (Eski jszip/pizzip/docxtemplater CDN'leri CSP'de izinli olmadığı için zaten hiç yüklenmiyordu.) -->
+<script src="/antet-belge.js"></script>
+<script src="/saha/sozlesme-metin.js"></script>
 <script>window.__PA_MOD='saha';</script>
 <script type="module" src="/portal-auth.js"></script>
 </head>
@@ -471,6 +472,7 @@ function renderKomModal(){
       <div class="fld"><label>Ödeme Şekli ve Beklenen Satış (ton/ay)</label>${F('s_odeme',sz.odemeSatis)}</div>
       <div class="fld"><label>İmza Yetkilisi (sözleşme)</label>${F('s_yetkili',sz.yetkili,'Yetkili kişi adı')}</div>
       <div class="fld"><label>Düşünceler</label>${F('s_dus',sz.dusunceler)}</div>
+      <div class="fld"><label>Sözleşme Tarihi <span style="font-weight:500;color:var(--slate-400);font-size:10.5px">— boş bırakılırsa belgede tarih yeri boş basılır</span></label><input id="s_tarih" type="date" value="${esc(sz.sozTarih||'')}"></div>
       <div style="font-size:11px;font-weight:700;color:var(--slate-500);margin:8px 0 2px">Yetkili Kişiler / Çalışanlar</div>
       <div class="fld-row"><div class="fld"><label>1) Ad Soyad</label>${F('s_y1ad',y1.ad)}</div><div class="fld"><label>T.C. Kimlik</label>${F('s_y1tc',y1.tc)}</div></div>
       <div class="fld-row"><div class="fld"><label>1) Görev</label>${F('s_y1gorev',y1.gorev)}</div><div class="fld"><label>1) Telefon</label>${F('s_y1tel',y1.tel)}</div></div>
@@ -481,7 +483,8 @@ function renderKomModal(){
       <div class="fld-row"><div class="fld"><label>T.C. Kimlik No</label>${F('s_tc',sz.tcKimlik)}</div><div class="fld"><label>IBAN</label>${F('s_iban',sz.iban,'TR..')}</div></div>
       <div class="fld-row"><div class="fld"><label>Vergi Dairesi</label>${F('s_vd',sz.vergiDairesi)}</div><div class="fld"><label>Vergi No</label>${F('s_vn',sz.vergiNo)}</div></div>
       <div class="fld"><label>Adres</label>${F('s_adres',sz.adres,'Tam adres')}</div>
-      <div class="fld"><label>E-posta</label>${F('s_eposta',sz.eposta)}</div>`;
+      <div class="fld"><label>E-posta</label>${F('s_eposta',sz.eposta)}</div>
+      <div class="fld"><label>Sözleşme Tarihi <span style="font-weight:500;color:var(--slate-400);font-size:10.5px">— boş bırakılırsa belgede tarih yeri boş basılır</span></label><input id="s_tarih" type="date" value="${esc(sz.sozTarih||'')}"></div>`;
   }
   document.getElementById('modalRoot').innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
     <div class="modal-hd"><h3>${o.id?'Düzenle':'Yeni Kayıt'} — ${isBayi?'Bayi':'Teknik Danışman'}</h3><button class="xbtn" onclick="closeModal()">×</button></div>
@@ -512,12 +515,12 @@ function renderKomModal(){
         <div style="margin-top:10px">${szHtml}</div>
       </details>
     </div>
-    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:8px"><button class="btn btn-sm btn-pri" onclick="sozlesmeIndir('${o.id}')">Sözleşme İndir</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
+    <div class="modal-ft">${o.id?`<div style="margin-right:auto;display:flex;gap:8px"><button class="btn btn-sm btn-pri" onclick="sozlesmePdf('${o.id}')">Sözleşme Hazırla (PDF)</button><button class="btn btn-sm" style="color:#b91c1c;border-color:#fecaca" onclick="delKom('${o.id}')">Sil</button></div>`:''}<button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn btn-pri" onclick="saveKom()">Kaydet</button></div>
   </div></div>`;
   setTimeout(()=>{var n=document.getElementById('k_name');if(n)n.focus();},30);
 }
 async function saveKom(){
-  const o=editKom; const V=id=>{var e=document.getElementById(id);return e?(e.value||'').trim():'';};
+  const o=editKom; const _yeniKayit=!o.id; const V=id=>{var e=document.getElementById(id);return e?(e.value||'').trim():'';};
   o.name=V('k_name');
   if(!o.name){alert('İsim giriniz');return;}
   o.type=document.getElementById('k_type').value;
@@ -536,9 +539,10 @@ async function saveKom(){
     sz.adres=V('s_adres');sz.vergiDairesi=V('s_vd');sz.vergiNo=V('s_vn');sz.ticaretSicil=V('s_ts');sz.mersis=V('s_mersis');
     sz.isTel=V('s_istel');sz.faks=V('s_faks');sz.gsm2=V('s_gsm2');sz.eposta=V('s_eposta');sz.iban=V('s_iban');
     sz.teminat=V('s_teminat');sz.odemeSatis=V('s_odeme');sz.yetkili=V('s_yetkili');sz.dusunceler=V('s_dus');
+    sz.sozTarih=V('s_tarih');
     sz.yetkililer=[{ad:V('s_y1ad'),tc:V('s_y1tc'),gorev:V('s_y1gorev'),tel:V('s_y1tel')},{ad:V('s_y2ad'),tc:V('s_y2tc'),gorev:V('s_y2gorev'),tel:V('s_y2tel')}];
   } else {
-    sz.tcKimlik=V('s_tc');sz.iban=V('s_iban');sz.vergiDairesi=V('s_vd');sz.vergiNo=V('s_vn');sz.adres=V('s_adres');sz.eposta=V('s_eposta');
+    sz.tcKimlik=V('s_tc');sz.iban=V('s_iban');sz.vergiDairesi=V('s_vd');sz.vergiNo=V('s_vn');sz.adres=V('s_adres');sz.eposta=V('s_eposta');sz.sozTarih=V('s_tarih');
   }
   o.sz=sz;
   // ÇEKİRDEK → ANA liste (apps/siparis, tek kaynak). sz/belgeler yerelde (apps/saha) kalır. Yeni kayıtta id'yi sunucu verir.
@@ -552,6 +556,9 @@ async function saveKom(){
     else{['name','type','city','phone','adres','note','rate','active','danismanId','plasiyerId','odemeTipi'].forEach(f=>ex[f]=core[f]);}   // odemeTipi ŞART: listede yoksa mevcut bayinin DBS'i sessizce eski değerde kalır
     ex.sz=o.sz; if(o.belgeler)ex.belgeler=o.belgeler;
     BAYILER=DB.komisyoncular; saveSaha(); closeModal(); render();
+    // YENİ kayıt: anlaşma yapılır yapılmaz sözleşme paketi hazır olsun (firma isteği 08.08).
+    // Düzenlemede sorulmaz — her küçük değişiklikte sözleşme açmak gürültü olurdu.
+    if(_yeniKayit&&confirm(ex.name+' kaydı oluşturuldu.\n\nSözleşme paketini şimdi hazırlayalım mı?'))sozlesmePdf(id);
   }catch(e){ alert('Kaydedilemedi: '+(e.message||e)+'\n(Bayi/danışman yönetimi yalnız saha yöneticisi/portal yöneticisi yetkisiyle yapılır.)'); }
 }
 async function delKom(id){
@@ -563,35 +570,111 @@ async function delKom(id){
     BAYILER=DB.komisyoncular; saveSaha(); closeModal(); render();
   }catch(e){ alert('Silinemedi: '+(e.message||e)); }
 }
-async function sozlesmeIndir(id){
-  if(typeof window.docxtemplater==='undefined'||typeof PizZip==='undefined'||typeof JSZip==='undefined'){alert('Sözleşme bileşenleri henüz yüklenmedi, birkaç saniye sonra tekrar deneyin.');return;}
-  const o=(DB.komisyoncular||[]).find(k=>k.id===id); if(!o){alert('Kayıt bulunamadı');return;}
-  const sz=o.sz||{};
-  const vdNo=[sz.vergiDairesi,sz.vergiNo].filter(Boolean).join(' / ');
-  const base='/saha/sozlesme-sablonlari/';
-  async function fill(file,data){
-    const buf=await (await fetch(base+file)).arrayBuffer();
-    const doc=new window.docxtemplater(new PizZip(buf),{paragraphLoop:true,linebreaks:true,delimiters:{start:'{',end:'}'},nullGetter:()=>''});
-    doc.render(data);
-    return doc.getZip().generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-  }
-  async function raw(file){return await (await fetch(base+file)).blob();}
-  try{
-    const zip=new JSZip();
-    if(o.type==='bayi'){
-      const yy=sz.yetkililer||[]; const y1=yy[0]||{},y2=yy[1]||{};
-      zip.file('1- Bayilik Sözleşmesi.docx', await fill('bayi-sozlesme.docx',{unvan:o.name,adres:sz.adres||'',vergiDaireNo:vdNo,ticaretSicil:sz.ticaretSicil||'',yetkili:sz.yetkili||'',telefon:o.phone||'',eposta:sz.eposta||''}));
-      zip.file('2- Bayi Atama Formu.docx', await fill('bayi-atama.docx',{sirketAdi:o.name,adres:sz.adres||'',vergiDairesi:sz.vergiDairesi||'',vergiNo:sz.vergiNo||'',ticaretSicil:sz.ticaretSicil||'',mersis:sz.mersis||'',isTel:sz.isTel||'',faks:sz.faks||'',gsm1:o.phone||'',gsm2:sz.gsm2||'',eposta:sz.eposta||'',iban:sz.iban||'',teminat:sz.teminat||'',odemeSatis:sz.odemeSatis||'',dusunceler:sz.dusunceler||'',y1ad:y1.ad||'',y1tc:y1.tc||'',y1gorev:y1.gorev||'',y1tel:y1.tel||'',y2ad:y2.ad||'',y2tc:y2.tc||'',y2gorev:y2.gorev||'',y2tel:y2.tel||''}));
-      zip.file('3- KVKK Aydınlatma Metni.docx', await raw('kvkk.docx'));
-    } else {
-      zip.file('1- Teknik Danışmanlık Sözleşmesi.docx', await fill('danisman-sozlesme.docx',{adSoyad:o.name,tcKimlik:sz.tcKimlik||'',vergiDaireNo:vdNo,adres:sz.adres||'',telefon:o.phone||'',eposta:sz.eposta||'',iban:sz.iban||''}));
-      zip.file('2- KVKK Aydınlatma Metni.docx', await raw('kvkk.docx'));
+// ══════════════════════════════════════════════════════════════════════════
+// SÖZLEŞME PAKETİ — firmanın antetli kağıdına PDF
+// Metin saha/sozlesme-metin.js'ten gelir (kaynak: sozlesme-sablonlari/*.docx).
+// Kayıtta boş olan alan SİLİNMEZ, noktalı çizgi basılır — belge elle doldurulabilsin.
+// ══════════════════════════════════════════════════════════════════════════
+function sozBelgeler(type){
+  return type==='bayi'
+    ? [['bayiSozlesme','BAYİLİK SÖZLEŞMESİ'],['bayiAtama','EK-A'],['kvkk','EK-B']]
+    : [['danismanSozlesme','TEKNİK DANIŞMANLIK SÖZLEŞMESİ'],['kvkk','EK']];
+}
+// Sözleşmenin doldurulması gereken alanları — eksikse kullanıcı UYARILIR, üretim engellenmez.
+function sozZorunlu(type){
+  return type==='bayi'
+    ? [['name','Ünvan / Şirket adı'],['sz.adres','Adres'],['sz.vergiDairesi','Vergi dairesi'],['sz.vergiNo','Vergi no'],
+       ['sz.ticaretSicil','Ticaret sicil no'],['sz.yetkili','İmza yetkilisi'],['phone','Telefon'],['sz.eposta','E-posta']]
+    : [['name','Ad soyad'],['sz.tcKimlik','T.C. kimlik no'],['sz.adres','Adres'],['phone','Telefon'],
+       ['sz.eposta','E-posta'],['sz.iban','IBAN']];
+}
+function sozAlan(o,yol){var p=yol.split('.');var v=(p.length>1)?((o[p[0]]||{})[p[1]]):o[p[0]];return String(v==null?'':v).trim();}
+function sozEksikler(o){return sozZorunlu(o.type).filter(function(z){return !sozAlan(o,z[0]);}).map(function(z){return z[1];});}
+function sozVeri(o){
+  var sz=o.sz||{}, vdNo=[sz.vergiDairesi,sz.vergiNo].filter(Boolean).join(' / ');
+  var yy=sz.yetkililer||[], y1=yy[0]||{}, y2=yy[1]||{};
+  return {unvan:o.name,sirketAdi:o.name,adSoyad:o.name,adres:sz.adres||o.adres||'',
+    vergiDaireNo:vdNo,vergiDairesi:sz.vergiDairesi||'',vergiNo:sz.vergiNo||'',
+    ticaretSicil:sz.ticaretSicil||'',mersis:sz.mersis||'',yetkili:sz.yetkili||'',
+    telefon:o.phone||'',gsm1:o.phone||'',gsm2:sz.gsm2||'',isTel:sz.isTel||'',faks:sz.faks||'',
+    eposta:sz.eposta||'',iban:sz.iban||'',tcKimlik:sz.tcKimlik||'',
+    teminat:sz.teminat||'',odemeSatis:sz.odemeSatis||'',dusunceler:sz.dusunceler||'',
+    y1ad:y1.ad||'',y1tc:y1.tc||'',y1gorev:y1.gorev||'',y1tel:y1.tel||'',
+    y2ad:y2.ad||'',y2tc:y2.tc||'',y2gorev:y2.gorev||'',y2tel:y2.tel||''};
+}
+// Yer tutucu doldurma: metin ÖNCE kaçırılır, sonra {alan} yerine kaçırılmış değer konur.
+// Boş değer noktalı çizgi olur — sözleşmede boşluk kalması, yanlış değer basmaktan iyidir.
+function sozDoldur(metin,V){
+  return esc(metin).replace(/\{([a-zA-Z0-9_]+)\}/g,function(m,k){
+    var v=V[k];
+    return (v==null||v==='') ? '<span class="bosluk">............................</span>' : esc(v);
+  });
+}
+// Madde 1'deki taraf boşluğu: "[…………………..]" → kayıttaki ünvan/ad.
+// Ayraç sınıfı YALNIZ nokta/üç-nokta: "[…./…./………]" (tarih) bu desene TAKILMAZ,
+// yoksa tarih girilmemiş sözleşmede tarih yerine bayi adı basılırdı.
+function sozTarafDoldur(html,ad){
+  if(!ad)return html;
+  return html.replace(/\[[…\.]{5,}\]/g,'<b>'+esc(ad)+'</b>');
+}
+// Tarih boşlukları ("....../....../.........." ve "[…./…./………]") — tarih girildiyse doldurulur.
+function sozTarihDoldur(html,t){
+  if(!t)return html;
+  var d=new Date(t+'T00:00:00'); if(isNaN(d))return html;
+  var g=('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear();
+  return html.replace(/\.{3,}\s*\/\s*\.{3,}\s*\/\s*\.{3,}/g,g)
+             .replace(/…\.\s*\/\s*…\.\s*\/\s*…+/g,g);
+}
+function sozBlokHTML(b,V){
+  switch(b.t){
+    case 'h1': return '<div class="h1">'+sozDoldur(b.x,V)+'</div>';
+    case 'h2': return '<div class="h2">'+sozDoldur(b.x,V)+'</div>';
+    case 'h3': return '<div class="h3">'+sozDoldur(b.x,V)+'</div>';
+    case 'li': return '<div class="li">'+sozDoldur(b.x,V)+'</div>';
+    case 'p':  return '<div class="p">'+sozDoldur(b.x,V)+'</div>';
+    case 'kv': return '<div class="kv"><b>'+sozDoldur(b.k,V)+'</b><span>'+sozDoldur(b.v,V)+'</span></div>';
+    case 'bos':return '<div class="ara"></div>';
+    case 'tbl':{
+      // Word tablosunda satırların hücre sayısı değişebiliyor (2 / 4 / tek hücre). Eksik
+      // hücreleri colspan ile tamamla — yoksa sütunlar kayıyor, tek hücreli ara başlıklar
+      // ("B) BAYİLERE ÖZEL VERİLER") tablonun soluna sıkışıyordu.
+      var en=b.rows.reduce(function(m,r){return Math.max(m,r.length);},0);
+      var gov=b.rows.map(function(r,ri){
+        return '<tr'+((r.length===1&&en>1)?' class="ara-satir"':'')+'>'+r.map(function(c,ci){
+          var span=(ci===r.length-1&&r.length<en)?' colspan="'+(en-r.length+1)+'"':'';
+          return '<td'+span+'>'+sozDoldur(c,V).replace(/\n/g,'<br>')+'</td>';}).join('')+'</tr>';});
+      // Başlıklı tabloda ilk satır <thead> → uzun tablo sayfaya bölününce başlık TEKRARLAR.
+      return '<table'+(b.bas?' class="bas"':'')+'>'+
+        (b.bas?('<thead>'+gov[0]+'</thead><tbody>'+gov.slice(1).join('')+'</tbody>'):('<tbody>'+gov.join('')+'</tbody>'))+'</table>';
     }
-    const out=await zip.generateAsync({type:'blob'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(out);
-    a.download=(o.name||'Sozlesme').replace(/[\\/:*?"<>|]/g,' ').trim()+' - Sözleşme Paketi.zip';
-    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
-  }catch(e){console.error(e); alert('Sözleşme oluşturulamadı: '+(e.message||e));}
+    case 'imza':return '<div class="imzalar">'+[b.sol,b.sag].map(function(kol){
+      return '<div><div class="ust">'+sozDoldur(kol[0],V)+'</div>'+
+        kol.slice(1).map(function(x){return '<div class="sat">'+sozDoldur(x,V)+'</div>';}).join('')+
+        '<div class="cizgi"><span>İmza / Kaşe</span></div></div>';}).join('')+'</div>';
+    default: return '';
+  }
+}
+function sozlesmePdf(id){
+  var o=(DB.komisyoncular||[]).find(function(k){return k.id===id;});
+  if(!o){alert('Kayıt bulunamadı');return;}
+  if(!window.antetBelge||!window.SOZ_METIN){alert('Sözleşme bileşenleri yüklenmedi — sayfayı yenileyin.');return;}
+  var eksik=sozEksikler(o);
+  if(eksik.length&&!confirm('Sözleşmede boş kalacak alanlar var:\n\n• '+eksik.join('\n• ')+
+    '\n\nBoş alanlar noktalı çizgi olarak basılır (elle doldurabilirsiniz).\nYine de hazırlansın mı?\n\n'+
+    '(İptal → kaydı düzenleyip "Sözleşme Bilgileri" bölümünü doldurun.)'))return;
+  var V=sozVeri(o), parcalar=[];
+  sozBelgeler(o.type).forEach(function(b,i){
+    var m=window.SOZ_METIN[b[0]]; if(!m)return;
+    var ic=m.bloklar.map(function(x){return sozBlokHTML(x,V);}).join('');
+    parcalar.push('<div class="sz'+(i?' yeni':'')+'">'+sozTarafDoldur(sozTarihDoldur(ic,(o.sz||{}).sozTarih),o.name)+'</div>');
+  });
+  var html=window.antetBelge({duz:true,govde:parcalar.join(''),
+    baslikEtiket:(o.name||'')+' — '+(o.type==='bayi'?'Bayilik Sözleşmesi':'Danışmanlık Sözleşmesi'),
+    imzaSol:'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş.',
+    imzaSag:'Belge tarihi: '+new Date().toLocaleDateString('tr-TR'),
+    araclar:'<button class="bp" onclick="window.print()">PDF olarak kaydet</button><button class="bc" onclick="window.close()">Kapat</button>',
+    otoYazdir:700});
+  if(!window.antetBelgeAc(html))alert('Açılır pencere engellendi — tarayıcı ayarından bu site için izin verin.');
 }
 
 // ====== SÖZLEŞMELER (link tabanlı) ======
@@ -612,9 +695,9 @@ function renderSozlesme(){
   var arr=[...(BAYILER||[])].sort(function(a,b){return a.type===b.type?a.name.localeCompare(b.name,'tr'):(a.type==='bayi'?-1:1);});
   var toplam=arr.length, tamam=arr.filter(function(o){var x=belgeDurum(o);return x[0]===x[1]&&x[1]>0;}).length;
   let h=`<div class="card"><div class="card-hd"><h3>Evrak Takibi — Bayi &amp; Danışman</h3><span class="hint">${tamam}/${toplam} eksiksiz</span></div>
-    <div style="padding:9px 16px;font-size:12px;color:var(--slate-500);border-bottom:1px solid var(--slate-100)">İmzalı sözleşmeleri ve vergi levhasını tarayıp yükleyin. <b style="color:#16a34a">✓</b> yüklü (tıkla → indir) · <b style="color:#dc2626">✕</b> eksik (tıkla → yükle).</div>
-    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th></tr></thead><tbody>`;
-  if(!arr.length)h+=`<tr><td colspan="7" class="empty">Kayıt yok. Bayi & Danışman sekmesinden ekleyin.</td></tr>`;
+    <div style="padding:9px 16px;font-size:12px;color:var(--slate-500);border-bottom:1px solid var(--slate-100)"><b>Hazırla</b> → antetli sözleşme paketini PDF olarak üretir. İmzalanan nüshaları tarayıp buraya yükleyin. <b style="color:#16a34a">✓</b> yüklü (tıkla → indir) · <b style="color:#dc2626">✕</b> eksik (tıkla → yükle).</div>
+    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th><th style="text-align:center">Sözleşme</th></tr></thead><tbody>`;
+  if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt yok. Bayi & Danışman sekmesinden ekleyin.</td></tr>`;
   arr.forEach(function(o){
     var dt=belgeDurum(o), isBayi=o.type==='bayi';
     h+=`<tr>
@@ -625,6 +708,7 @@ function renderSozlesme(){
       <td style="text-align:center">${belgeCell(o,'kvkk')}</td>
       <td style="text-align:center">${belgeCell(o,'vergi')}</td>
       <td style="text-align:center"><span class="dur ${dt[0]===dt[1]?'dok':'dno'}">${dt[0]}/${dt[1]}</span></td>
+      <td style="text-align:center"><button class="btn btn-sm" onclick="sozlesmePdf('${o.id}')" title="Antetli sözleşme paketini PDF olarak hazırla">Hazırla</button></td>
     </tr>`;
   });
   h+=`</tbody></table></div></div>`;

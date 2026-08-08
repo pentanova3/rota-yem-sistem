@@ -134,6 +134,36 @@
   .kutular .son{background:var(--tint);border-color:var(--lac)}
   .kutular .son .v{color:var(--lac)}
 
+  /* ── SÖZLEŞME METNİ ────────────────────────────────────────────────────
+     Rapor değil hukuki belge: iki yana yaslı, 9.5 pt, madde başlığı sayfa
+     sonunda yalnız kalmasın diye break-after:avoid. */
+  .sz{font-size:9.5pt;line-height:1.5;text-align:justify}
+  .sz .h1{font-size:14pt;font-weight:800;color:var(--lac2);text-align:center;margin:0 0 10px;text-wrap:balance}
+  .sz .h2{font-size:10pt;font-weight:800;color:var(--lac);margin:11px 0 4px;text-align:left;
+          break-after:avoid;page-break-after:avoid}
+  .sz .h3{font-size:9.5pt;font-weight:800;color:var(--lac2);margin:9px 0 3px;text-align:left;
+          break-after:avoid;page-break-after:avoid}
+  .sz .p{margin:0 0 5px}
+  .sz .li{margin:0 0 4px;padding-left:9mm}
+  .sz .kv{display:flex;gap:5px;margin:0 0 2px;text-align:left}
+  .sz .kv b{width:44mm;flex:none;font-weight:600;color:#3A4256}
+  .sz .ara{height:6px}
+  .sz table{width:100%;border-collapse:collapse;font-size:8pt;margin:5px 0 8px;text-align:left}
+  .sz table td{border:1px solid var(--cizgi);padding:4px 6px;vertical-align:top;line-height:1.4}
+  .sz table.bas thead td{background:var(--lac);color:#fff;font-weight:700;font-size:7pt;
+          text-transform:uppercase;letter-spacing:.04em}
+  .sz table thead{display:table-header-group}
+  .sz table tr.ara-satir td{background:var(--tint);font-weight:700;color:var(--lac2)}
+  .sz table tr{break-inside:avoid}
+  .sz .imzalar{display:flex;gap:16mm;margin-top:16px;break-inside:avoid;text-align:left;align-items:stretch}
+  .sz .imzalar > div{flex:1;display:flex;flex-direction:column}
+  .sz .imzalar .ust{font-weight:800;color:var(--lac2);margin-bottom:1px}
+  .sz .imzalar .sat{color:#3A4256}
+  .sz .imzalar .cizgi{margin-top:auto;padding-top:15mm;border-top:0;font-size:8.5pt;color:var(--soluk)}
+  .sz .imzalar .cizgi span{display:block;border-top:1px solid #9AA1B4;padding-top:3px}
+  .sz .bosluk{color:#96A0B8;letter-spacing:.6px}
+  .sz.yeni{break-before:page;page-break-before:always}
+
   .not{font-size:7.5pt;color:var(--soluk);line-height:1.5;margin-top:5px}
   .not b{color:#4A5266}
   .not .kk{color:#fff}
@@ -198,11 +228,13 @@
       '<div class="kagit"><table class="sayfa">' +
         '<thead><tr><td><img class="ust" src="' + K + '/antet-ust.png" alt=""></td></tr></thead>' +
         '<tbody><tr><td class="icerik">' +
+          // duz: künye şeridi HİÇ basılmaz — sözleşme gibi kendi başlığı olan belgeler için.
+          (o.duz ? '' :
           '<div class="kunye"><div>' +
             (o.tip ? '<div class="tip">' + esc(o.tip) + '</div>' : '') +
             '<h1>' + esc(o.ad || '') + '</h1>' +
             (o.altad ? '<div class="altad">' + esc(o.altad) + '</div>' : '') +
-          '</div><div class="sag">' + kunye + '</div></div>' +
+          '</div><div class="sag">' + kunye + '</div></div>') +
           ozet + (o.govde || '') +
           '<div class="imza"><span>' + esc(o.imzaSol || '') + '</span><span>' + esc(o.imzaSag || '') + '</span></div>' +
         '</td></tr></tbody>' +
