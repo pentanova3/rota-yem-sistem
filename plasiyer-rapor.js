@@ -1000,12 +1000,7 @@
     govde += printOzetKirilim(D);
     govde += printUrun(D);
     govde += printMusteri(D);
-    govde += '<div class="blok"><h2>Yöntem Notu</h2>';
-    govde += '<p class="not"><b>1.</b> Satış = teslim edilen sipariş; tarih = fiili teslim tarihi.<br>';
-    govde += '<b>2.</b> Plasiyer eşlemesi: sipariş damgası → bayiPlasiyerId → müşteri.plasiyerId → bayinin plasiyeri → Alıcı:Bayi.<br>';
-    govde += '<b>3.</b> Ciro yalnız canlı siparişlerden; tarihsel arşiv tonaj/çuvala girer, ciroya girmez.<br>';
-    govde += '<b>4.</b> Yeni müşteri = dönem içinde ilk teslimini yapan müşteri.<br>';
-    govde += '<b>5.</b> Önerilen prim bandı ciro üzerinden % aralığıdır — bağlayıcı değildir.</p></div>';
+    /* Yöntem notu yazdırılmaz — yönetime giden çıktıda kafa karıştırıyordu (ekrandaki not duruyor). */
 
     var html = g().antetBelge({
       tip: 'Plasiyer Aktüerya Raporu',
