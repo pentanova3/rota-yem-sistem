@@ -1041,6 +1041,30 @@ function belgePaketGonderildi(id,kanal,link){
   });
   saveSaha();
 }
+/** Test / yanlış WA-Mail işaretlerini temizler → Bekliyor. İmzalı yüklenenler kalır. */
+function belgeGonderimleriSifirla(){
+  var n=0;
+  (DB.komisyoncular||[]).forEach(function(o){
+    if(!o||!o.belgeler)return;
+    Object.keys(o.belgeler).forEach(function(k){
+      var b=o.belgeler[k];
+      if(b&&(b.gonderildi||b.gonderTs||b.gonderKanal||b.gonderLink))n++;
+    });
+  });
+  if(!n){toast('Sıfırlanacak gönderim yok');return;}
+  if(!confirm(n+' «Gönderildi» kaydı Bekliyor’a alınsın mı?\n(İmzalı yüklenenler korunur.)'))return;
+  (DB.komisyoncular||[]).forEach(function(o){
+    if(!o||!o.belgeler)return;
+    Object.keys(o.belgeler).forEach(function(k){
+      var b=o.belgeler[k]; if(!b)return;
+      if(!(b.gonderildi||b.gonderTs||b.gonderKanal||b.gonderLink))return;
+      if(b.url){delete b.gonderildi;delete b.gonderTs;delete b.gonderKanal;delete b.gonderLink;}
+      else delete o.belgeler[k];
+    });
+  });
+  saveSaha(); render(); toast(n+' gönderim bekliyora alındı');
+  if(typeof window.__pushNow==='function')window.__pushNow();
+}
 function belgeCell(o,key){
   var b=belgeKayit(o,key);
   var fid='bf_'+o.id+'_'+key;
@@ -1083,7 +1107,10 @@ function renderSozlesme(){
         <span><span class="bst gon">Gönderildi</span> WA/Mail ile iletildi · tarih görünür</span>
         <span><span class="bst yuk">Yüklendi</span> imzalı nüsha sistemde</span>
       </div>
-      <div style="margin-top:7px;font-size:11.5px;color:var(--slate-500)"><b>İndir</b> antetli PDF · <b>WA / Mail</b> paketi gönderir ve «Gönderildi» işaretler · imzalı döneni <b>Yükle</b> ile ekleyin.</div>
+      <div style="margin-top:7px;font-size:11.5px;color:var(--slate-500);display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+        <span><b>İndir</b> antetli PDF · <b>WA / Mail</b> paketi gönderir ve «Gönderildi» işaretler · imzalı döneni <b>Yükle</b> ile ekleyin.</span>
+        ${arr.some(function(o){var x=belgeDurum(o);return x.gon>0;})?'<button class="btn btn-sm" onclick="belgeGonderimleriSifirla()" title="Tüm Gönderildi işaretlerini temizle">Gönderimleri sıfırla</button>':''}
+      </div>
     </div>
     <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th><th style="text-align:center">İşlem</th></tr></thead><tbody>`;
   if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt yok. Bayi & Danışman sekmesinden ekleyin.</td></tr>`;
