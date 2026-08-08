@@ -968,11 +968,31 @@ function imeceVadeToplam(o,ay,oran){
   if(!o)return 0;
   const r=(oran==null)?imeceOranKolon(o,ay):+oran, ana=imeceAnaTutar(o);
   if(!imeceOranGecerli(r))return ana;                 // vade yok/bozuk oran → fark faturası yok
+  // KISMİ ÖDEME manuel/ürün dallarının İKİSİNİ DE geçersiz kılar: ürünlerin bir kısmı nakit
+  // ödendiği için satır-bazlı vade fiyatı taban olamaz. Nakit kısım aynen, kart kısmı vadeli.
+  if(imeceKismiMi(o)){const k=imeceKartTutar(o);return round2(ana-k+imeceKirp(k/(1-r/100)));}
   if(imeceManuelMi(o))return imeceKirp(ana/(1-r/100));
   if(!o.lines)return ana;
   let t=0;o.lines.forEach(l=>{t+=imeceSatirTutar(o,l,ay,r);});
   return round2(t);
 }
+// KISMİ İMECE (firma isteği 08.08.2026): müşteri tutarın bir kısmını İMECE kartla, kalanını
+// nakit/kredi kartıyla ödeyebiliyor. Vade farkı YALNIZ kartla ödenen kısma işler.
+//   boş / 0        → siparişin TAMAMI İMECE (eski davranış; geçmiş siparişler aynen çalışır)
+//   0 < tutar < ana → kısmi; fark = tutar/(1−oran) − tutar
+//   tutar >= ana    → tamamı (girişte kırpılır; sipariş küçültülünce eski değer taşmasın diye
+//                     okuma anında da kırpılır — aksi halde ekranda ana tutardan büyük "kart payı" kalır)
+function imeceKartTutar(o){
+  if(!o)return 0;
+  const v=round2(+o.imeceKartTutar||0);
+  if(!(v>0))return 0;
+  return Math.min(v,imeceAnaTutar(o));
+}
+function imeceKismiMi(o){const k=imeceKartTutar(o);return k>0&&k<imeceAnaTutar(o)-0.005;}
+// Vade farkının hesaplanacağı taban: kısmi girildiyse o tutar, yoksa 1. faturanın tamamı.
+function imeceVadeTabani(o){const k=imeceKartTutar(o);return k>0?k:imeceAnaTutar(o);}
+// Nakit/kredi kartıyla ödenecek kalan.
+function imeceNakitKalan(o){return imeceKismiMi(o)?round2(imeceAnaTutar(o)-imeceKartTutar(o)):0;}
 // 1. FATURA (normal ederi) — ciro/komisyon/iskonto tabanı BUDUR (firma kararı: kredi kartı ana tutarı).
 // Manuel pazarlık tutarı girilmişse orderTotal zaten onu döndürür.
 function imeceAnaTutar(o){return orderTotal(o);}
@@ -2016,6 +2036,7 @@ function imeceBlokHTML(o,ro){
 
   const satirlar=(o.lines||[]).filter(l=>l.code&&(+l.qty>0));
   const manuel=imeceManuelMi(o);
+  const kismi=imeceKismiMi(o), kartT=imeceKartTutar(o), nakit=imeceNakitKalan(o);
   // Uyarılar manuel modda da GÖSTERİLİR (yalnız metni değişir). Gizlendiklerinde, kredi kartı fiyatı
   // eksik ürünün yol açtığı yanlış "Hesaplanan Toplam" → yanlış İlave İskonto teşhissiz kalıyordu.
   const eksik=imeceEksikFiyat(o), elle=imeceElleFiyatli(o);
@@ -2046,7 +2067,12 @@ function imeceBlokHTML(o,ro){
       </label></th>`;}).join('');
   // MANUEL FATURA: ürün liste fiyatları vade tabanı DEĞİL (pazarlık tutarı geçerli) → tek satır göster,
   // yoksa ekranda toplamı tutmayan ürün satırları çıkar ve verilen ilave iskonto geri alınmış görünür.
-  const govde=manuel
+  // KISMİ: ürün satırları vade tabanı DEĞİL — tek satır, kart payının vadeli karşılığı.
+  const govde=kismi
+    ? `<tr><td><b>İMECE kart tutarı</b><div style="font-size:10px;color:var(--slate-400)">${fmtTL(kartT)} · kalan ${fmtTL(nakit)} nakit/KK</div></td><td class="num">—</td>
+        ${IMECE_AYLAR.map(a=>{const r=kolonOran(a);return `<td class="num" style="${ay===a?'background:#F5F3FF;font-weight:700':''}">${hucre({r,t:imeceOranGecerli(r)?imeceKirp(kartT/(1-r/100)):kartT})}</td>`}).join('')}
+      </tr>`
+    : manuel
     ? `<tr><td><b>Fatura Tutarı</b><div style="font-size:10px;color:var(--slate-400)">pazarlık — ürün fiyatları geçersiz</div></td><td class="num">—</td>
         ${IMECE_AYLAR.map(a=>`<td class="num" style="${ay===a?'background:#F5F3FF;font-weight:700':''}">${hucre({r:kolonOran(a),t:imeceVadeToplam(o,a,kolonOran(a))})}</td>`).join('')}
       </tr>`
@@ -2055,20 +2081,30 @@ function imeceBlokHTML(o,ro){
       ${IMECE_AYLAR.map(a=>`<td class="num" style="${ay===a?'background:#F5F3FF;font-weight:700':''}">${hucre({r:kolonOran(a),t:imeceSatirTutar(o,l,a,kolonOran(a))})}</td>`).join('')}
     </tr>`).join('');
   const toplam=`<tr style="background:var(--slate-50);font-weight:800">
-      <td>Toplam</td><td class="num"></td>
+      <td>Toplam${kismi?'<div style="font-size:10px;font-weight:600;color:var(--slate-400)">nakit kısım dahil</div>':''}</td><td class="num"></td>
       ${IMECE_AYLAR.map(a=>`<td class="num" style="${ay===a?'background:#EDE9FE;color:#5B21B6':''}">${hucre({r:kolonOran(a),t:imeceVadeToplam(o,a,kolonOran(a))})}</td>`).join('')}
     </tr>`;
   const ana=imeceAnaTutar(o), fark=ay?imeceFarkAy(o,ay):0;
   const ozet=ay
     ? `<div style="margin-top:9px;border-top:1px solid #C4B5FD;padding-top:8px">
         <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span style="color:var(--slate-600)">1. Fatura — Normal Ederi</span><span style="font-weight:700">${fmtTL(ana)}</span></div>
-        <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span style="color:var(--slate-600)">2. Fatura — Fiyat Farkı (${ay} ay · %${fmtN(kolonOran(ay))})</span><span style="color:#6D28D9;font-weight:700">+ ${fmtTL(fark)}</span></div>
+        ${kismi?`<div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;color:var(--slate-500)"><span style="padding-left:10px">— İMECE kart payı <b style="color:#5B21B6">${fmtTL(kartT)}</b> · nakit/KK <b style="color:var(--slate-700)">${fmtTL(nakit)}</b></span><span></span></div>`:''}
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span style="color:var(--slate-600)">2. Fatura — Fiyat Farkı (${ay} ay · %${fmtN(kolonOran(ay))}${kismi?' · yalnız kart payına':''})</span><span style="color:#6D28D9;font-weight:700">+ ${fmtTL(fark)}</span></div>
         <div style="display:flex;justify-content:space-between;font-size:14px;border-top:1px solid #C4B5FD;padding-top:6px"><span style="font-weight:800;color:#5B21B6">Müşterinin Toplam Ödeyeceği</span><span style="font-weight:800;color:#5B21B6">${fmtTL(round2(ana+fark))}</span></div>
         <div style="font-size:10px;color:var(--slate-400);margin-top:4px">İki fatura AYRI kesilir. İskonto ve komisyon 1. fatura üzerinden hesaplanır; fiyat farkı ciroya girmez.</div>
       </div>`
     : `<div style="font-size:11.5px;color:var(--amber-700);margin-top:8px;font-weight:600">Vade seçilmedi — yukarıdaki tablodan bir ay işaretleyin. (Vade seçmeden kaydedilemez.)</div>`;
   return kutu+`<div style="margin-top:9px;border:1px solid #DDD6FE;border-radius:8px;padding:10px 11px;background:#FDFCFF">
     <div style="font-size:11px;color:#5B21B6;font-weight:800;margin-bottom:7px">İMECE KART — VADE TABLOSU</div>
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#F8F6FF;border:1px solid #DDD6FE;border-radius:6px;padding:7px 9px">
+      <label style="font-size:11.5px;font-weight:700;color:#5B21B6;white-space:nowrap">İMECE kart ile ödenecek</label>
+      <input type="number" step="0.01" min="0" value="${o.imeceKartTutar?esc(o.imeceKartTutar):''}" ${ro?'disabled':''}
+        onchange="setImeceKartTutar(this.value)" placeholder="tamamı"
+        style="width:130px;padding:5px 8px;border:1px solid #C4B5FD;border-radius:6px;font-size:12.5px;text-align:right;font-weight:700">
+      <span style="font-size:11px;color:var(--slate-500)">${kismi
+        ? 'kalan <b style="color:var(--slate-700)">'+fmtTL(nakit)+'</b> nakit / kredi kartı — vade farkı yalnız kart tutarına işler'
+        : 'boş bırakılırsa siparişin <b>tamamı</b> İMECE karta işlenir'}</span>
+    </div>
     ${manuel?uy('#EFF6FF','#BFDBFE','#1E40AF','<b>Manuel fatura tutarı girili:</b> vade farkı pazarlık tutarı ('+fmtTL(imeceAnaTutar(o))+') üzerinden hesaplanır — ürün liste fiyatları kullanılmaz, verdiğiniz ilave iskonto korunur.'):''}
     ${eksik.length?uy('#FEF2F2','#FECACA','#991B1B','<b>Kredi kartı fiyatı girilmemiş:</b> '+esc(eksik.join(', '))+' — bu ürünler normal fiyattan hesaplanıyor. Ürünler &amp; Fiyat ekranından girin.'+(manuel?' <b>2. faturayı etkilemez</b>, ancak Hesaplanan Toplam ve İlave İskonto eksik çıkar.':'')):''}
     ${elle.length?uy('#FFFBEB','#FDE68A','#92400E','<b>Elle fiyat girilmiş:</b> '+esc(elle.join(', '))+' — kredi kartı tarifesine geçmedi, yazdığınız fiyatta kaldı.'+(manuel?' Hesaplanan Toplam ve İlave İskonto bu fiyattan çıkıyor.':'')):''}
@@ -2081,12 +2117,24 @@ function imeceBlokHTML(o,ro){
 }
 // Kutucuk: İMECE açılıp kapanınca fiyat TABANI değişir (normal kademe ↔ kredi kartı) →
 // elle girilmemiş satırlar yeniden fiyatlanır. Kapatılırken vade de sıfırlanır.
+// Kart tutarı girişi. Ana tutarı aşan değer GİRİŞTE kırpılır (kaydedilmeden) — sonra sipariş
+// büyütülürse eski değer taşımaz, küçültülürse okuma anındaki kırpma devreye girer.
+function setImeceKartTutar(v){
+  if(!editOrder)return;
+  var t=String(v==null?'':v).replace(',','.').trim();
+  var n=t===''?0:round2(+t||0);
+  var ana=imeceAnaTutar(editOrder);
+  if(n<0)n=0;
+  if(n>ana&&ana>0){n=0;toast('Girilen tutar 1. faturayı aşıyor — tamamı İMECE sayıldı');}
+  editOrder.imeceKartTutar=n>0?n:'';
+  renderOrderModal();
+}
 function toggleImece(v){
   if(!editOrder)return;
   // AÇMAK: yalnız DBS'siz müşteride. KAPATMAK: her zaman serbest.
   if(v&&!imeceSecilebilirMi(editOrder)){toast('DBS ile ödeyen müşteride İMECE seçilemez');renderOrderModal();return;}
   editOrder.imeceSecili=!!v;
-  if(!v)editOrder.imeceAy=0;
+  if(!v){editOrder.imeceAy=0;editOrder.imeceKartTutar='';}   // kapatılan İMECE'nin kart payı kalıp sonra dirilmemeli
   applyTariffToLines();
   renderOrderModal();
 }
@@ -3529,10 +3577,13 @@ function imeceFarkKartHTML(){
       +'<td class="num">'+fmtN(imeceAySip(o))+' ay</td>'
       +'<td class="num" style="color:var(--slate-500)">%'+fmtN(imeceOranSip(o))+'</td>'
       +'<td class="num">'+fmtTL(orderTotal(o))+'</td>'
+      +'<td class="num">'+(imeceKismiMi(o)
+        ? '<b>'+fmtTL(imeceKartTutar(o))+'</b><div style="font-size:10px;color:var(--slate-400)">nakit '+fmtTL(imeceNakitKalan(o))+'</div>'
+        : '<span style="color:var(--slate-400)">tamamı</span>')+'</td>'
       +'<td class="num" style="color:#6D28D9;font-weight:700">'+fmtTL(imeceFark(o))+'</td></tr>';
   }).join('');
   return '<div class="card" style="margin-top:16px"><div class="card-hd"><h3>İMECE Fark Faturaları <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— 2. fatura: her sipariş için ayrıca kesilecek vade farkı</span></h3><span style="font-size:12px;font-weight:700;color:#6D28D9;white-space:nowrap">Toplam fark: '+fmtTL(D.toplam)+'</span></div>'
-    +'<div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Sipariş</th><th>Müşteri / Bayi</th><th class="num">Vade</th><th class="num">Oran</th><th class="num">1. Fatura</th><th class="num" style="background:#F5F3FF">2. Fatura (Fark)</th></tr></thead>'
+    +'<div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Sipariş</th><th>Müşteri / Bayi</th><th class="num">Vade</th><th class="num">Oran</th><th class="num">1. Fatura</th><th class="num">Karta İşlenen</th><th class="num" style="background:#F5F3FF">2. Fatura (Fark)</th></tr></thead>'
     +'<tbody>'+satir+'</tbody>'
     +'<tfoot><tr style="font-weight:800;background:var(--slate-50)"><td colspan="5">TOPLAM ('+D.rows.length+' sipariş)</td><td class="num" style="color:#6D28D9">'+fmtTL(D.toplam)+'</td></tr></tfoot>'
     +'</table></div></div>';

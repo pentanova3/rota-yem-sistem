@@ -861,7 +861,7 @@ function diziUzunluk(blob) {
 // KASITEN DIŞARIDA: bunlar değişince müşteriden yeniden onay istemek gereksiz gürültü olur.
 const ICERIK_ALAN = ["customerId", "bayiId", "aliciBayi", "aliciMusteri", "portalMusteri",
   "teslimTarihi", "fiyatKademe", "priceListId", "nakliye", "faturaManuel",
-  "imeceSecili", "imeceAy", "odeme", "vade", "nakliyeBirim", "nakliyeTipi", "hammaliyeBirim",
+  "imeceSecili", "imeceAy", "imeceKartTutar", "odeme", "vade", "nakliyeBirim", "nakliyeTipi", "hammaliyeBirim",
   "iskontoOran", "iskontoTL", "ozelListeId", "araciId", "araciKomisyon"];
 function siparisImza(o) {
   if (!o) return "";
@@ -904,7 +904,8 @@ function siparisFark(eski, yeni, adCoz) {
   Object.keys(A).forEach((k) => { if (!B[k]) out.push("➖ Ürün çıkarıldı: " + tek(k, 24) + " — " + say(A[k].q) + " çuval"); });
   // alan değişimleri
   const ETIKET = {teslimTarihi: "Teslim tarihi", fiyatKademe: "Fiyat kademesi", nakliye: "Nakliye",
-    faturaManuel: "Manuel fatura tutarı", imeceAy: "İMECE vade (ay)", odeme: "Ödeme", vade: "Vade",
+    faturaManuel: "Manuel fatura tutarı", imeceAy: "İMECE vade (ay)",
+    imeceKartTutar: "İMECE karta işlenecek tutar", odeme: "Ödeme", vade: "Vade",
     nakliyeBirim: "Nakliye birim", nakliyeTipi: "Nakliye tipi", hammaliyeBirim: "Hammaliye birim",
     iskontoOran: "İskonto oranı", iskontoTL: "İskonto (TL)", araciKomisyon: "Aracı komisyonu",
     aliciBayi: "Bayiye satış", bayiId: "Bayi kaydı", araciId: "Aracı kaydı",

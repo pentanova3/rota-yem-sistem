@@ -12,6 +12,7 @@ const ORTAK = ['round2', 'odemeTipiOf', 'dbsAliciAktif', 'dbsOranAyar', 'dbsOran
 // YALNIZ TMR'de aranan yeni İMECE hesap motoru (Yem altyapısı sonra kurulacak — firma kararı)
 const TMR_IMECE = ['ordTaban', 'manuelFatura', 'faturaArtisi', 'imeceKirp', 'imeceManuelMi', 'imeceSeciliMi', 'imeceSecilebilirMi',
   'imeceBirimVade', 'imeceSatirTutar', 'imeceOranKolon', 'imeceVadeToplam', 'imeceAnaTutar',
+  'imeceKartTutar', 'imeceKismiMi', 'imeceVadeTabani', 'imeceNakitKalan',   // kısmi İMECE (08.08)
   'imeceFarkAy', 'imeceGenelToplam', 'listeBirimFiyat', 'orderListKademe', 'orderListTotal', 'brutListeDamga'];
 
 // saveOrder ile AYNI SIRA: damgala → total → imeceFark → brutListe → diziye yaz.
@@ -2173,6 +2174,63 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('GEÇMİŞ girişi → serbest (son durum doğrudan girilir)',
         kilit({id: null, gecmisKayit: true}) === false);
       dogru('boş girdi çökertmiyor', kilit(null) === false && kilit(undefined) === false);
+    }
+
+    // ══ 37 · KISMİ İMECE — tutarın bir kısmı kart, kalanı nakit ════════════════════════
+    // Vade farkı YALNIZ karta işlenen kısma uygulanır. Tabanı kaçıran her yol müşteriye
+    // fazla fatura keser: bu yüzden motor tek noktadan (imeceVadeToplam) geçiyor.
+    {
+      const M = tmrKur();
+      const oran = 2.99;
+      M.__DB.meta.imeceOranlar = {1: 0.99, 2: oran, 3: 6.99, 4: 10.99, 5: 14.99, 6: 18.99};
+      const kur = (kart) => {
+        const o = {id: 'k1', lines: [{code: 'A', qty: 1, price: 100000}], fiyatKademe: 'fabrika',
+          imeceSecili: true, imeceAy: 2, imeceOran: oran, imeceKartTutar: kart};
+        return o;
+      };
+      const tam = kur('');
+      esit('taban: kart tutarı boşsa 1. faturanın tamamı', M.imeceVadeTabani(tam), M.imeceAnaTutar(tam));
+      dogru('boş tutar kısmi SAYILMAZ (eski siparişler aynen çalışır)', M.imeceKismiMi(tam) === false);
+
+      const yari = kur(40000);
+      const ana = M.imeceAnaTutar(yari);
+      dogru('kısmi tanınıyor', M.imeceKismiMi(yari) === true);
+      esit('kart payı', M.imeceKartTutar(yari), 40000);
+      esit('nakit kalan = ana − kart', M.imeceNakitKalan(yari), Math.round((ana - 40000) * 100) / 100);
+      const beklenenFark = Math.floor(+((40000 / (1 - oran / 100)) * 100).toFixed(6)) / 100 - 40000;
+      esit('2. fatura YALNIZ kart payından', M.imeceFark(yari), Math.round(beklenenFark * 100) / 100);
+      dogru('kısmi fark, tam farktan KÜÇÜK', M.imeceFark(yari) < M.imeceFark(tam),
+        M.imeceFark(yari) + ' < ' + M.imeceFark(tam));
+      esit('müşterinin ödeyeceği = ana + kısmi fark',
+        M.imeceGenelToplam(yari), Math.round((ana + M.imeceFark(yari)) * 100) / 100);
+      esit('1. fatura (ciro) DEĞİŞMİYOR — kısmi ödeme ciroyu etkilemez',
+        M.imeceAnaTutar(yari), M.imeceAnaTutar(tam));
+
+      // Sınırlar
+      esit('ana tutarı aşan değer okuma anında kırpılır', M.imeceKartTutar(kur(ana + 50000)), ana);
+      dogru('aşan değer kısmi SAYILMAZ (tamamı kart)', M.imeceKismiMi(kur(ana + 50000)) === false);
+      esit('negatif değer yok sayılır', M.imeceKartTutar(kur(-500)), 0);
+      esit('0 yok sayılır', M.imeceKartTutar(kur(0)), 0);
+      esit('metin çöpü yok sayılır', M.imeceKartTutar(kur('abc')), 0);
+      esit('tam ana tutar girilirse fark tam farkla AYNI', M.imeceFark(kur(ana)), M.imeceFark(tam));
+      const kapali = kur(40000); kapali.imeceSecili = false;
+      esit('İMECE seçili değilse fark 0', M.imeceFark(kapali), 0);
+      const vadesiz = kur(40000); vadesiz.imeceAy = 0;
+      esit('vade seçilmemişse fark 0', M.imeceFark(vadesiz), 0);
+
+      // Kod kapıları
+      dogru('kısmi dal manuel/ürün dallarından ÖNCE (satır bazı geçersiz)',
+        /if\(imeceKismiMi\(o\)\)\{const k=imeceKartTutar\(o\);return round2\(ana-k\+imeceKirp\(k\/\(1-r\/100\)\)\);\}[\s\S]{0,80}?if\(imeceManuelMi\(o\)\)/.test(H));
+      dogru('İMECE kapatılınca kart payı temizleniyor (dirilmesin)',
+        /if\(!v\)\{editOrder\.imeceAy=0;editOrder\.imeceKartTutar='';\}/.test(H));
+      dogru('girişte ana tutarı aşan değer reddediliyor',
+        /if\(n>ana&&ana>0\)\{n=0;toast\(/.test(H));
+      dogru('formda kart tutarı alanı var', /onchange="setImeceKartTutar\(this\.value\)"/.test(H));
+      dogru('muhasebe kartında "Karta İşlenen" sütunu', /<th class="num">Karta İşlenen<\/th>/.test(H));
+      const FN = require('fs').readFileSync(require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+      dogru('SUNUCU: kart payı içerik alanı — değişirse müşteri onayı tazelenir',
+        /"imeceAy", "imeceKartTutar",/.test(FN));
+      dogru('SUNUCU: değişiklik mesajında adı var', /imeceKartTutar: "İMECE karta işlenecek tutar"/.test(FN));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
