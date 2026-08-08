@@ -3740,7 +3740,14 @@ function musteriIskontoData(from,to){
     e.satirlar.push({tarih:satisTarihi(o),no:o.no,urun:(o.lines||[]).map(function(l){return l.code+'×'+fmtN(l.qty)}).join(', '),musIsk:musIsk,ilave:ilave,dbs:dbsT,fatura:orderTotal(o)});
     totMus+=musIsk;totIlave+=ilave;totDbs+=dbsT;totFat+=orderTotal(o);
   });
-  var rows=Object.values(byCust).sort(function(a,b){return (b.musIsk+b.ilave)-(a.musIsk+a.ilave);});
+  // Raporda yalnız GERÇEK iskontolu müşteriler: kartında iskonto oranı olan,
+  // veya dönemde DBS / ilave iskonto uygulanmış olanlar. Liste–net farkı (kademe vb.)
+  // tek başına yeter sayılmaz — bunlar müşteri kartından zaten görülür.
+  var rows=Object.values(byCust).filter(function(e){
+    return (+e.cust.iskonto>0) || e.ilave>0 || e.dbs>0;
+  }).sort(function(a,b){return (b.musIsk+b.ilave+b.dbs)-(a.musIsk+a.ilave+a.dbs);});
+  totMus=0;totIlave=0;totDbs=0;totFat=0;
+  rows.forEach(function(e){totMus+=e.musIsk;totIlave+=e.ilave;totDbs+=e.dbs;totFat+=e.fatura;});
   return {rows:rows,totMus:round2(totMus),totIlave:round2(totIlave),totDbs:round2(totDbs),totFat:round2(totFat)};
 }
 // İMECE FARK FATURALARI: 2. fatura ayrı kesildiği için muhasebenin hangi siparişe, ne kadar fark
@@ -3795,7 +3802,7 @@ function musteriIskontoKartHTML(){
         +'<td class="num">'+fmtTL(round2(x.musIsk+x.dbs+x.ilave))+'</td></tr>';}).join('');
     return bas+alt;
   }).join('');
-  return '<div class="card" style="margin-top:16px"><div class="card-hd"><h3>Müşteri İskonto Raporu <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— müşteri iskontosu + firmayla anlaşılan ilave indirimler</span></h3><span style="font-size:12px;font-weight:700;color:#92400E">İlave: '+fmtTL(D.totIlave)+'</span></div>'
+  return '<div class="card" style="margin-top:16px"><div class="card-hd"><h3>Müşteri İskonto Raporu <span style="font-size:11px;font-weight:500;color:var(--slate-400)">— yalnız iskonto / DBS / ilave uygulanan müşteriler</span></h3><span style="font-size:12px;font-weight:700;color:#92400E">İlave: '+fmtTL(D.totIlave)+'</span></div>'
     +'<div class="card-bd" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Müşteri</th><th class="num">Sipariş</th><th class="num">Fatura Cirosu</th><th class="num">Müşteri İskontosu</th><th class="num">DBS İndirimi</th><th class="num">İlave İskonto</th><th class="num">Toplam İskonto</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'<tfoot><tr style="font-weight:800;background:var(--slate-50)"><td>TOPLAM ('+D.rows.length+' müşteri)</td><td class="num"></td><td class="num">'+fmtTL(D.totFat)+'</td><td class="num">'+fmtTL(D.totMus)+'</td><td class="num" style="color:#0E7490">'+fmtTL(D.totDbs)+'</td><td class="num" style="color:#92400E">'+fmtTL(D.totIlave)+'</td><td class="num">'+fmtTL(round2(D.totMus+D.totDbs+D.totIlave))+'</td></tr></tfoot>'
