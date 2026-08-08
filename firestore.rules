@@ -73,6 +73,8 @@ service cloud.firestore {
 
     // Hız sınırı sayaçları (Faz 2.3): tümüyle sunucu-içi (Admin SDK). İstemci erişimi tümüyle kapalı.
     match /rate/{kayit} { allow read, write: if false; }
+    // Sözleşme kısa linkleri — yalnız Admin SDK (Cloud Function sozPaylas)
+    match /paylas/{kod} { allow read, write: if false; }
 
     // Tanımsız her yol kapalı
     match /{belge=**} { allow read, write: if false; }

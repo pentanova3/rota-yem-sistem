@@ -716,6 +716,28 @@ function sozTarihDoldur(html,t){
   return html.replace(/\.{3,}\s*\/\s*\.{3,}\s*\/\s*\.{3,}/g,g)
              .replace(/…\.\s*\/\s*…\.\s*\/\s*…+/g,g);
 }
+// İmza sonrası yetim "EKLER / EK-A / EK-B" satırlarını çıkar (asıl ekler sonraki sayfada gelir)
+function sozEkListesiniAyikla(bloklar){
+  return (bloklar||[]).filter(function(b){
+    if(b.t!=='p')return true;
+    var x=String(b.x||'').trim();
+    return !(x==='EKLER:'||/^EK-[A-Z]\s*:/.test(x));
+  });
+}
+// Kapanış paragrafı + imza tek parça (sayfa dibinde yetim imza kalmasın)
+function sozBloklarHTML(bloklar,V){
+  var html=[], buf=[];
+  function flush(){if(buf.length){html.push('<div class="sz-kapanis">'+buf.join('')+'</div>');buf=[];}}
+  (bloklar||[]).forEach(function(b,i,arr){
+    var next=arr[i+1];
+    if(b.t==='imza'||(next&&next.t==='imza'&&(b.t==='p'||b.t==='bos'))){
+      buf.push(sozBlokHTML(b,V));
+      if(b.t==='imza')flush();
+    }else{flush();html.push(sozBlokHTML(b,V));}
+  });
+  flush();
+  return html.join('');
+}
 function sozBlokHTML(b,V){
   switch(b.t){
     case 'ust':return '<div class="usty">'+sozDoldur(b.x,V)+'</div>';
@@ -771,7 +793,7 @@ function sozMesaj(o, url){
   var tip=o.type==='bayi'?'bayilik':'danışmanlık';
   var gov='Sayın '+(o.name||'')+',\n\nRota SMI '+tip+' sözleşmeniz hazırdır.';
   if(url){
-    gov+='\n\nAntetli sözleşmeyi buradan görüntüleyip indirebilirsiniz:\n'+url+'\n\nİnceleyip imzalı nüshayı tarafımıza iletiniz.';
+    gov+='\n\nSözleşme linki:\n'+url+'\n\nİnceleyip imzalı nüshayı tarafımıza iletiniz.';
   }else{
     gov+='\n\nAntetli sözleşme ektedir / ayrı pencerede açılmıştır. İnceleyip imzalı nüshayı tarafımıza iletiniz.';
   }
@@ -806,8 +828,8 @@ function sozlesmeHtml(id,opt){
   var V=sozVeri(o), parcalar=[];
   sozBelgeler(o.type).forEach(function(b,i){
     var m=sozMetinGet(b[0]); if(!m)return;
-    var bloklar=i===0?sozBloklarKisi(m.bloklar,o):m.bloklar;
-    var ic=bloklar.map(function(x){return sozBlokHTML(x,V);}).join('');
+    var bloklar=i===0?sozBloklarKisi(sozEkListesiniAyikla(m.bloklar),o):m.bloklar;
+    var ic=sozBloklarHTML(bloklar,V);
     parcalar.push('<div class="sz'+(i?' yeni':'')+'">'+sozTarafDoldur(sozTarihDoldur(ic,(o.sz||{}).sozTarih),o.name)+'</div>');
   });
   if(!parcalar.length){alert('Sözleşme metni bulunamadı');return null;}
@@ -852,8 +874,15 @@ async function sozlesmeGonder(id,kanal){
     var file=new File([html],ad,{type:'text/html;charset=utf-8'});
     var up=await window.__sahaUpload(id,'sozlesme-paylas',file);
     if(!up||!up.url)throw new Error('bağlantı alınamadı');
-    sozlesmeKanalAc(id,kanal,up.url);
-    toast(kanal==='wa'?'WhatsApp açıldı — mesajda sözleşme linki var':'E-posta taslağı açıldı — mesajda sözleşme linki var');
+    var link=up.url;
+    try{
+      if(window.__sozKisaLink){
+        var k=await window.__sozKisaLink({url:up.url,path:up.path,komId:id,ad:o.name||''});
+        if(k&&k.link)link=k.link;
+      }
+    }catch(ke){console.warn('kisa link',ke);toast('Kısa link oluşmadı — uzun link kullanıldı');}
+    sozlesmeKanalAc(id,kanal,link);
+    toast(kanal==='wa'?'WhatsApp açıldı — mesajda kısa sözleşme linki var':'E-posta taslağı açıldı — mesajda kısa sözleşme linki var');
   }catch(e){
     alert('Sözleşme paylaşılamadı: '+(e.message||e)+'\n\nİsterseniz «Sözleşme İndir» ile PDF alıp elle ekleyebilirsiniz.');
   }

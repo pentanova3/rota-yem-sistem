@@ -2353,8 +2353,17 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('sözleşme Mail ve WA gönderimi var',
         /function sozlesmeGonder\(id,kanal\)/.test(SAHA) && /sozlesmeGonder\([^)]*'mail'\)/.test(SAHA) && /sozlesmeGonder\([^)]*'wa'\)/.test(SAHA) && /sozlesme-paylas/.test(SAHA));
       dogru('liste Sözleşme düğmesi sozlesmeIndir ile bağlı', /function sozlesmeIndir\(id\)/.test(SAHA));
-      dogru('WA/Mail mesajında sözleşme linki var', /Antetli sözleşmeyi buradan/.test(SAHA) && /function sozMesaj\(o, url\)/.test(SAHA));
+      dogru('WA/Mail mesajında sözleşme linki var', /Sözleşme linki:/.test(SAHA) && /function sozMesaj\(o, url\)/.test(SAHA));
       dogru('kartta Hazırla yerine İndir/Gönder var', /Sözleşme İndir/.test(SAHA) && /Sözleşme Gönder \(WA\)/.test(SAHA) && /Sözleşme Gönder \(Mail\)/.test(SAHA) && !/Sözleşme Hazırla/.test(SAHA));
+      dogru('imza sonrası yetim EKLER listesi varsayılan metinden çıkarıldı',
+        !/"x":\s*"EKLER:"/.test(fsx.readFileSync(KOK + '/saha/sozlesme-metin.js', 'utf8')));
+      dogru('kapanış+imza keep-together (sz-kapanis)',
+        /sz-kapanis/.test(fsx.readFileSync(KOK + '/antet-belge.js', 'utf8')) && /function sozBloklarHTML\(/.test(SAHA));
+      dogru('kısa link sozPaylas + /s/ rewrite var',
+        /exports\.sozPaylas\s*=/.test(fsx.readFileSync(KOK + '/functions/index.js', 'utf8')) &&
+        /"source":\s*"\/s\/\*\*"/.test(fsx.readFileSync(KOK + '/firebase.json', 'utf8')) &&
+        /window\.__sozKisaLink/.test(SAHA));
+
       dogru('bayi paketi bayiSozlesme + atama içerir',
         /bayiSozlesme/.test(SAHA) && /function sozBelgeler\(type\)[\s\S]*?bayiAtama/.test(SAHA));
       dogru('danışman paketi danismanSozlesme içerir (bayi metni değil)',

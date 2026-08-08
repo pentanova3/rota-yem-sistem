@@ -527,18 +527,6 @@ window.SOZ_METIN = {
      "BAYİ",
      "{unvan}"
     ]
-   },
-   {
-    "t": "p",
-    "x": "EKLER:"
-   },
-   {
-    "t": "p",
-    "x": "EK-A : Yeni Bayi & Doğrudan Müşteri Atama Formu"
-   },
-   {
-    "t": "p",
-    "x": "EK-B : Bayi/Müşteri KVKK Aydınlatma Metni"
    }
   ]
  },
@@ -547,7 +535,7 @@ window.SOZ_METIN = {
   "bloklar": [
    {
     "t": "h1",
-    "x": "YENİ BAYİ & DOĞRUDAN MÜŞTERİ ATAMA FORMU"
+    "x": "EK-A — YENİ BAYİ & DOĞRUDAN MÜŞTERİ ATAMA FORMU"
    },
    {
     "t": "h3",

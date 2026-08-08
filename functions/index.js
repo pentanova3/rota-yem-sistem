@@ -3140,3 +3140,105 @@ exports.danisman = onRequest({region: "us-central1", cors: true, secrets: [TG_TO
     console.error("danisman", e); res.status(500).json({hata: "sunucu"});
   }
 });
+
+
+// ============================================================
+// SÖZLEŞME KISA LİNK — WA/Mail'de firebasestorage… yerine rota-yem.web.app/s/xxxxxxxx
+// POST (saha/portal yetkisi): {url, path?, komId?, ad?} → {ok, kod, link}
+// GET  /s/{kod} (Hosting rewrite) veya ?k=kod → antetli HTML'i sunar (Firebase markası yok)
+// paylas/* yalnız Admin SDK; istemci okuyamaz/yazamaz (firestore catch-all).
+// ============================================================
+const crypto = require("crypto");
+function sozKisaKod() {
+  // 8 karakter, URL-dostu (karışıklık yaratan 0/O/1/l yok)
+  const abc = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(8);
+  let s = "";
+  for (let i = 0; i < 8; i++) s += abc[bytes[i] % abc.length];
+  return s;
+}
+exports.sozPaylas = onRequest({region: "us-central1", cors: true}, async (req, res) => {
+  try {
+    // —— GET: kısa link → belgeyi göster ——
+    if (req.method === "GET") {
+      const raw = String(req.url || req.path || "");
+      const m = raw.match(/\/s\/([A-Za-z0-9]{6,12})/) || String(req.path || "").match(/([A-Za-z0-9]{6,12})$/);
+      const kod = (m && m[1]) || String(req.query.k || "").trim();
+      if (!kod || !/^[A-Za-z0-9]{6,12}$/.test(kod)) {
+        res.status(404).set("Content-Type", "text/html; charset=utf-8")
+          .send("<!doctype html><meta charset=utf-8><title>Link bulunamadı</title><body style=\"font-family:system-ui;padding:40px\"><h2>Sözleşme linki geçersiz</h2><p>Bağlantı hatalı veya süresi dolmuş olabilir. Rota SMI ile iletişime geçin.</p></body>");
+        return;
+      }
+      const snap = await db.doc("paylas/" + kod).get();
+      if (!snap.exists) {
+        res.status(404).set("Content-Type", "text/html; charset=utf-8")
+          .send("<!doctype html><meta charset=utf-8><title>Link bulunamadı</title><body style=\"font-family:system-ui;padding:40px\"><h2>Sözleşme linki bulunamadı</h2><p>Bu bağlantı artık geçerli değil. Lütfen Rota SMI ile iletişime geçin.</p></body>");
+        return;
+      }
+      const d = snap.data() || {};
+      // Tercihen Storage'dan HTML sun — tarayıcıda firebase URL görünmez
+      if (d.path) {
+        try {
+          const bucket = admin.storage().bucket();
+          const [buf] = await bucket.file(d.path).download();
+          res.status(200)
+            .set("Content-Type", "text/html; charset=utf-8")
+            .set("Cache-Control", "private, max-age=300")
+            .set("X-Content-Type-Options", "nosniff")
+            .send(buf.toString("utf8"));
+          return;
+        } catch (e) {
+          console.error("sozPaylas download", e);
+          if (d.url) { res.redirect(302, d.url); return; }
+          res.status(502).send("Belge okunamadı");
+          return;
+        }
+      }
+      if (d.url) { res.redirect(302, d.url); return; }
+      res.status(404).send("Belge yok");
+      return;
+    }
+
+    if (req.method !== "POST") { res.status(405).json({hata: "method"}); return; }
+
+    const idToken = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    let dec;
+    try { dec = await admin.auth().verifyIdToken(idToken); } catch (e) { res.status(401).json({hata: "kimlik doğrulanamadı"}); return; }
+    const sahaOk = dec.portalYonetici === true || (dec.saha && dec.saha !== "yok");
+    if (!sahaOk) { res.status(403).json({hata: "yetkisiz"}); return; }
+
+    if (!(await rateLimit("sozPaylas:" + (dec.uid || "x"), 30, 60))) { res.status(429).json({hata: "çok sık istek"}); return; }
+
+    const b = req.body || {};
+    const url = String(b.url || "").trim();
+    const path = String(b.path || "").trim();
+    if (!url && !path) { res.status(400).json({hata: "url veya path gerekli"}); return; }
+    // Yalnız kendi Storage bucket / bilinen host — açık yönlendirme (open redirect) engeli
+    if (url && !/^https:\/\/firebasestorage\.googleapis\.com\//.test(url) && !/^https:\/\/.*\.firebasestorage\.app\//.test(url)) {
+      res.status(400).json({hata: "geçersiz depolama adresi"}); return;
+    }
+    if (path && (path.includes("..") || !path.startsWith("belgeler/"))) {
+      res.status(400).json({hata: "geçersiz path"}); return;
+    }
+
+    let kod = sozKisaKod(), deneme = 0;
+    while (deneme < 5) {
+      const exists = await db.doc("paylas/" + kod).get();
+      if (!exists.exists) break;
+      kod = sozKisaKod(); deneme++;
+    }
+    await db.doc("paylas/" + kod).set({
+      url: url || null,
+      path: path || null,
+      komId: String(b.komId || "").slice(0, 40) || null,
+      ad: String(b.ad || "").slice(0, 120) || null,
+      by: dec.username || dec.uid || null,
+      ts: Date.now(),
+    });
+    const link = "https://rota-yem.web.app/s/" + kod;
+    res.json({ok: true, kod, link});
+  } catch (e) {
+    console.error("sozPaylas", e);
+    res.status(500).json({hata: "sunucu"});
+  }
+});

@@ -172,7 +172,8 @@
   .sz table thead{display:table-header-group}
   .sz table tr.ara-satir td{background:var(--tint);font-weight:700;color:var(--lac2)}
   .sz table tr{break-inside:avoid}
-  .sz .imzalar{display:flex;gap:16mm;margin-top:16px;break-inside:avoid;text-align:left;align-items:stretch}
+  .sz .sz-kapanis{break-inside:avoid;page-break-inside:avoid;break-before:auto}
+  .sz .imzalar{display:flex;gap:16mm;margin-top:16px;break-inside:avoid;page-break-inside:avoid;text-align:left;align-items:stretch}
   .sz .imzalar > div{flex:1;display:flex;flex-direction:column}
   .sz .imzalar .ust{font-weight:800;color:var(--lac2);margin-bottom:1px}
   .sz .imzalar .sat{color:#3A4256}

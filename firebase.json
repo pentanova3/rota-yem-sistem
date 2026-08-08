@@ -75,6 +75,13 @@
       ],
       "rewrites": [
         {
+          "source": "/s/**",
+          "function": {
+            "functionId": "sozPaylas",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
