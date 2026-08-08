@@ -129,6 +129,23 @@ table.t tbody tr:hover .rowact{opacity:1}
 .dur{display:inline-block;font-weight:700;font-size:12px;padding:3px 9px;border-radius:11px}
 .dur.dok{background:#dcfce7;color:#16a34a}
 .dur.dno{background:#fef3c7;color:#b45309}
+.dur.dgonder{background:#dbeafe;color:#1d4ed8}
+/* Evrak hücresi: Bekliyor → Gönderildi → Yüklendi */
+.bcell{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:92px;padding:4px 2px}
+.bcell .bst{font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;line-height:1.3;white-space:nowrap}
+.bcell .bst.bek{background:#f1f5f9;color:#64748b}
+.bcell .bst.gon{background:#dbeafe;color:#1d4ed8}
+.bcell .bst.yuk{background:#dcfce7;color:#15803d}
+.bcell .bdt{font-size:10px;color:var(--slate-500);font-variant-numeric:tabular-nums;line-height:1.2}
+.bcell .bakt{display:flex;align-items:center;gap:4px;margin-top:1px;flex-wrap:wrap;justify-content:center}
+.bcell .bakt .btn{font-size:10.5px;padding:3px 7px}
+.bcell .bkanal{font-size:9.5px;color:var(--slate-400)}
+.evrak-leg{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.evrak-leg span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--slate-600)}
+.evrak-leg .bst{font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px}
+.evrak-leg .bst.bek{background:#f1f5f9;color:#64748b}
+.evrak-leg .bst.gon{background:#dbeafe;color:#1d4ed8}
+.evrak-leg .bst.yuk{background:#dcfce7;color:#15803d}
 </style>
 <!-- docx üretimi kaldırıldı: sözleşmeler artık firmanın antetli kağıdına PDF basılıyor.
      (Eski jszip/pizzip/docxtemplater CDN'leri CSP'de izinli olmadığı için zaten hiç yüklenmiyordu.) -->
@@ -878,7 +895,9 @@ async function sozlesmeGonder(id,kanal){
     var k=await window.__sozKisaLink({url:up.url,path:up.path,komId:id,ad:o.name||''});
     if(!k||!k.link||k.link.indexOf('rota-yem.web.app/s/')<0)throw new Error('kısa link alınamadı');
     sozlesmeKanalAc(id,kanal,k.link);
-    toast(kanal==='wa'?'WhatsApp açıldı — kısa link: '+k.link:'E-posta açıldı — kısa link: '+k.link);
+    belgePaketGonderildi(id,kanal,k.link);
+    if(tab==='sozlesme')render();
+    toast(kanal==='wa'?'Gönderildi işaretlendi · WhatsApp açıldı':'Gönderildi işaretlendi · E-posta açıldı');
   }catch(e){
     alert('Sözleşme paylaşılamadı: '+(e.message||e)+'\n\nİsterseniz «Sözleşme İndir» ile PDF alıp elle ekleyebilirsiniz.');
   }
@@ -985,16 +1004,68 @@ function belgeDefs(type){
     ? [['sozlesme','Bayilik Sözleşmesi'],['ekform','Bayi Atama Formu'],['kvkk','KVKK Aydınlatma'],['vergi','Vergi Levhası']]
     : [['sozlesme','Danışmanlık Sözleşmesi'],['kvkk','KVKK Aydınlatma'],['vergi','Vergi Levhası']];
 }
-function belgeDurum(o){var defs=belgeDefs(o.type);var d=defs.filter(function(x){var b=(o.belgeler||{})[x[0]];return b&&b.url;}).length;return [d,defs.length];}
+// Paketle gönderilen evraklar (WA/Mail). Vergi levhası karşı taraftan gelir — yalnız yükleme.
+function belgeGonderilebilir(type){
+  return type==='bayi' ? ['sozlesme','ekform','kvkk'] : ['sozlesme','kvkk'];
+}
+function fmtTsKisa(iso){
+  if(!iso)return '';
+  try{
+    var d=new Date(iso); if(isNaN(d.getTime()))return '';
+    var g=('0'+d.getDate()).slice(-2), a=('0'+(d.getMonth()+1)).slice(-2);
+    return g+'.'+a+'.'+d.getFullYear();
+  }catch(e){return '';}
+}
+function belgeKayit(o,key){return ((o&&o.belgeler)||{})[key]||null;}
+function belgeYukluMu(b){return !!(b&&b.url);}
+function belgeGonderildiMi(b){return !!(b&&(b.gonderildi||b.gonderTs));}
+function belgeDurum(o){
+  var defs=belgeDefs(o.type);
+  var yuk=defs.filter(function(x){return belgeYukluMu(belgeKayit(o,x[0]));}).length;
+  var gon=defs.filter(function(x){var b=belgeKayit(o,x[0]);return belgeGonderildiMi(b)&&!belgeYukluMu(b);}).length;
+  return {yuk:yuk,gon:gon,toplam:defs.length};
+}
+function belgePaketGonderildi(id,kanal,link){
+  var o=(DB.komisyoncular||[]).find(function(k){return k.id===id;});
+  if(!o)return;
+  o.belgeler=o.belgeler||{};
+  var ts=new Date().toISOString();
+  belgeGonderilebilir(o.type).forEach(function(key){
+    var cur=o.belgeler[key]||{};
+    o.belgeler[key]=Object.assign({},cur,{
+      gonderildi:true,
+      gonderTs:ts,
+      gonderKanal:kanal||'',
+      gonderLink:link||cur.gonderLink||''
+    });
+  });
+  saveSaha();
+}
 function belgeCell(o,key){
-  var b=(o.belgeler||{})[key];
+  var b=belgeKayit(o,key);
   var fid='bf_'+o.id+'_'+key;
-  if(b&&b.url) return '<a class="bdoc bok" href="'+esc(b.url)+'" target="_blank" rel="noopener" title="İndir: '+esc(b.name||'')+'">✓</a><button class="bx" onclick="belgeSil(\''+o.id+'\',\''+key+'\')" title="Kaldır">×</button>';
-  return '<button class="bdoc bno" onclick="document.getElementById(\''+fid+'\').click()" title="Yükle (PDF/JPG/PNG)">✕</button><input type="file" id="'+fid+'" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc" onchange="belgeYukle(\''+o.id+'\',\''+key+'\',this)">';
+  var yuk=belgeYukluMu(b), gon=belgeGonderildiMi(b);
+  var st=yuk?'yuk':(gon?'gon':'bek');
+  var etiket=yuk?'Yüklendi':(gon?'Gönderildi':'Bekliyor');
+  var tarih=yuk?fmtTsKisa(b.ts):(gon?fmtTsKisa(b.gonderTs):'');
+  var kanal=(!yuk&&gon&&b.gonderKanal)?(b.gonderKanal==='wa'?'WA':(b.gonderKanal==='mail'?'Mail':b.gonderKanal)):'';
+  var akt='';
+  if(yuk){
+    akt='<a class="btn btn-sm" href="'+esc(b.url)+'" target="_blank" rel="noopener" title="'+esc(b.name||'İmzalı nüsha')+'">Aç</a>'
+      +'<button class="bx" onclick="belgeSil(\''+o.id+'\',\''+key+'\')" title="İmzalı nüshayı kaldır">×</button>';
+  }else{
+    akt='<button class="btn btn-sm" onclick="document.getElementById(\''+fid+'\').click()" title="İmzalı nüshayı yükle">Yükle</button>'
+      +'<input type="file" id="'+fid+'" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc" onchange="belgeYukle(\''+o.id+'\',\''+key+'\',this)">';
+  }
+  return '<div class="bcell">'
+    +'<span class="bst '+st+'">'+etiket+'</span>'
+    +(tarih?'<span class="bdt">'+esc(tarih)+'</span>':'')
+    +(kanal?'<span class="bkanal">'+esc(kanal)+'</span>':'')
+    +'<div class="bakt">'+akt+'</div></div>';
 }
 function renderSozlesme(){
   var arr=[...(BAYILER||[])].sort(function(a,b){return a.type===b.type?a.name.localeCompare(b.name,'tr'):(a.type==='bayi'?-1:1);});
-  var toplam=arr.length, tamam=arr.filter(function(o){var x=belgeDurum(o);return x[0]===x[1]&&x[1]>0;}).length;
+  var tamam=arr.filter(function(o){var x=belgeDurum(o);return x.yuk===x.toplam&&x.toplam>0;}).length;
   var sablonBtns=SOZ_SABLON_LIST.map(function(x){
     var ozel=!!(DB.sozSablon&&DB.sozSablon[x[0]]);
     return '<button class="btn btn-sm" onclick="openSozSablon(\''+x[0]+'\')" title="'+esc(x[2])+'">'+esc(x[1])+(ozel?' ✎':'')+'</button>';
@@ -1005,21 +1076,30 @@ function renderSozlesme(){
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${sablonBtns}</div>
       <div style="color:var(--slate-400);font-size:11.5px">✎ = özel düzenleme kayıtlı. Kişiye özel madde karttaki Sözleşme Bilgileri bölümünden girilir.</div>
     </div></div>
-    <div class="card"><div class="card-hd"><h3>Evrak Takibi — Bayi &amp; Danışman</h3><span class="hint">${tamam}/${toplam} eksiksiz</span></div>
-    <div style="padding:9px 16px;font-size:12px;color:var(--slate-500);border-bottom:1px solid var(--slate-100)"><b>İndir</b> antetli PDF · <b>WA / Mail</b> mesaja sözleşme linki ekler. İmzalı nüshaları buraya yükleyin. <b style="color:#16a34a">✓</b> yüklü · <b style="color:#dc2626">✕</b> eksik.</div>
-    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th><th style="text-align:center">Gönder</th></tr></thead><tbody>`;
+    <div class="card"><div class="card-hd"><h3>Evrak Takibi — Bayi &amp; Danışman</h3><span class="hint">${tamam}/${arr.length} eksiksiz (imzalı yüklü)</span></div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--slate-100)">
+      <div class="evrak-leg">
+        <span><span class="bst bek">Bekliyor</span> henüz gönderilmedi</span>
+        <span><span class="bst gon">Gönderildi</span> WA/Mail ile iletildi · tarih görünür</span>
+        <span><span class="bst yuk">Yüklendi</span> imzalı nüsha sistemde</span>
+      </div>
+      <div style="margin-top:7px;font-size:11.5px;color:var(--slate-500)"><b>İndir</b> antetli PDF · <b>WA / Mail</b> paketi gönderir ve «Gönderildi» işaretler · imzalı döneni <b>Yükle</b> ile ekleyin.</div>
+    </div>
+    <div class="tbl-scroll"><table class="t"><thead><tr><th>Ad</th><th>Tip</th><th style="text-align:center">Sözleşme</th><th style="text-align:center">Atama Formu</th><th style="text-align:center">KVKK</th><th style="text-align:center">Vergi Levhası</th><th style="text-align:center">Durum</th><th style="text-align:center">İşlem</th></tr></thead><tbody>`;
   if(!arr.length)h+=`<tr><td colspan="8" class="empty">Kayıt yok. Bayi & Danışman sekmesinden ekleyin.</td></tr>`;
   arr.forEach(function(o){
     var dt=belgeDurum(o), isBayi=o.type==='bayi';
     var ozelN=((o.sz&&o.sz.ozelMaddeler)||[]).length;
+    var durCls=dt.yuk===dt.toplam?'dok':(dt.gon||dt.yuk?'dgonder':'dno');
+    var durTxt=dt.yuk+'/'+dt.toplam+(dt.gon?' · '+dt.gon+' gönderildi':'');
     h+=`<tr>
       <td><b>${esc(o.name)}</b>${o.city?`<div style="font-size:11px;color:var(--slate-400)">${esc(o.city)}</div>`:''}${(o.sz&&o.sz.eposta)?'<div style="font-size:10px;color:var(--slate-400)">'+esc(o.sz.eposta)+'</div>':''}${ozelN?'<div style="font-size:10px;color:#0ea5e9">'+ozelN+' özel madde</div>':''}</td>
       <td><span class="tag ${isBayi?'tag-bayi':'tag-dan'}">${isBayi?'BAYİ':'DANIŞMAN'}</span></td>
-      <td style="text-align:center">${belgeCell(o,'sozlesme')}</td>
-      <td style="text-align:center">${isBayi?belgeCell(o,'ekform'):'<span style="color:var(--slate-300)">—</span>'}</td>
-      <td style="text-align:center">${belgeCell(o,'kvkk')}</td>
-      <td style="text-align:center">${belgeCell(o,'vergi')}</td>
-      <td style="text-align:center"><span class="dur ${dt[0]===dt[1]?'dok':'dno'}">${dt[0]}/${dt[1]}</span></td>
+      <td style="text-align:center;vertical-align:middle">${belgeCell(o,'sozlesme')}</td>
+      <td style="text-align:center;vertical-align:middle">${isBayi?belgeCell(o,'ekform'):'<span style="color:var(--slate-300)">—</span>'}</td>
+      <td style="text-align:center;vertical-align:middle">${belgeCell(o,'kvkk')}</td>
+      <td style="text-align:center;vertical-align:middle">${belgeCell(o,'vergi')}</td>
+      <td style="text-align:center"><span class="dur ${durCls}" title="İmzalı yüklenen / toplam">${durTxt}</span></td>
       <td style="text-align:center;white-space:nowrap"><button class="btn btn-sm" onclick="sozlesmeIndir('${o.id}')" title="Antetli sözleşmeyi indir">İndir</button> <button class="btn btn-sm" style="background:#25D366;color:#fff;border-color:#25D366" onclick="sozlesmeGonder('${o.id}','wa')" title="WhatsApp ile gönder">WA</button> <button class="btn btn-sm" onclick="sozlesmeGonder('${o.id}','mail')" title="Mail ile gönder">Mail</button></td>
     </tr>`;
   });
@@ -1031,19 +1111,25 @@ async function belgeYukle(komId,key,inp){
   if(file.size>25*1024*1024){alert('Dosya boyutu 25 MB sınırını aşıyor.');inp.value='';return;}
   if(typeof window.__sahaUpload!=='function'){alert('Yükleme servisi hazır değil. Firebase Storage kurulumu gerekiyor olabilir.');return;}
   var o=(DB.komisyoncular||[]).find(function(k){return k.id===komId;}); if(!o)return;
-  var btn=inp.parentNode&&inp.parentNode.querySelector('button.bdoc'); if(btn){btn.textContent='…';btn.disabled=true;}
   try{
     var res=await window.__sahaUpload(komId,key,file);
     o.belgeler=o.belgeler||{};
-    o.belgeler[key]={url:res.url,path:res.path,name:res.name,ts:new Date().toISOString()};
-    saveSaha(); render();
+    var eski=o.belgeler[key]||{};
+    // Gönderildi bilgisini koru; imzalı nüsha alanlarını yaz
+    o.belgeler[key]=Object.assign({},eski,{url:res.url,path:res.path,name:res.name,ts:new Date().toISOString()});
+    saveSaha(); render(); toast('İmzalı nüsha yüklendi');
   }catch(e){console.error('upload',e); alert('Yükleme hatası: '+(e&&(e.code||e.message)||e)); render();}
 }
 async function belgeSil(komId,key){
   var o=(DB.komisyoncular||[]).find(function(k){return k.id===komId;}); if(!o||!o.belgeler||!o.belgeler[key])return;
-  if(!confirm('Bu belge kaldırılsın mı?'))return;
-  var path=o.belgeler[key].path;
-  delete o.belgeler[key]; saveSaha(); render();
+  if(!confirm('İmzalı nüsha kaldırılsın mı?\n(Gönderildi kaydı varsa korunur.)'))return;
+  var cur=o.belgeler[key], path=cur.path;
+  if(belgeGonderildiMi(cur)){
+    o.belgeler[key]={gonderildi:true,gonderTs:cur.gonderTs||'',gonderKanal:cur.gonderKanal||'',gonderLink:cur.gonderLink||''};
+  }else{
+    delete o.belgeler[key];
+  }
+  saveSaha(); render();
   if(path&&typeof window.__sahaDeleteBelge==='function'){try{await window.__sahaDeleteBelge(path);}catch(e){}}
 }
 function openSozlesme(id){

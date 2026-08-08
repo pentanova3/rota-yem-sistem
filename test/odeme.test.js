@@ -2363,6 +2363,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /exports\.sozPaylas\s*=/.test(fsx.readFileSync(KOK + '/functions/index.js', 'utf8')) &&
         /"source":\s*"\/s\/\*\*"/.test(fsx.readFileSync(KOK + '/firebase.json', 'utf8')) &&
         /window\.__sozKisaLink=async function/.test(SAHA));
+      dogru('evrak takibinde Gönderildi/Yüklendi durumları var',
+        /function belgePaketGonderildi\(/.test(SAHA) && /bst gon/.test(SAHA) && /Yüklendi/.test(SAHA) && /Gönderildi/.test(SAHA));
+      dogru('WA/Mail sonrası paket gönderildi işaretleniyor',
+        /belgePaketGonderildi\(id,kanal/.test(SAHA));
 
       dogru('bayi paketi bayiSozlesme + atama içerir',
         /bayiSozlesme/.test(SAHA) && /function sozBelgeler\(type\)[\s\S]*?bayiAtama/.test(SAHA));
