@@ -5364,9 +5364,95 @@ window.addEventListener('beforeprint',function(){repCharts.forEach(function(ch){
 window.addEventListener('afterprint',function(){document.querySelectorAll('.prn-img').forEach(function(i){i.remove()});
   repCharts.forEach(function(ch){try{ch.canvas.style.display=''}catch(e){}});});
 
+// ---- RAPORLAR → ANTETLİ ÇIKTI ----
+// Ekrandaki aktif rapor (tonaj/genel/yönetici) klonlanır, grafikler PNG'ye çevrilir,
+// etkileşimli öğeler ayıklanır ve ortak antetli belge iskeletiyle (antet-belge.js) yeni
+// pencerede açılır. Yöntem/veri-kalitesi metinleri yönetim çıktısına BASILMAZ.
+function raporYazdir(){
+  if(!window.antetBelge||!window.antetBelgeAc){window.print();return}
+  var src=document.getElementById('content');
+  if(!src){window.print();return}
+  var cl=src.cloneNode(true);
+  // Grafikler: ekranda çizilmiş canvas'lar aynı sırayla klondaki yerine PNG olarak konur.
+  var cs=src.querySelectorAll('canvas'),cc=cl.querySelectorAll('canvas');
+  for(var i=0;i<cc.length;i++){
+    var img=document.createElement('img');img.className='prn-chart';
+    try{img.src=cs[i].toDataURL('image/png');}catch(e){}
+    if(img.src&&img.src.length>200)cc[i].parentNode.replaceChild(img,cc[i]);
+    else{var kb=cc[i].closest('.card');if(kb)kb.remove();}   // çizilmemiş grafik → boş kart basma
+  }
+  // Etkileşimli / ekrana özgü öğeler
+  cl.querySelectorAll('.rep-tabs,.rep-filter,.ta-bar,button,.ta-filt,.ta-handle,.no-print').forEach(function(el){el.remove();});
+  cl.querySelectorAll('select').forEach(function(s){var sp=document.createElement('span');sp.textContent=(s.options[s.selectedIndex]||{}).text||'';sp.style.fontWeight='600';s.parentNode.replaceChild(sp,s);});
+  cl.querySelectorAll('input').forEach(function(inp){var sp=document.createElement('span');sp.textContent=(inp.value!==''&&inp.value!=null)?inp.value:'—';sp.style.fontWeight='600';inp.parentNode.replaceChild(sp,inp);});
+  // Yöntem/uyarı metinleri çıktıya girmez (yönetim geri bildirimi)
+  cl.querySelectorAll('.card').forEach(function(k){var h3=k.querySelector('.card-hd h3');if(h3&&/Veri Kalitesi/.test(h3.textContent))k.remove();});
+  cl.querySelectorAll('div[style*="EFF6FF"]').forEach(function(d){if(/tarihsel arşiv/.test(d.textContent))d.remove();});
+  cl.querySelectorAll('div').forEach(function(d){var t=(d.textContent||'').trim();if(d.children.length===0&&(/^Ton hesabı:/.test(t)||/^Kurallar deterministtir/.test(t)))d.remove();});
+  // Başlık / künye
+  var adlar={tonaj:'Tonaj & Hedef Raporu',genel:'Genel Rapor',yonetici:'Yönetici Raporu'};
+  var ad=adlar[repTab]||'Rapor';var alt='';var kunye=[];
+  if(repTab==='tonaj'){
+    var tm=AYLAR_TR[+(tonajSel.month||'01')-1]+' '+(tonajSel.year||'');
+    alt=tm+' · '+(tonajSel.taban==='siparis'?'Sipariş Alınan':'Teslim Edilen')+' · tüm değerler ton';
+    kunye.push({k:'Dönem',v:tm},{k:'Taban',v:tonajSel.taban==='siparis'?'Sipariş Alınan':'Teslim Edilen'});
+  }else if(repTab==='genel'){
+    var pt=((repFilt.month?AYLAR_TR[+repFilt.month-1]+' ':'')+(repFilt.year||'')).trim()||'Tüm Zamanlar';
+    alt=pt;kunye.push({k:'Dönem',v:pt});
+  }else if(repTab==='yonetici'&&window._yon){
+    var sA=window._yon.sonTamAy?AYLAR_TR[window._yon.sonTamAy-1]:'—';
+    alt=window._yon.YCUR+' · Veri kesimi: '+sA+' '+window._yon.YCUR;
+    kunye.push({k:'Yıl',v:window._yon.YCUR},{k:'Veri kesimi',v:sA+' '+window._yon.YCUR});
+  }
+  kunye.push({k:'Hazırlayan',v:(USER&&USER.name)||'—'});
+  // Baskı stili: ekran sınıfları antet belge diline çevrilir
+  var stil='<style>'+
+    '.prnrap{--slate-50:#F8FAFC;--slate-100:#F1F5F9;--slate-200:#E2E8F0;--slate-300:#CBD5E1;--slate-400:#94A3B8;--slate-500:#64748B;--slate-600:#475569;--slate-700:#334155;--slate-900:#0F172A;--blue-50:#EFF6FF;--blue-100:#DBEAFE;--blue-600:#2563EB;--blue-700:#1D4ED8;--blue-800:#1E40AF;--blue-900:#1E3A8A;--green-700:#15803D;--red-700:#B91C1C;--amber-700:#B45309}'+
+    '.prnrap .report-grid,.prnrap .report-grid3{display:block}'+
+    '.prnrap .card{margin-top:5mm;break-inside:auto}'+
+    '.prnrap .card-hd{display:flex;justify-content:space-between;align-items:baseline;gap:4mm;border-bottom:1px solid #DCE1EE;padding-bottom:1.2mm;margin-bottom:2mm;break-after:avoid;page-break-after:avoid}'+
+    '.prnrap .card-hd h3{font-size:8.5pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2A3A70}'+
+    '.prnrap .card-hd h3 span,.prnrap .card-hd>span{text-transform:none;letter-spacing:0;font-weight:500;color:#6A7288;font-size:7.5pt}'+
+    '.prnrap .card-bd{overflow:visible!important;padding:0!important}'+
+    '.prnrap .kpis{display:flex;flex-wrap:wrap;gap:2mm;margin-top:3mm}'+
+    '.prnrap .kpi{flex:1 1 30%;min-width:46mm;border:1px solid #DCE1EE;border-top:2px solid #2A3A70;background:#F2F4FA;padding:2mm 3mm;break-inside:avoid}'+
+    '.prnrap .kpi .kl{font-size:6.5pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6A7288}'+
+    '.prnrap .kpi .kv{font-size:12pt!important;font-weight:700;color:#1F2C57;font-variant-numeric:tabular-nums}'+
+    '.prnrap .kpi .ks{font-size:7pt;color:#6A7288}'+
+    '.prnrap table.tbl{width:100%;border-collapse:collapse;font-size:7.5pt!important}'+
+    '.prnrap table.tbl thead{display:table-header-group}'+
+    '.prnrap table.tbl th{background:#2A3A70;color:#fff;font-size:6.3pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:1.3mm 1.5mm;text-align:left;position:static!important}'+
+    '.prnrap table.tbl th.num{text-align:right}'+
+    '.prnrap table.tbl td{padding:1.1mm 1.5mm;border-bottom:1px solid #EDEFF6;vertical-align:top;position:static!important}'+
+    '.prnrap table.tbl td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+    '.prnrap table.tbl tbody tr:nth-child(even) td{background:#F8F9FD}'+
+    '.prnrap table.tbl tr{break-inside:avoid;page-break-inside:avoid}'+
+    '.prnrap table.tbl tfoot{display:table-row-group}'+
+    '.prnrap table.tbl tfoot td{background:#E7EBF6;font-weight:700;border-top:1.5px solid #2A3A70}'+
+    '.prnrap .prn-chart{width:100%;max-height:80mm;object-fit:contain;display:block;break-inside:avoid}'+
+    '.prnrap .chart-cv{height:auto!important}'+
+    '.prnrap .badge{display:inline-block;font-size:6.3pt;font-weight:700;border-radius:2px;padding:0 1mm;background:#E7EBF6;color:#1F2C57}'+
+    '.prnrap .kom-chip{font-size:6.3pt;font-weight:700}'+
+    '.prnrap .tbl-empty{text-align:center;color:#9AA1B4;font-style:italic;padding:4mm}'+
+    '.prnrap ul{margin:0;padding:0}'+
+    '</style>';
+  var html=window.antetBelge({
+    tip:'Rota Yem — Raporlar',
+    ad:ad,
+    altad:alt,
+    kunye:kunye,
+    govde:stil+'<div class="prnrap">'+cl.innerHTML+'</div>',
+    araclar:'<button class="bp" onclick="window.print()">Yazdır / PDF</button><button class="bc" onclick="window.close()">Kapat</button>',
+    imzaSol:'Rota SMI Tarım ve Hayvancılık San. Tic. A.Ş. — sipariş takip sisteminden üretilmiştir.',
+    imzaSag:'Belge tarihi: '+new Date().toLocaleString('tr-TR'),
+    baslikEtiket:ad+(alt?' · '+alt:'')
+  });
+  if(!window.antetBelgeAc(html)){toast('Pop-up engellendi — tarayıcıda izin verin');return}
+  toast('Antetli rapor hazır');
+}
 function renderReports(c,tb){
   if(!canSeePrice()){c.innerHTML=`<div class="tbl-empty card" style="padding:50px">Raporları görüntüleme yetkiniz bulunmuyor.</div>`;return}
-  tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
+  tb.innerHTML=`<button class="btn btn-gray" onclick="raporYazdir()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   const _repGor=['tonaj','genel'].concat(isAdmin()?['yonetici']:[]).filter(t=>!altKapaliSip('raporlar',t));
   if(!_repGor.length){c.innerHTML='<div class="card tbl-empty" style="padding:50px">Bu bölümde görüntüleyebileceğiniz sekme yok.</div>';return}
   if(_repGor.indexOf(repTab)<0)repTab=_repGor[0];
