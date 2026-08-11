@@ -1961,7 +1961,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         plasById: () => null,
         prodByCode: (c) => ({code: c, danismanListe: 1000, fabrika: 900}),
         lineUnit: () => 1100,               // satış birim fiyatı
-        orderPL: () => null, tariffPrice: () => 0,
+        orderPL: () => null, orderPLForPrim: () => null, tariffPrice: () => 0,
         TD_ISKONTO_DEFAULT: 6,
       };
       const KOM = new Function(...Object.keys(ort), [gov2('ordBayi'), gov2('ordDanisman'),
@@ -1984,6 +1984,88 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /komOverride\|\|\(\(o&&o\.komisyoncuId\)\?komById\(o\.komisyoncuId\):null\)\|\|ordDanisman\(o\)\|\|ordBayi\(o\)/.test(H));
       dogru('sipariş kartı ham alan yerine çözümleyici kullanıyor',
         /const bayiKom=ordBayi\(o\);\s*\n\s*const danKom=ordDanisman\(o\);/.test(H));
+    }
+
+    // ── TARİFE AS-OF (firma 11.08): prim Liste/Alış teslim günündeki arşive göre ───────────
+    // 23.03 → <03.08 | 03.08 → 03–05.08 | 06.08 → ≥06.08. Direkt satış güncel ürünü EZMEMELİ.
+    {
+      dogru('priceListAsOf + orderPLForPrim kodda',
+        /function priceListAsOf\(/.test(H) && /function orderPLForPrim\(/.test(H));
+      dogru('direkt prim orderPLForPrim kullanıyor',
+        /const plDir=orderPLForPrim\(o\)/.test(H));
+      dogru('bayi-üzerinden prim orderPLForPrim kullanıyor',
+        /const pl=orderPLForPrim\(o\)/.test(H));
+      const gov2 = (nm) => {
+        const i = H.indexOf('function ' + nm + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) { const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+      const PL_OLD = {id: 'pl-mar', date: '2026-03-23', items: [
+        {code: 'BK-300 PLUS', fabrika: 900, danismanListe: 900}]};
+      const PL_AUG3 = {id: 'pl-aug3', date: '2026-08-03', items: [
+        {code: 'BK-300 PLUS', fabrika: 870, danismanListe: 870}]};
+      const PL_AUG6 = {id: 'pl-aug6', date: '2026-08-06', items: [
+        {code: 'BK-300 PLUS', fabrika: 850, danismanListe: 830}]};
+      const DB = {
+        meta: {tdIskonto: 6, activePriceListId: 'pl-aug6'},
+        priceLists: [PL_OLD, PL_AUG3, PL_AUG6],
+        products: [{code: 'BK-300 PLUS', fabrika: 850, danismanListe: 830}], // güncel = yeni tarife
+        komisyoncular: [{id: 'd1', name: 'Yavuz', type: 'danisman'}],
+        customers: [{id: 'c1', danismanId: 'd1'}],
+      };
+      const ort = {
+        DB,
+        priceLists: () => DB.priceLists,
+        activePriceList: () => PL_AUG6,
+        priceListById: (id) => DB.priceLists.find((p) => p.id === id) || null,
+        trNorm: (s) => String(s || '').toLocaleUpperCase('tr-TR'),
+        satisMi: (o) => !!(o && o.status === 'teslim'),
+        satisTarihi: (o) => (o && o.status === 'teslim') ? String(o.teslimEdildiTarih || o.date || '') : '',
+        komById: (id) => DB.komisyoncular.find((k) => k.id === id) || null,
+        custById: (id) => DB.customers.find((c) => c.id === id) || null,
+        plasById: () => null,
+        prodByCode: (c) => DB.products.find((p) => p.code === c) || null,
+        lineUnit: (l) => +l.price || 0,
+        bayiIskOranlar: () => ({ozel: 0, rate: 0}),
+        bayiIskCarpan: () => 1,
+        TD_ISKONTO_DEFAULT: 6,
+        ordBayi: () => null,
+      };
+      // priceListAsOf / orderPriceDate / orderPL / orderPLForPrim / tariffPrice / orderKomisyon
+      const FN = new Function(...Object.keys(ort), [
+        gov2('priceListAsOf'), gov2('orderPriceDate'), gov2('orderPL'), gov2('orderPLForPrim'),
+        gov2('tariffPrice'), gov2('ordDanisman'), gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
+        'return {priceListAsOf, orderPLForPrim, orderKomisyon, tariffPrice};'
+      ].join('\n'))(...Object.values(ort));
+
+      esit('02.08 → Mart tarifesi', FN.priceListAsOf('2026-08-02').id, 'pl-mar');
+      esit('03.08 → 3 Ağustos tarifesi (dahil)', FN.priceListAsOf('2026-08-03').id, 'pl-aug3');
+      esit('05.08 → 3 Ağustos tarifesi', FN.priceListAsOf('2026-08-05').id, 'pl-aug3');
+      esit('06.08 → 6 Ağustos tarifesi (dahil)', FN.priceListAsOf('2026-08-06').id, 'pl-aug6');
+      esit('07.08 → 6 Ağustos tarifesi', FN.priceListAsOf('2026-08-07').id, 'pl-aug6');
+
+      // Temmuz teslim, satış 965, eski liste 900 → alış 846 → prim (965-846)*20 = 2380
+      // Güncel ürün 830 olsaydı alış 780.2 → prim yanlış 3696 olurdu
+      const TEMMUZ = {
+        status: 'teslim', teslimEdildiTarih: '2026-07-28', date: '2026-07-20',
+        danismanId: 'd1', customerId: 'c1', nakliye: 0,
+        // bilerek YANLIŞ damga (güncel) — prim yine Mart tarifesini kullanmalı
+        priceListId: 'pl-aug6',
+        lines: [{code: 'BK-300 PLUS', qty: 20, price: 965}],
+      };
+      const rTem = FN.orderKomisyon(TEMMUZ);
+      esit('Temmuz: Liste Mart (900), güncel 830 ezmesin', Math.round(rTem.det[0].liste), 900);
+      esit('Temmuz: Alış 846', Math.round(rTem.det[0].alis * 10) / 10, 846);
+      esit('Temmuz: prim 2380', Math.round(rTem.tutar), 2380);
+      dogru('yanlış priceListId damgası primde yok sayıldı', FN.orderPLForPrim(TEMMUZ).id === 'pl-mar');
+
+      const AUG5 = Object.assign({}, TEMMUZ, {teslimEdildiTarih: '2026-08-05', priceListId: ''});
+      esit('5 Ağustos → Aug3 liste 870', Math.round(FN.orderKomisyon(AUG5).det[0].liste), 870);
+
+      const AUG7 = Object.assign({}, TEMMUZ, {teslimEdildiTarih: '2026-08-07', priceListId: ''});
+      esit('7 Ağustos → Aug6 liste 830', Math.round(FN.orderKomisyon(AUG7).det[0].liste), 830);
     }
 
     // ── PRİMİ SIFIR OLAN SATIR DÖKÜMDE GÖSTERİLMEZ (firma isteği 07.08) ─────────────────

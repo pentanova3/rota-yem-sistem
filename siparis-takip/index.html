@@ -671,7 +671,7 @@ function orderKomisyon(o,komOverride){
       // Prim = (Bayi Alış − Danışman Alış) × Miktar ; Bayi Alış = FABRİKA × (1 − bayi isk.), Danışman Alış = Torbalı × (1 − %6).
       const bayi=ordBayi(o);if(!bayi)return {kom,rate:isk,tutar:0,type:'danisman',det,kargo:0,viaBayi:true};
       const bor=bayiIskOranlar(o,bayi);const bRate=bor.rate;
-      const pl=orderPL(o);
+      const pl=orderPLForPrim(o);
       (o.lines||[]).forEach(l=>{
         const p=prodByCode(l.code);
         const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);
@@ -684,8 +684,11 @@ function orderKomisyon(o,komOverride){
       return {kom,rate:isk,tutar:prim,type:'danisman',det,kargo:0,viaBayi:true,bayi};
     }
     // MÜŞTERİYE DİREKT: (Satış − Alış) × Miktar − Kargo ; Alış = Liste(Torbalı) × (1 − iskonto). İskonto SABİT %6.
+    // Liste = teslim günündeki arşiv tarife (orderPLForPrim) — güncel ürün tablosu ESKİ siparişi ezmesin.
+    const plDir=orderPLForPrim(o);
     (o.lines||[]).forEach(l=>{
-      const p=prodByCode(l.code);const liste=p?(+p.danismanListe||0):0;
+      const p=prodByCode(l.code);
+      const liste=tariffPrice(plDir,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);
       const alis=liste*(1-isk/100);
       const satis=lineUnit(l,o.fiyatKademe);
       const q=+l.qty||0;const lp=satis>0?(satis-alis)*q:0;prim+=lp;
@@ -870,7 +873,40 @@ function lineUnit(l,kademe){if(l.price==='')return 0;if(l.price!=null)return +l.
 function priceLists(){return (DB.priceLists=DB.priceLists||[])}
 function activePriceList(){const ls=priceLists();return ls.find(p=>p.id===(DB.meta&&DB.meta.activePriceListId))||ls.find(p=>p.active)||ls[ls.length-1]||null}
 function priceListById(id){return id?(priceLists().find(p=>p.id===id)||null):null}
-function orderPL(o){return priceListById(o&&o.priceListId)||activePriceList()}
+/** Yürürlük günü ≤ iso olan en yeni tarife. Örn. 02.08→23.03 · 03–05.08→03.08 · 06.08+→06.08 */
+function priceListAsOf(iso){
+  const d=String(iso||'').slice(0,10);
+  const ls=priceLists().filter(function(p){return p&&p.date;});
+  if(!ls.length)return activePriceList();
+  if(!d)return activePriceList();
+  let best=null;
+  for(let i=0;i<ls.length;i++){
+    const pd=String(ls[i].date).slice(0,10);
+    if(pd<=d&&(!best||pd>=String(best.date).slice(0,10)))best=ls[i];
+  }
+  if(best)return best;
+  // Tarih tüm tarifelerden önceyse → en eski arşiv (uydurma güncel fiyat vermeyelim)
+  return ls.slice().sort(function(a,b){return String(a.date).localeCompare(String(b.date));})[0]||activePriceList();
+}
+/** Prim/fiyat için siparişin tarife günü: teslim edilmişse fiilî teslim günü, değilse sipariş tarihi. */
+function orderPriceDate(o){
+  if(!o)return '';
+  try{
+    if(typeof satisMi==='function'&&satisMi(o)){
+      const t=(typeof satisTarihi==='function'?satisTarihi(o):'')||'';
+      if(t)return String(t).slice(0,10);
+    }
+  }catch(e){}
+  return String(o.date||'').slice(0,10);
+}
+/** Damgalı tarife (sipariş formu seçimi) varsa onu; yoksa teslim/sipariş gününe göre arşiv; son çare güncel. */
+function orderPL(o){return priceListById(o&&o.priceListId)||priceListAsOf(orderPriceDate(o))||activePriceList()}
+/** Prim hakedişinde tarife YALNIZ yürürlük gününe göre — eski sipariş yeni güncel tarifeyle ezilmesin. */
+function orderPLForPrim(o){
+  const d=orderPriceDate(o);
+  if(d)return priceListAsOf(d)||activePriceList();
+  return orderPL(o);
+}
 function tariffPrice(pl,code,kademe){if(!pl||!code)return 0;const it=(pl.items||[]).find(x=>trNorm(x.code)===trNorm(code));return it?(+it[kademe||'fabrika']||0):0}
 // krediKarti: İMECE hesabının TABANI. Fiyat listesindeki "Kredi Kartı Tek Çekim" sütunu buraya girilir.
 // (Havale/DBS fiyatları iskontolu olduğu için vadeli satışta taban olamaz — resmî İMECE listesi KK'dan kurulur.)
@@ -4018,7 +4054,7 @@ function openKomDetay(komId){
       <thead><tr><th>Tarih</th><th>Müşteri</th><th>Bayi</th><th>Ürün</th><th class="num">Miktar</th><th class="num">Liste ₺</th><th class="num">Alış ₺</th><th class="num">Satış ₺</th><th class="num">Tutar ₺</th><th class="num">Kargo ₺</th><th class="num">Prim ₺</th></tr></thead>
       <tbody>${satirlar}</tbody>
       <tfoot><tr><td colspan="8" style="text-align:right">TOPLAM — kargo düşülmüştür</td><td class="num">${m0(d.totTutar)}</td><td class="num">${m0(d.totKargo)}</td><td class="num" style="font-size:10pt;color:var(--lac)">${m0(d.netPrim)}</td></tr></tfoot></table>
-      <p class="not"><b class="kk">B</b> işaretli satırlar bayi üzerinden yapılan satışlardır.<br><b>Hesap yöntemi.</b> Müşteriye doğrudan satışta prim = (Satış − Alış) × Miktar − Kargo; Alış = torbalı liste × (1 − %${tdIsk}). Bayi üzerinden satışta komisyon = (Bayi Alış − Danışman Alış) × Miktar; Bayi Alış = fabrika listesi × (1 − bayi iskontosu). Tarih, siparişin <b>fiilen teslim edildiği</b> gündür — teslim edilmemiş sipariş bu dökümde yer almaz.</p></div>`;
+      <p class="not"><b class="kk">B</b> işaretli satırlar bayi üzerinden yapılan satışlardır.<br><b>Hesap yöntemi.</b> Müşteriye doğrudan satışta prim = (Satış − Alış) × Miktar − Kargo; Alış = torbalı liste × (1 − %${tdIsk}). Bayi üzerinden satışta komisyon = (Bayi Alış − Danışman Alış) × Miktar; Bayi Alış = fabrika listesi × (1 − bayi iskontosu). <b>Liste / Alış</b>, teslim gününde yürürlükte olan fiyat arşivi tarifesinden alınır (ör. 3 Ağustos’a kadar önceki tarife, 3–5 Ağustos arası 3 Ağustos tarifesi, 6 Ağustos ve sonrası güncel tarife). Tarih, siparişin <b>fiilen teslim edildiği</b> gündür — teslim edilmemiş sipariş bu dökümde yer almaz.</p></div>`;
     const ayKeys=Object.keys(d.aylik||{}).sort();
     if(ayKeys.length){
       const AY=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];

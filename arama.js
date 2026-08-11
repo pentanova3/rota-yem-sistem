@@ -68,7 +68,22 @@ const prodByCode=c=>D().products.find(p=>norm(p.code)===norm(c))||null;
 const komById=id=>D().koms.find(k=>k.id===id)||null;
 const activePL=()=>D().priceLists.find(p=>p.id===D().meta.activePriceListId)||D().priceLists[D().priceLists.length-1]||null;
 const plById=id=>id?(D().priceLists.find(p=>p.id===id)||null):null;
-const orderPL=o=>plById(o&&o.priceListId)||activePL();
+function priceListAsOf(iso){
+  const d=String(iso||'').slice(0,10);
+  const ls=(D().priceLists||[]).filter(p=>p&&p.date);
+  if(!ls.length||!d)return activePL();
+  let best=null;
+  for(let i=0;i<ls.length;i++){const pd=String(ls[i].date).slice(0,10);if(pd<=d&&(!best||pd>=String(best.date).slice(0,10)))best=ls[i];}
+  if(best)return best;
+  return ls.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0]||activePL();
+}
+function orderPriceDate(o){
+  if(!o)return '';
+  if(satisMi(o)){const t=satisTarihi(o);if(t)return String(t).slice(0,10);}
+  return String(o.date||'').slice(0,10);
+}
+const orderPL=o=>plById(o&&o.priceListId)||priceListAsOf(orderPriceDate(o))||activePL();
+function orderPLForPrim(o){const d=orderPriceDate(o);if(d)return priceListAsOf(d)||activePL();return orderPL(o);}
 function tariffPrice(pl,code,kad){if(!pl||!code)return 0;const it=(pl.items||[]).find(x=>norm(x.code)===norm(code));return it?(+it[kad||'fabrika']||0):0;}
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
 const tonOf=(code,qty)=>(+qty||0)*prodKg(code)/1000;
@@ -96,12 +111,13 @@ function orderKomisyon(o,kom){
     if(o.aliciBayi){
       const bayi=ordBayi(o);if(!bayi)return {tutar:0};
       const bOzel=(o.ozelIskonto!=null&&o.ozelIskonto!=='')?+o.ozelIskonto:(+bayi.ozelIskonto||0);
-      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPL(o);
+      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPLForPrim(o);
       const bCarpan=(1-bOzel/100)*(1-bRate/100);
       (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);if(fab>0&&torb>0)prim+=(fab*bCarpan-torb*(1-isk/100))*(+l.qty||0);});
       return {tutar:prim,viaBayi:true};
     }
-    (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const liste=p?(+p.danismanListe||0):0;const satis=lineUnit(l,o.fiyatKademe);if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);});
+    const plDir=orderPLForPrim(o);
+    (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const liste=tariffPrice(plDir,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);const satis=lineUnit(l,o.fiyatKademe);if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);});
     return {tutar:prim-(+o.nakliye||0)};
   }
   return {tutar:0,rate:(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0)};
