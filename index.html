@@ -246,10 +246,20 @@ details.val .body p:first-child{margin-top:0;padding-top:14px;border-top:1px sol
   <section class="ka-box">
     <div class="ka-bar">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="ka-q" type="search" placeholder="Kurumsal arama: bayiler, fiyatlar, tonaj, izinler, siparişler…" autocomplete="off">
+      <input id="ka-q" type="search" placeholder="Site içi Google: tonaj, bayi, izin, evrak, bakım, yardım…" autocomplete="off">
       <button id="ka-btn">Ara</button>
     </div>
-    <div class="ka-scope"><b>Muhasebe ve finans verileri aramaya kapalıdır.</b></div>
+    <div class="ka-chips" id="ka-chips">
+      <button type="button" onclick="kaAsk('Yardım')">Ne sorabilirim?</button>
+      <button type="button" onclick="kaAsk('Bekleyen siparişler')">Bekleyen sipariş</button>
+      <button type="button" onclick="kaAsk('Bu ay tonaj')">Bu ay tonaj</button>
+      <button type="button" onclick="kaAsk('En çok satan ürün')">En çok satan</button>
+      <button type="button" onclick="kaAsk('Evrak durumu')">Evrak durumu</button>
+      <button type="button" onclick="kaAsk('Kimin izni kaldı')">İzinler</button>
+      <button type="button" onclick="kaAsk('Açık arızalar')">Bakım</button>
+      <button type="button" onclick="kaAsk('Haftalık toplantı nerede')">Toplantı</button>
+    </div>
+    <div class="ka-scope"><b>Muhasebe ve finans verileri aramaya kapalıdır.</b> · Sipariş, Yem, Saha, İK, Bakım, Toplantı açık</div>
     <div id="ka-out"></div>
   </section>
 

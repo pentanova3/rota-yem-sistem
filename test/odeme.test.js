@@ -1965,6 +1965,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         prodByCode: (c) => ({code: c, danismanListe: 1000, fabrika: 900}),
         lineUnit: () => 1100,               // satış birim fiyatı
         orderPL: () => null, orderPLForPrim: () => null, tariffPrice: () => 0,
+        primTarifeFiyat: (_pl, _o, _c, kad) => (kad === 'fabrika' ? 900 : 1000),
         TD_ISKONTO_DEFAULT: 6,
       };
       const KOM = new Function(...Object.keys(ort), [gov2('ordBayi'), gov2('ordDanisman'),
@@ -1972,7 +1973,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         'return {orderKomisyon, ordDanisman, ordDanismanDamgali};'].join('\n'))(...Object.values(ort));
 
       // alis = 1000 × (1−0,06) = 940 · satis = 1100 → prim = (1100−940) × 100 = 16.000
-      const DAMGASIZ = {id: 'o1', customerId: 'c1', lines: [{code: 'A', qty: 100}], nakliye: 0, status: 'teslim'};
+      const DAMGASIZ = {id: 'o1', customerId: 'c1', lines: [{code: 'A', qty: 100, price: 1100}], nakliye: 0, status: 'teslim'};
       const DAMGALI = Object.assign({}, DAMGASIZ, {danismanId: 'd1'});
 
       dogru('DAMGASIZ siparişte danışman çözülüyor', (KOM.ordDanisman(DAMGASIZ) || {}).id === 'd1');
@@ -2036,11 +2037,11 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         TD_ISKONTO_DEFAULT: 6,
         ordBayi: () => null,
       };
-      // priceListAsOf / orderPriceDate / orderPL / orderPLForPrim / tariffPrice / orderKomisyon
+      // priceListAsOf / orderPriceDate / orderPL / orderPLForPrim / tariffPrice / primTarifeFiyat / orderKomisyon
       const FN = new Function(...Object.keys(ort), [
         gov2('priceListAsOf'), gov2('orderPriceDate'), gov2('orderPL'), gov2('orderPLForPrim'),
-        gov2('tariffPrice'), gov2('ordDanisman'), gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
-        'return {priceListAsOf, orderPLForPrim, orderKomisyon, tariffPrice};'
+        gov2('tariffPrice'), gov2('primTarifeFiyat'), gov2('ordDanisman'), gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
+        'return {priceListAsOf, orderPLForPrim, orderKomisyon, tariffPrice, primTarifeFiyat};'
       ].join('\n'))(...Object.values(ort));
 
       esit('02.08 → Mart tarifesi', FN.priceListAsOf('2026-08-02').id, 'pl-mar');
@@ -2069,6 +2070,13 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
 
       const AUG7 = Object.assign({}, TEMMUZ, {teslimEdildiTarih: '2026-08-07', priceListId: ''});
       esit('7 Ağustos → Aug6 liste 830', Math.round(FN.orderKomisyon(AUG7).det[0].liste), 830);
+
+      // As-of listede ürün YOK → güncel ürün kartına DÜŞME (830 ezmesin)
+      const PL_BOS = {id: 'pl-bos', date: '2026-03-23', items: [{code: 'DIGER', fabrika: 1, danismanListe: 1}]};
+      DB.priceLists = [PL_BOS, PL_AUG6];
+      const TEM_BOS = Object.assign({}, TEMMUZ, {teslimEdildiTarih: '2026-07-28', priceListId: ''});
+      esit('as-of listede kod yok → Liste 0 (güncel 830 ezmez)', Math.round(FN.orderKomisyon(TEM_BOS).det[0].liste||0), 0);
+      DB.priceLists = [PL_OLD, PL_AUG3, PL_AUG6];
     }
 
     // ── HAKEDİŞ TABLOSU ≡ DÖKÜM (firma 11.08): aynı sipariş kümesi, aynı prim ─────────────
@@ -2079,6 +2087,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /orderKomisyon\(o,\s*dan\)/.test(H) || /orderKomisyon\(o,ordDanisman\(o\)\)/.test(H));
       dogru('ayar ekranı dan override',
         /orderKomisyon\(o,dan\)\.tutar/.test(H));
+      dogru('dönemsel ödemeler prim dönemiyle süzülüyor',
+        /if\(komRepFrom\)_odemeList=_odemeList\.filter/.test(H) && /if\(komRepTo\)_odemeList=_odemeList\.filter/.test(H));
+      dogru('primTarifeFiyat as-of listede yoksa güncel ürünü ezmiyor',
+        /if\(plAsOf&&\(plAsOf\.items\|\|\[\]\)\.length\)return 0/.test(H));
     }
 
     // ── PRİMİ SIFIR OLAN SATIR DÖKÜMDE GÖSTERİLMEZ (firma isteği 07.08) ─────────────────
@@ -2482,6 +2494,12 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     dogru('arama: bayi iskonto kartı satış kuralında', /o\.aliciBayi&&satisMi\(o\)&&\(ordBayi\(o\)\|\|\{\}\)\.id===bayiId/.test(AR));
     dogru('arama: hedef kartı satış kuralında', /satisMi\(o\)&&satisTarihi\(o\)\.slice\(0,4\)===yil/.test(AR));
     dogru('arama: dipnotlar artık "iptal hariç" demiyor', !/iptal siparişler hariç/.test(AR));
+    dogru('arama: site rehberi kataloğu var', /const SITE_MODULLER=\[/.test(AR) && /function ansRehber\(/.test(AR));
+    dogru('arama: muhasebe apps okunmaz', /apps\/muhasebe bilinçli olarak OKUNMAZ/.test(AR));
+    dogru('arama: YASAK listesinde muhasebe/finans', /YASAK=\[.muhasebe/.test(AR) || /'muhasebe'/.test(AR.slice(AR.indexOf('YASAK='), AR.indexOf('YASAK=')+400)));
+    dogru('arama: ön sipariş / evrak / bakım / toplantı analizörleri',
+      /function ansOnSiparis\(/.test(AR) && /function ansSahaEvrak\(/.test(AR) && /function ansBakim\(/.test(AR) && /function ansToplanti\(/.test(AR));
+    dogru('portal: arama chip rehberi', /kaAsk\('Yardım'\)/.test(require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8')));
 
     // Teslim damgası: düzenlenebilir + geçmiş kayıtta doğru güne + geri alınca siliniyor
     dogru('teslim tarihi ELLE düzenlenebilir', /editOrder\.teslimEdildiTarih=this\.value/.test(H));

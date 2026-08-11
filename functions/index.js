@@ -2810,7 +2810,7 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
       }));
     const siparisler = tmrSiparisler.concat(yemSiparisler).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     let alimTutar = 0;
-    tmrSiparisler.forEach((o) => { alimTutar += (+o.total || 0); });   // alım tutarı yalnız fiyatlı (TMR) siparişlerden
+    tmrSiparisler.forEach((o) => { if (o.teslimEdildi) alimTutar += (+o.total || 0); });   // yalnız TESLİM — iç bayiAlimData ile aynı taban
     res.json({profil, siparisler, musteriler, urunler, yemUrunler, ozet: {alimTutar, siparisAdet: siparisler.length, musteriSayisi: musteriler.length}});
   } catch (e) {
     if (e && e.message === "SIP_TAVAN") { res.status(429).json({hata: "Açık sipariş sınırına ulaştınız. Mevcut siparişleriniz teslim/iptal edildikçe yeni sipariş açabilirsiniz."}); return; }

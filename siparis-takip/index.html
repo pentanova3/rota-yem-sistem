@@ -673,9 +673,8 @@ function orderKomisyon(o,komOverride){
       const bor=bayiIskOranlar(o,bayi);const bRate=bor.rate;
       const pl=orderPLForPrim(o);
       (o.lines||[]).forEach(l=>{
-        const p=prodByCode(l.code);
-        const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);
-        const torbali=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);
+        const fab=primTarifeFiyat(pl,o,l.code,'fabrika');
+        const torbali=primTarifeFiyat(pl,o,l.code,'danismanListe');
         const bayiAlis=fab*bayiIskCarpan(bor.ozel,bor.rate);
         const danAlis=torbali*(1-isk/100);
         const q=+l.qty||0;const lp=(torbali>0&&fab>0)?(bayiAlis-danAlis)*q:0;prim+=lp;
@@ -684,13 +683,15 @@ function orderKomisyon(o,komOverride){
       return {kom,rate:isk,tutar:prim,type:'danisman',det,kargo:0,viaBayi:true,bayi};
     }
     // MÜŞTERİYE DİREKT: (Satış − Alış) × Miktar − Kargo ; Alış = Liste(Torbalı) × (1 − iskonto). İskonto SABİT %6.
-    // Liste = teslim günündeki arşiv tarife (orderPLForPrim) — güncel ürün tablosu ESKİ siparişi ezmesin.
+    // Liste/Alış = teslim günü as-of tarife. Satış = damgalı birim (gerçek satış); damgasızsa as-of torbalıdan (güncel ürün ezmesin).
     const plDir=orderPLForPrim(o);
     (o.lines||[]).forEach(l=>{
-      const p=prodByCode(l.code);
-      const liste=tariffPrice(plDir,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);
+      const liste=primTarifeFiyat(plDir,o,l.code,'danismanListe');
       const alis=liste*(1-isk/100);
-      const satis=lineUnit(l,o.fiyatKademe);
+      var satis=0;
+      if(l.price==='')satis=0;
+      else if(l.price!=null)satis=+l.price||0;
+      else satis=liste;   // fiyat damgalı değil → as-of liste (prodByCode/güncel YOK)
       const q=+l.qty||0;const lp=satis>0?(satis-alis)*q:0;prim+=lp;
       if(l.code)det.push({code:l.code,liste,alis,satis,qty:q,prim:lp});
     });
@@ -911,6 +912,14 @@ function orderPLForPrim(o){
   return orderPL(o);
 }
 function tariffPrice(pl,code,kademe){if(!pl||!code)return 0;const it=(pl.items||[]).find(x=>trNorm(x.code)===trNorm(code));return it?(+it[kademe||'fabrika']||0):0}
+/** Prim Liste/Alış: önce as-of tarife, yoksa damgalı tarife. As-of listede ürün YOKSA güncel ürün kartına DÜŞME — sessizce yeni fiyatla prim üretilmesin. */
+function primTarifeFiyat(plAsOf,o,code,kademe){
+  const a=tariffPrice(plAsOf,code,kademe); if(a>0)return a;
+  const b=tariffPrice(orderPL(o),code,kademe); if(b>0)return b;
+  // Arşiv hiç yoksa (göç/boş DB) ürün kartı son çare
+  if(plAsOf&&(plAsOf.items||[]).length)return 0;
+  const p=prodByCode(code); return p?(+p[kademe]||0):0;
+}
 // krediKarti: İMECE hesabının TABANI. Fiyat listesindeki "Kredi Kartı Tek Çekim" sütunu buraya girilir.
 // (Havale/DBS fiyatları iskontolu olduğu için vadeli satışta taban olamaz — resmî İMECE listesi KK'dan kurulur.)
 function snapshotProducts(){return DB.products.map(p=>({code:p.code,pkg:p.pkg||'25 kg',fabrika:+p.fabrika||0,yakin:+p.yakin||0,uzak:+p.uzak||0,danismanListe:+p.danismanListe||0,krediKarti:+p.krediKarti||0}))}
@@ -983,9 +992,7 @@ function dbsIskonto(o){const r=dbsOran(o);if(!(r>0))return 0;return round2(order
 // (banka komisyonunun müşteriye yansıtılması, firma marjı değil).
 // Vade farkı yalnız ÜRÜN tutarına biner — nakliye/hammaliye/aracıya BİNMEZ (firma kararı).
 // ================== İMECE FLAG ==================
-// İMECE (vadeli kredi kartı) şimdilik KAPALI. Sipariş-bazlı İMECE dört düşmanca denetim turunda
-// tekrarlayan bulgu verdi (fiyat tabanı geçişi, damga-önizleme çelişkisi, iki-modül asimetrisi).
-// Ayrı bir oturumda test-öncelikli yeniden açılacak. Bu flag=false iken:
+// TMR'de AÇIK. Yem hattında flag ayrı (orası kapalı/landmine). Kapalıyken:
 //   imeceAySip() hep 0 → imeceAliciAktif/imeceOranSip/imeceFark/custUnitPrice-kk hepsi ETKİSİZ (DBS aynen çalışır),
 //   imeceBlokHTML() boş → vade seçim UI'ı GÖRÜNMEZ.
 // Açmak için: IMECE_AKTIF=true yap; kredi kartı fiyat alanları ve tüm motor zaten yerinde.
@@ -3909,7 +3916,12 @@ function renderKomisyon(c,tb){
     const dan=ordDanisman(o);
     if(dan){const r=orderKomisyon(o,dan);const eff=effAyarVal(r.tutar,o.primAyar);const a=agg[dan.id]||(agg[dan.id]={kom:dan,ciro:0,tonaj:0,tutar:0,ham:0,adet:0,ayar:0});a.ciro+=orderTotal(o);a.tonaj+=orderTon(o);a.tutar+=eff;a.ham+=r.tutar;if(o.primAyar&&o.primAyar.mode)a.ayar++;a.adet++;}
   });
-  const paid={};(DB.komisyonOdemeler||[]).forEach(p=>{paid[p.komisyoncuId]=(paid[p.komisyoncuId]||0)+(+p.odenenTutar||0)});
+  // Ödeme bakiyesi: prim dönemiyle AYNI pencerede. Dönem seçiliyken tüm zamanlar ödemeyi
+  // düşmek sahte negatif bakiye üretir (dökümle çelişki → fazla/eksik ödeme riski).
+  let _odemeList=(DB.komisyonOdemeler||[]);
+  if(komRepFrom)_odemeList=_odemeList.filter(function(p){return !p.odemeTarihi||p.odemeTarihi>=komRepFrom;});
+  if(komRepTo)_odemeList=_odemeList.filter(function(p){return !p.odemeTarihi||p.odemeTarihi<=komRepTo;});
+  const paid={};_odemeList.forEach(p=>{paid[p.komisyoncuId]=(paid[p.komisyoncuId]||0)+(+p.odenenTutar||0)});
   const danRows=Object.values(agg).sort((a,b)=>b.tutar-a.tutar);
   const totPrim=danRows.reduce((s,r)=>s+r.tutar,0);
   const totPaid=danRows.reduce((s,r)=>s+(paid[r.kom.id]||0),0);

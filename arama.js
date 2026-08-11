@@ -1,9 +1,8 @@
 // ============================================================
-// ROTA SMI · Kurumsal Arama v2 ("site içi Google")
-// Canlı (yazdıkça) · çok-bölümlü · autocomplete · TMR + YEM birleşik.
-// Kapsam: sipariş, müşteri, bayi & danışman, ürün fiyatları, tonaj/üretim,
-//         komisyon & iskonto, plasiyer performansı, İK (izin/avans/tazminat), hedef.
-// Muhasebe & Finans verileri KAPALIDIR (YASAK listesi + apps/muhasebe hiç okunmaz).
+// ROTA SMI · Kurumsal Arama v3 ("site içi Google + portal rehberi")
+// Canlı · çok-bölümlü · autocomplete · TMR+Yem+İK+Saha+Bakım rehberi.
+// Soru çeşitleri: veri (tonaj/ciro/fiyat/hakediş) + "nerede/nasıl/hangi modül".
+// Muhasebe & Finans KAPALI (YASAK + apps/muhasebe hiç okunmaz).
 // ============================================================
 import { initializeApp } from "/vendor/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, getDoc } from "/vendor/firebasejs/10.12.0/firebase-firestore.js";
@@ -44,12 +43,14 @@ async function loadData(){
   if(CACHE)return CACHE;
   const read=async(id,key)=>{try{const s=await getDoc(doc(db,'apps',id));const d=s.exists()?s.data().data:null;return d&&d[key]?JSON.parse(d[key]):null;}catch(e){return null;}};
   // DİKKAT: apps/muhasebe bilinçli olarak OKUNMAZ — finans verileri aramaya kapalıdır.
-  const [so,yem,saha,ik]=await Promise.all([
-    read('siparis','rota_so_v1'), read('yem','rota_yem_v1'), read('saha','rota_saha_v1'), read('ik','rota_ik_v1')]);
+  const [so,yem,saha,ik,bakim]=await Promise.all([
+    read('siparis','rota_so_v1'), read('yem','rota_yem_v1'), read('saha','rota_saha_v1'),
+    read('ik','rota_ik_v1'), read('bakim','rota_bakim_v1')]);
   CACHE={
     // TMR
     orders:(so&&so.orders)||[],customers:(so&&so.customers)||[],products:(so&&so.products)||[],
     priceLists:(so&&so.priceLists)||[],meta:(so&&so.meta)||{},odemeler:(so&&so.komisyonOdemeler)||[],
+    preOrders:(so&&so.preOrders)||[],
     koms:(saha&&saha.komisyoncular)||(so&&so.komisyoncular)||[],
     // YEM (yeni)
     yemOrders:(yem&&yem.orders)||[],yemCustomers:(yem&&yem.customers)||[],yemProducts:(yem&&yem.products)||[],
@@ -57,6 +58,8 @@ async function loadData(){
     // İK
     personeller:(ik&&ik.personeller)||[],izinler:(ik&&ik.izinler)||[],izinBakiye:(ik&&ik.izinBakiye)||[],
     avanslar:(ik&&ik.avanslar)||[],tazminatAyar:(ik&&ik.tazminatAyar)||{},
+    // Bakım (makine envanter) — tutar/maliyet satırları gösterilmez (finans sınırı)
+    bakimKayitlar:(bakim&&bakim.kayitlar)||[],bakimKitaplar:(bakim&&bakim.kitaplar)||[],
   };
   buildIndex();
   return CACHE;
@@ -85,10 +88,29 @@ function orderPriceDate(o){
 const orderPL=o=>plById(o&&o.priceListId)||priceListAsOf(orderPriceDate(o))||activePL();
 function orderPLForPrim(o){const d=orderPriceDate(o);if(d)return priceListAsOf(d)||activePL();return orderPL(o);}
 function tariffPrice(pl,code,kad){if(!pl||!code)return 0;const it=(pl.items||[]).find(x=>norm(x.code)===norm(code));return it?(+it[kad||'fabrika']||0):0;}
+function primTarifeFiyat(plAsOf,o,code,kad){
+  const a=tariffPrice(plAsOf,code,kad); if(a>0)return a;
+  const b=tariffPrice(orderPL(o),code,kad); if(b>0)return b;
+  if(plAsOf&&(plAsOf.items||[]).length)return 0;
+  const p=prodByCode(code); return p?(+p[kad]||0):0;
+}
+function round2(x){return Math.round((+x||0)*100)/100;}
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
 const tonOf=(code,qty)=>(+qty||0)*prodKg(code)/1000;
 function lineUnit(l,kad){if(l.price==='')return 0;if(l.price!=null)return +l.price||0;const p=prodByCode(l.code);return p?(+p[kad||'fabrika']||0):0;}
-function orderTotal(o){if(o.lines&&o.lines.length){let t=0;o.lines.forEach(l=>{t+=(+l.qty||0)*lineUnit(l,o.fiyatKademe);});return t||o.total||0;}return o.total||0;}
+// Ciro: panel orderTotal ile hizalı — manuel fatura > DBS’li net > satır toplamı. Damgalı o.total yoksa yeniden hesap.
+function manuelFatura(o){
+  if(!o||o.faturaManuel==null||o.faturaManuel==='')return null;
+  const v=+o.faturaManuel; return (isFinite(v)&&v>0)?round2(v):null;
+}
+function orderNetHesap(o){
+  if(o.lines&&o.lines.length){let t=0,fiyatli=false;o.lines.forEach(l=>{const u=lineUnit(l,o.fiyatKademe);if(u>0)fiyatli=true;t+=(+l.qty||0)*u;});return fiyatli?t:(t||o.total||0);}
+  return o.total||0;
+}
+function dbsOran(o){if(!o)return 0;if(o.dbsOran!=null&&o.dbsOran!=='')return +o.dbsOran||0;return 0;} // arama: yalnız damga (canlı form yok)
+function dbsIskonto(o){const r=dbsOran(o);if(!(r>0))return 0;return round2(orderNetHesap(o)*r/100);}
+function orderNetDbs(o){return round2(orderNetHesap(o)-dbsIskonto(o));}
+function orderTotal(o){const m=manuelFatura(o);return m!=null?m:orderNetDbs(o);}
 function ordBayi(o){let id=o&&o.bayiId;if(!id&&o&&o.komisyoncuId){const k=komById(o.komisyoncuId);if(k&&k.type==='bayi')id=o.komisyoncuId;}return id?komById(id):null;}
 // siparis-takip/index.html ordDanisman ile BİREBİR: damga yoksa müşteri/bayi kartına düşülür
 // (Excel'den aktarılmış + ataması sonradan yapılmış siparişlerde danışman kaybolmasın).
@@ -102,7 +124,8 @@ function ordDanisman(o){
   return id?komById(id):null;
 }
 const tmrTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=tonOf(l.code,l.qty);});return t;};
-const tmrTotal=o=>(+o.total||0)||orderTotal(o);
+const tmrTotal=o=>{const m=manuelFatura(o);if(m!=null)return m;if(o&&o.total!=null&&o.total!=='')return +o.total||0;return orderTotal(o);};
+function effAyarVal(raw,ay){if(!ay||!ay.mode)return raw;if(ay.mode==='yok')return 0;if(ay.mode==='tutar')return +ay.tutar||0;return raw;}
 function orderKomisyon(o,kom){
   if(!o||!kom)return {tutar:0};
   const isk=(D().meta&&D().meta.tdIskonto)||6;
@@ -113,26 +136,35 @@ function orderKomisyon(o,kom){
       const bOzel=(o.ozelIskonto!=null&&o.ozelIskonto!=='')?+o.ozelIskonto:(+bayi.ozelIskonto||0);
       const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPLForPrim(o);
       const bCarpan=(1-bOzel/100)*(1-bRate/100);
-      (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const fab=tariffPrice(pl,l.code,'fabrika')||(p?(+p.fabrika||0):0);const torb=tariffPrice(pl,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);if(fab>0&&torb>0)prim+=(fab*bCarpan-torb*(1-isk/100))*(+l.qty||0);});
+      (o.lines||[]).forEach(l=>{const fab=primTarifeFiyat(pl,o,l.code,'fabrika');const torb=primTarifeFiyat(pl,o,l.code,'danismanListe');if(fab>0&&torb>0)prim+=(fab*bCarpan-torb*(1-isk/100))*(+l.qty||0);});
       return {tutar:prim,viaBayi:true};
     }
     const plDir=orderPLForPrim(o);
-    (o.lines||[]).forEach(l=>{const p=prodByCode(l.code);const liste=tariffPrice(plDir,l.code,'danismanListe')||(p?(+p.danismanListe||0):0);const satis=lineUnit(l,o.fiyatKademe);if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);});
+    (o.lines||[]).forEach(l=>{
+      const liste=primTarifeFiyat(plDir,o,l.code,'danismanListe');
+      var satis=0; if(l.price==='')satis=0; else if(l.price!=null)satis=+l.price||0; else satis=liste;
+      if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);
+    });
     return {tutar:prim-(+o.nakliye||0)};
   }
   return {tutar:0,rate:(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+kom.rate||0)};
 }
 function bayiAlimOzet(bayiId,yil){
-  // SATIŞ KURALI: teslim edilmemiş siparişe bayi iskontosu işlenmez (bayiAlimData ile BİREBİR)
+  // SATIŞ KURALI + panel bayiAlimData ile hizalı: teslim + orderTotal + iskAyar
   const os=D().orders.filter(o=>o.aliciBayi&&satisMi(o)&&(ordBayi(o)||{}).id===bayiId&&satisTarihi(o).slice(0,4)===String(yil));
-  let brut=0,fat=0;const ceyrek=[0,0,0,0];
-  os.forEach(o=>{const pl=orderPL(o);let b=0;(o.lines||[]).forEach(l=>{if(!l.code)return;const f=tariffPrice(pl,l.code,'fabrika')||((prodByCode(l.code)||{}).fabrika||0);b+=f*(+l.qty||0);});const ft=tmrTotal(o);const isk=Math.max(0,b-ft);const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;brut+=b;fat+=ft;});
-  return {adet:os.length,brut,fatura:fat,iskonto:Math.max(0,brut-fat),ceyrek};
+  let brut=0,fat=0,iskonto=0;const ceyrek=[0,0,0,0];
+  os.forEach(o=>{
+    const pl=orderPLForPrim(o);let b=0;
+    (o.lines||[]).forEach(l=>{if(!l.code)return;b+=primTarifeFiyat(pl,o,l.code,'fabrika')*(+l.qty||0);});
+    const ft=tmrTotal(o);const iskHam=Math.max(0,b-ft);const isk=effAyarVal(iskHam,o.iskAyar);
+    const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
+    brut+=b;fat+=ft;iskonto+=isk;
+  });
+  return {adet:os.length,brut,fatura:fat,iskonto,ceyrek};
 }
 function danismanHakedis(danId){
-  // SATIŞ KURALI: komisyon YALNIZ teslim edilen siparişten doğar. Burada hiç durum süzgeci yoktu —
-  // iptal ve teslim edilmemiş siparişlerin primi de hakedişe giriyordu (İskonto&Komisyon ekranıyla çelişki).
-  let hak=0,adet=0;D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId&&satisMi(o)){hak+=orderKomisyon(o,d).tutar||0;adet++;}});
+  // SATIŞ KURALI + primAyar (panel effPrim ile BİREBİR)
+  let hak=0,adet=0;D().orders.forEach(o=>{const d=ordDanisman(o);if(d&&d.id===danId&&satisMi(o)){hak+=effAyarVal(orderKomisyon(o,d).tutar||0,o.primAyar);adet++;}});
   const odenen=D().odemeler.filter(p=>p.komisyoncuId===danId).reduce((s,p)=>s+(+p.odenenTutar||0),0);
   return {hak,odenen,bakiye:hak-odenen,adet};
 }
@@ -234,7 +266,8 @@ const STLBL={beklemede:'Beklemede',onay:'Onaylandı',hazir:'Hazır',sevk:'Sevk E
 // ============================================================
 
 function ansYasak(){
-  return card('Erişim Engellendi',`<p class="ka-p">Muhasebe ve finans verileri (kasa, banka, tahsilat, maaş vb.) kurumsal aramaya <b>kapalıdır</b>. Bu bilgiler yalnızca yetkili kullanıcıların erişebildiği <a href="muhasebe/">Muhasebe &amp; Finans</a> modülünde yer alır.</p>`,'ka-red');
+  return card('Erişim Engellendi',`<p class="ka-p">Muhasebe ve finans verileri (kasa, banka, tahsilat, maaş vb.) kurumsal aramaya <b>kapalıdır</b>. Bu bilgiler yalnızca yetkili kullanıcıların erişebildiği <a href="muhasebe/">Muhasebe &amp; Finans</a> modülünde yer alır.</p>
+  <p class="ka-p">Diğer modüller için <a href="#" onclick="kaAsk('Yardım');return false">portal rehberine</a> bakın (sipariş, yem, saha, İK, bakım, toplantı).</p>`,'ka-red');
 }
 
 // ---- Sipariş numarası (TMR + Yem) ----
@@ -289,8 +322,8 @@ const donemFiltre=(orders,P)=>orders.filter(o=>{const t=satisTarihi(o);return t&
 // ---- Sipariş durumları (TMR + Yem) ----
 function ansDurumSayim(q){
   const n=norm(q);
-  if(!/siparis/.test(n))return null;
-  if(!/bekleyen|onay bekle|kac siparis|siparis sayisi|sevk|teslim|hazir|acik siparis|durum|uretim/.test(n))return null;
+  if(!/siparis|onay bek|fabrika onay|uretim onay/.test(n))return null;
+  if(!/bekleyen|onay bekle|kac siparis|siparis sayisi|sevk|teslim|hazir|acik siparis|durum|uretim|onay/.test(n))return null;
   return datasets().map(ds=>{
     const say={};ds.orders.forEach(o=>{say[o.status||'beklemede']=(say[o.status||'beklemede']||0)+1;});
     const rows=Object.keys(STLBL).filter(k=>say[k]).map(k=>row(STLBL[k],say[k]+' sipariş')).join('');
@@ -652,9 +685,207 @@ function ansGenel(q){
   return card('Eşleşen Kayıtlar',table([{t:''},{t:'Ad'},{t:'Bilgi'},{t:''}],rows));
 }
 
+// ============================================================
+//  SİTE REHBERİ — portal içi Google: modül + nasıl/nerede + örnek sorular
+//  Muhasebe & Finans katalogda YOKTUR (finans verisi döndürülmez).
+// ============================================================
+const SITE_MODULLER=[
+  {id:'siparis',ad:'Sipariş Takip (TMR)',href:'siparis/',kw:['siparis takip','tmr','siparis sistemi','siparis paneli','siparis modul'],
+   ne:'TMR siparişleri, müşteri/bayi, ürün tarifeleri, raporlar, komisyon & iskonto, ön sipariş.',
+   ornek:['Bekleyen siparişler','Bu ay tonaj','#123 sipariş','En çok satan ürün']},
+  {id:'tmr',ad:'TMR Sipariş Detay',href:'siparis-takip/',kw:['siparis takip detay','tmr panel','kanban'],
+   ne:'Sipariş listesi, müşteriler, ürünler, raporlar, İskonto & Komisyon ekranı.',
+   ornek:['Danışman hakedişi','Bayi iskonto','Tonaj hedefi']},
+  {id:'yem',ad:'Yem Sipariş',href:'yem/',kw:['yem siparis','yem panel','yem modul','kanatli'],
+   ne:'Yem hattı siparişleri, plasiyer performansı, vade fiyatları, Yem müşterileri.',
+   ornek:['Plasiyer performansı','Yem ürün fiyatı','Yem müşteri sayısı']},
+  {id:'saha',ad:'Bayi & Teknik Danışman (Saha)',href:'saha/',kw:['saha','bayi harita','danisman harita','sozlesme','evrak takip','belge takip'],
+   ne:'Bayi/danışman listesi, Türkiye haritası, sözleşme paketi, evrak gönderim/yükleme takibi, portal erişimi.',
+   ornek:['Afyon bayileri','Evrak durumu','Sözleşme nerede']},
+  {id:'ik',ad:'İnsan Kaynakları',href:'ik/',kw:['insan kaynak','ik modul','ik paneli','hr','isg','kvkk'],
+   ne:'Personel, izin, avans, kıdem/ihbar, İSG & KVKK kartları (ücret bordrosu aramaya kapalı).',
+   ornek:['Kimin izni kaldı','Personel sayısı','Kıdem hesabı']},
+  {id:'hr',ad:'İK Uygulaması',href:'hr/',kw:['izin takip','avans yonet','personel listesi','kidem ihbar'],
+   ne:'İzin bakiyeleri, avans taksitleri, kıdem & ihbar tahmini, personel kartları.',
+   ornek:['Yıllık izin durumu','Açık avans bakiyesi']},
+  {id:'bakim',ad:'Makine Envanter / Bakım',href:'bakim/',kw:['bakim','makine','envanter','ariza','yedek parca','pbs'],
+   ne:'Bakım/arıza kayıtları, makine etiketleri, kullanım kılavuzu linkleri. (Maliyet tutarları aramada gizlenir.)',
+   ornek:['Açık arızalar','Hangi makineler var','Bakım modülü']},
+  {id:'toplanti',ad:'Haftalık Yönetim Toplantısı',href:'haftalik-toplanti/',kw:['toplanti','haftalik yonetim','kontrol listesi','yonetim kurulu','fabrika insaat'],
+   ne:'Haftalık kontrol listesi, üretim istatistikleri, inşaat takibi, yönetim kurulu raporu.',
+   ornek:['Haftalık toplantı nerede','Toplantı kontrol listesi']},
+  {id:'bayi-portal',ad:'Bayi Portalı (dış)',href:'bayi-site/',kw:['bayi portal','bayi site','dis erisim','bayi giris'],
+   ne:'Bayilerin kendi siparişlerini verdiği dış portal. İç personel Saha’dan portal açar/kapatır.',
+   ornek:['Bayi portalı nasıl açılır']},
+  {id:'onay',ad:'Sipariş Onay Akışı',href:'fabrika-onay/',kw:['fabrika onay','uretim onay','siparis onay','onay sureci','telegram onay'],
+   ne:'TMR: sipariş önce finans onayına, sonra üretime gider. Yem: tek kapı. Telegram’dan onaylanır.',
+   ornek:['Onay bekleyen siparişler','Fabrika onay']},
+];
+// Sık sorulan “nasıl / nerede / ne işe yarar” — veri değil rehber
+const SITE_SSS=[
+  {kw:['nasil siparis','siparis nasil','yeni siparis','siparis ac'],bas:'Yeni sipariş nasıl açılır?',
+   cevap:'Portal → <b>Sipariş Takip</b> (TMR) veya <b>Yem Sipariş</b>. Listede “Yeni Sipariş” ile müşteri/ürün seçilir; kayıt sonrası onay akışı başlar.',href:'siparis/'},
+  {kw:['on siparis','onsiparis','ileri tarihli siparis'],bas:'Ön sipariş nedir?',
+   cevap:'Henüz kesinleşmemiş / ileri tarihli talep. <code>preOrders</code> dizisinde yaşar; tonaj ve ciroya <b>karışmaz</b>. Panel hafta görünümünde ayrı şeritte.',href:'siparis-takip/'},
+  {kw:['fiyat listesi','tarife','fiyat tarife','guncel fiyat'],bas:'Fiyat tarifesi nerede?',
+   cevap:'TMR: Sipariş Takip → Ürünler / sipariş modalındaki tarife seçici. Yem: Yem → Ürünler (vade fiyatları). Arama kutusuna ürün kodu yazınca güncel fiyat gelir.',href:'siparis-takip/#urunler'},
+  {kw:['komisyon nerede','prim nerede','hakedis nerede','iskonto ekran'],bas:'İskonto & Komisyon ekranı',
+   cevap:'Sipariş Takip → <b>İskonto & Komisyon</b>. Danışman primi (teslim edilen sipariş) ve bayi alım iskontosu burada. Dönem filtresi prim ile ödemeyi aynı pencerede tutar.',href:'siparis-takip/#komisyon'},
+  {kw:['rapor nerede','tonaj rapor','ciro rapor','yonetici rapor'],bas:'Raporlar',
+   cevap:'TMR: Sipariş Takip → Raporlar (tonaj, hedef, müşteri, yönetici). Yem: Yem → Raporlar (plasiyer). Aramada “bu ay tonaj / ciro” diye de sorabilirsiniz.',href:'siparis-takip/#raporlar'},
+  {kw:['evrak','belge takip','sozlesme gonder','whatsapp sozlesme'],bas:'Saha evrak & sözleşme',
+   cevap:'Saha → Sözleşmeler / bayi kartı: antetli sözleşme indir, WA/Mail gönder, yüklenen imzalı belgeleri takip et (Bekliyor → Gönderildi → Yüklendi).',href:'saha/'},
+  {kw:['yetki','erisim yonet','kullanici ekle','arama izni','portal yonetici'],bas:'Erişim / yetki yönetimi',
+   cevap:'Portal sağ üst çark (yalnız portal yöneticisi) → kullanıcı, modül seviyesi, <b>Arama</b> izni, fiyat görme, bölüm sekmeleri.',href:'./'},
+  {kw:['sifre','sifremi unuttum','sifre degistir'],bas:'Şifre',
+   cevap:'Giriş sonrası üst bardaki profil/şifre alanı. Süresi dolan şifre uyarı verir; yönetici sıfırlayabilir.',href:'./'},
+  {kw:['kalite','iso','laboratuvar','brcgs'],bas:'Kalite Kontrol',
+   cevap:'Portal kartında <b>Yakında</b>. Henüz canlı modül yok — arama da yönlendirmez.',href:null},
+  {kw:['dbs nedir','imece nedir','vade fark'],bas:'DBS / İMECE (kısa bilgi)',
+   cevap:'DBS: banka iskontosu sipariş netine işler (oran siparişe damgalanır). İMECE: vadeli KK farkı (TMR’de açık olabilir). Kasa/tahsilat aramaya kapalıdır; detay sipariş modalında.',href:'siparis-takip/'},
+];
+
+function rehberSkor(entry,n){
+  let sc=0;(entry.kw||[]).forEach(k=>{if(n.includes(norm(k)))sc+=Math.max(3,norm(k).split(' ').length*2);});
+  const adn=norm(entry.ad||entry.bas||'');
+  if(adn&&n.includes(adn))sc+=8;
+  return sc;
+}
+function ansRehber(q){
+  const n=norm(q);
+  const yardim=/^(yardim|yardım|rehber|ne sor|ne yapabilir|nasil kullan|site ici|google|ornek soru|ne sorabilirim)\b/.test(n)
+    ||/ne sorabilir|ornek sorular|site rehberi|portal rehberi|hangi modul|moduller neler|ne var bu sitede/.test(n);
+  const nere=/nerede|nerde|hangi ekran|hangi modul|nasil ac|nasil gir|ne ise yarar|ne is|acilir mi/.test(n);
+
+  const modHits=SITE_MODULLER.map(m=>({m,sc:rehberSkor(m,n)})).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc);
+  const sssHits=SITE_SSS.map(s=>({s,sc:rehberSkor(s,n)})).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc);
+
+  if(!yardim&&!nere&&!modHits.length&&!sssHits.length)return null;
+
+  // Tek SSS net eşleşme
+  if(!yardim&&sssHits.length&&sssHits[0].sc>=4&&(!modHits.length||sssHits[0].sc>=modHits[0].sc)){
+    const s=sssHits[0].s;
+    return card('Rehber — '+esc(s.bas),`<p class="ka-p">${s.cevap}</p>`+(s.href?`<a class="ka-link" href="${s.href}">Modülü aç →</a>`:''));
+  }
+  // Tek modül
+  if(!yardim&&modHits.length&&modHits[0].sc>=4){
+    const m=modHits[0].m;
+    return card('Modül — '+esc(m.ad),
+      `<p class="ka-p">${esc(m.ne)}</p>`+
+      (m.ornek&&m.ornek.length?`<div class="ka-sub">Örnek sorular</div><ul class="ka-ul">${m.ornek.map(o=>`<li><a href="#" onclick="kaAsk(${JSON.stringify(o)});return false">${esc(o)}</a></li>`).join('')}</ul>`:'')+
+      `<a class="ka-link" href="${m.href}">${esc(m.ad)} aç →</a>`);
+  }
+  // Tam rehber / yardım
+  if(yardim||(nere&&!modHits.length&&!sssHits.length)||(modHits.length+sssHits.length>=2)){
+    const rows=SITE_MODULLER.map(m=>`<tr><td><b>${esc(m.ad)}</b></td><td>${esc(m.ne)}</td><td><a class="ka-link" href="${m.href}">aç</a></td></tr>`).join('');
+    const ornekler=[
+      'Bekleyen siparişler','Bu ay tonaj','Bu yıl ciro','En çok satan ürün','Afyon',
+      'Plasiyer performansı','Kimin izni kaldı','Açık arızalar','Evrak durumu','Yardım'
+    ];
+    return card('Portal Rehberi — Ne sorabilirsiniz?',
+      `<p class="ka-p">Bu arama, Rota portalındaki <b>açık modüllerin</b> site içi Google’ıdır. Muhasebe &amp; finans (kasa, banka, tahsilat, maaş) <b>kapalıdır</b>.</p>`+
+      `<div class="ka-sub">Modüller</div>`+table([{t:'Modül'},{t:'Ne işe yarar'},{t:''}],rows)+
+      `<div class="ka-sub">Hızlı örnekler</div><ul class="ka-ul">${ornekler.map(o=>`<li><a href="#" onclick="kaAsk(${JSON.stringify(o)});return false">${esc(o)}</a></li>`).join('')}</ul>`+
+      (sssHits.slice(0,3).map(({s})=>card('SSS — '+esc(s.bas),`<p class="ka-p">${s.cevap}</p>`+(s.href?`<a class="ka-link" href="${s.href}">Aç →</a>`:'')).join('')));
+  }
+  return null;
+}
+
+// ---- Ön sipariş (TMR) ----
+function ansOnSiparis(q){
+  const n=norm(q);if(!/on siparis|onsiparis|ileri tarih|on talep/.test(n))return null;
+  const list=(D().preOrders||[]).filter(p=>(p.durum||'acik')==='acik');
+  if(!list.length)return card('Ön Siparişler','<p class="ka-p">Açık ön sipariş yok. Ön siparişler kesin siparişe dönüşmeden tonaj/ciroya girmez. <a class="ka-link" href="siparis-takip/">Sipariş Takip</a></p>');
+  const rows=list.slice().sort((a,b)=>(a.tarih||'').localeCompare(b.tarih||'')).slice(0,20).map(p=>{
+    let ton=0;(p.lines||[]).forEach(l=>{if(l.code)ton+=tonOf(l.code,l.qty);});
+    return `<tr><td><b>#Ö${esc(p.no||'—')}</b></td><td>${esc(p.customer||'—')}</td><td>${fmtDate(p.tarih)}</td><td class="n">${fmtTon(ton)} t</td></tr>`;
+  }).join('');
+  return card('Açık Ön Siparişler ('+list.length+') '+srcBadge('tmr'),
+    table([{t:'No'},{t:'Müşteri'},{t:'Tarih'},{t:'Tonaj',n:1}],rows)+
+    `<div class="ka-note">Ön sipariş ayrı dizidedir; satış raporlarına sızmaz. <a href="siparis-takip/">Panelde aç</a></div>`);
+}
+
+// ---- Tarife özeti ----
+function ansTarife(q){
+  const n=norm(q);if(!/tarife|fiyat listesi|guncel fiyat|hangi tarife|aktif tarife/.test(n))return null;
+  const pl=activePL();const ls=(D().priceLists||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(!ls.length)return card('Fiyat Tarifeleri','<p class="ka-p">Henüz tarife kaydı yok. <a class="ka-link" href="siparis-takip/#urunler">Ürünler</a></p>');
+  const rows=ls.slice(0,8).map(p=>`<tr><td><b>${fmtDate(p.date)}</b>${p.id===(D().meta.activePriceListId||(pl&&pl.id))?' · <span class="ka-chip">Güncel</span>':''}</td><td>${esc(p.note||'—')}</td><td class="n">${(p.items||[]).length} kalem</td></tr>`).join('');
+  return card('TMR Fiyat Tarifeleri '+srcBadge('tmr'),
+    row('Aktif tarife',pl?fmtDate(pl.date)+(pl.note?' · '+esc(pl.note):''):'—')+
+    table([{t:'Tarih'},{t:'Not'},{t:'Kalem',n:1}],rows)+
+    `<div class="ka-note">Prim hesabı teslim günü as-of tarifeyi kullanır. Ürün kodu yazarak fiyat da sorabilirsiniz.</div>`);
+}
+
+// ---- Saha evrak özeti ----
+function ansSahaEvrak(q){
+  const n=norm(q);if(!/evrak|belge durum|sozlesme durum|belge takip|yuklenmeyen|gonderilmeyen/.test(n))return null;
+  const defs=t=>t==='bayi'
+    ?[['sozlesme'],['ekform'],['kvkk'],['vergi']]:[['sozlesme'],['kvkk'],['vergi']];
+  const yuklu=b=>!!(b&&b.url);const gonderildi=b=>!!(b&&(b.gonderildi||b.gonderTs));
+  const ks=D().koms.filter(k=>(k.type==='bayi'||k.type==='danisman')&&k.active!==false);
+  let tot=0,yuk=0,gon=0,bek=0;const eksik=[];
+  ks.forEach(k=>{
+    defs(k.type).forEach(([key])=>{
+      tot++;const b=((k.belgeler)||{})[key];
+      if(yuklu(b))yuk++;else if(gonderildi(b)){gon++;eksik.push({k,key,st:'Gönderildi'});}
+      else{bek++;eksik.push({k,key,st:'Bekliyor'});}
+    });
+  });
+  const mt=bestMatch(ks,k=>k.name,tokensOf(q),2);
+  if(mt){
+    const k=mt.item;const rows=defs(k.type).map(([key])=>{
+      const b=((k.belgeler)||{})[key];const st=yuklu(b)?'Yüklendi':(gonderildi(b)?'Gönderildi':'Bekliyor');
+      return `<tr><td>${esc(key)}</td><td><b>${st}</b></td></tr>`;
+    }).join('');
+    return card('Evrak — '+esc(k.name),table([{t:'Belge'},{t:'Durum'}],rows)+`<a class="ka-link" href="saha/">Saha’da aç →</a>`);
+  }
+  const topEksik=eksik.filter(x=>x.st!=='Yüklendi').slice(0,12)
+    .map(x=>`<tr><td>${esc(x.k.name)}</td><td>${esc(x.k.type)}</td><td>${esc(x.key)}</td><td>${esc(x.st)}</td></tr>`).join('');
+  return card('Saha Evrak Özeti',
+    row('Toplam kalem',tot)+row('Yüklendi',yuk)+row('Gönderildi (bekleyen yükleme)',gon)+row('Bekliyor',bek)+
+    (topEksik?`<div class="ka-sub">Eksik / bekleyen (örnek)</div>`+table([{t:'Ad'},{t:'Tip'},{t:'Belge'},{t:'Durum'}],topEksik):'')+
+    `<a class="ka-link" href="saha/">Saha evrak takibi →</a>`);
+}
+
+// ---- Bakım / makine ----
+function ansBakim(q){
+  const n=norm(q);if(!/bakim|makine|ariza|envanter|yedek parca/.test(n))return null;
+  // Rehber “bakım modülü” → ansRehber; burada veri
+  const kay=D().bakimKayitlar||[];
+  if(!kay.length&&!/modul|nerede|nasil/.test(n))return card('Makine Bakım','<p class="ka-p">Henüz bakım kaydı yok. <a class="ka-link" href="bakim/">Makine Envanter</a></p>');
+  if(/modul|nerede|nasil/.test(n)&&!/ariza|acik|bekleyen|hangi makine/.test(n))return null;
+  const acik=kay.filter(k=>/bekle|devam|acik/i.test(String(k.durum||'')));
+  const mc={};kay.forEach(k=>{const m=k.makine||'Genel';if(m!=='Genel')mc[m]=(mc[m]||0)+1;});
+  const topM=Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const rowsAcik=acik.slice(0,10).map(k=>`<tr><td>${fmtDate(k.tarih)}</td><td><b>${esc(k.makine||'—')}</b></td><td>${esc((k.sorun||'').slice(0,60))}</td><td>${esc(k.durum||'')}</td></tr>`).join('');
+  return card('Makine Bakım Özeti',
+    row('Toplam kayıt',kay.length)+row('Açık / beklemede',`<span class="ka-big">${acik.length}</span>`)+
+    (topM.length?`<div class="ka-sub">En çok kayıtlı makineler</div>`+topM.map(([m,a])=>row(m,a+' kayıt')).join(''):'')+
+    (rowsAcik?`<div class="ka-sub">Açık kayıtlar</div>`+table([{t:'Tarih'},{t:'Makine'},{t:'Sorun'},{t:'Durum'}],rowsAcik):'')+
+    `<div class="ka-note">Maliyet tutarları aramada gösterilmez. <a href="bakim/">Bakım modülü</a></div>`);
+}
+
+// ---- Haftalık toplantı (rehber ağırlıklı; canlı checklist apps/toplanti ayrı) ----
+function ansToplanti(q){
+  const n=norm(q);if(!/toplanti|haftalik yonetim|yonetim kurulu|kontrol listesi/.test(n))return null;
+  if(/siparis|tonaj|ciro|musteri|bayi|izin|avans/.test(n)&&!/toplanti|haftalik/.test(n))return null;
+  return card('Haftalık Yönetim Toplantısı',
+    `<p class="ka-p">Kontrol listesi, üretim istatistikleri, fabrika inşaat takibi ve yönetim kurulu raporu bu modülde doldurulur.</p>`+
+    `<a class="ka-link" href="haftalik-toplanti/">Toplantı modülünü aç →</a>`);
+}
+
 function ansBos(){
-  return card('Sonuç Bulunamadı',`<p class="ka-p">Bu soruya karşılık gelen bir veri bulunamadı. Şunları deneyebilirsiniz:</p>
-  <ul class="ka-ul"><li>"En çok satan ürün"</li><li>"Bu ay geçen aya göre satış"</li><li>"En iyi 5 müşteri"</li><li>"Afyon" (bir il yazın — o ildeki her şey gelir)</li><li>"[müşteri adı] kaç ton aldı"</li><li>"Bekleyen siparişler"</li><li>"Bu yıl ciro"</li><li>"Plasiyer performansı"</li><li>"[danışman] komisyon bakiyesi"</li><li>"Kimin izni kaldı"</li><li>"[ürün kodu] fiyatı"</li></ul>`);
+  return card('Sonuç Bulunamadı',`<p class="ka-p">Bu soruya karşılık gelen bir veri bulunamadı. Portal rehberinden deneyin:</p>
+  <ul class="ka-ul">
+    <li><a href="#" onclick="kaAsk('Yardım');return false">Yardım / ne sorabilirim?</a></li>
+    <li>"Bekleyen siparişler" · "Bu ay tonaj" · "Bu yıl ciro"</li>
+    <li>"En çok satan ürün" · "Afyon" (il yazın)</li>
+    <li>"Plasiyer performansı" · "Evrak durumu" · "Açık arızalar"</li>
+    <li>"Kimin izni kaldı" · "Ön siparişler" · "Aktif tarife"</li>
+    <li>"[ürün kodu] fiyatı" · "[danışman] komisyon"</li>
+  </ul>
+  <div class="ka-note">Muhasebe &amp; finans (kasa, banka, tahsilat, maaş) aramaya kapalıdır.</div>`);
 }
 
 // ============================================================
@@ -663,7 +894,11 @@ function ansBos(){
 function analyze(q){
   const secs=[];  // {w, h}
   const push=(w,h)=>{if(h)secs.push({w,h});};
+  // Rehber / SSS / modül — yüksek öncelik (site içi Google)
+  push(98, ansRehber(q));
   push(100, ansSiparis(q));
+  push(94, ansOnSiparis(q)); push(94, ansSahaEvrak(q)); push(93, ansBakim(q)); push(92, ansToplanti(q));
+  push(92, ansTarife(q));
   // Raporlar (yüksek değer)
   push(92, ansDurumSayim(q)); push(92, ansKiyas(q)); push(92, ansEnCok(q)); push(92, ansCiro(q)); push(92, ansTonaj(q));
   push(90, ansHedef(q)); push(90, ansKomisyon(q)); push(90, ansPlasiyerPerf(q));
@@ -714,6 +949,11 @@ function suggest(q){
   q=String(q||'').trim();if(q.length<2||!IDX)return [];
   const qt=tokensOf(q),qn=norm(q),nq=bare(q);if(!qt.length&&qn.length<2)return [];
   const scored=[];
+  // Rehber / SSS önerileri
+  if(/yardim|rehber|modul|nasil|nerede|ne sor/.test(qn)){
+    scored.push({e:{type:'Rehber',src:'',name:'Yardım',nn:'yardim',ek:'ne sorabilirim?',go:'Yardım'},sc:95});
+    SITE_MODULLER.slice(0,5).forEach(m=>scored.push({e:{type:'Modül',src:'',name:m.ad,nn:norm(m.ad),ek:'açıklama',go:m.ad},sc:75}));
+  }
   IDX.forEach(e=>{
     let sc=0;
     if(e.nn===qn)sc=100;
