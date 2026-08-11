@@ -2483,6 +2483,80 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /function openSozSablon\(/.test(SAHA) && /ozelMaddeler/.test(SAHA) && /DB\.sozSablon/.test(SAHA));
     }
 
+    // ══ 39 · SAYISAL DENETİM DÜZELTMELERİ — ACİL İKİLİ + ÇAPRAZ BUTON (12.08) ══════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const KOK = pth.join(__dirname, '..');
+      // 39a — ICERIK_ALAN ÜÇ KOPYA BİREBİR AYNI OLMALI. 08.08'de imeceKartTutar yalnız
+      // sunucuya eklendi; istemci hash ≠ sunucu hash oldu ve TÜM yeni sipariş onay
+      // butonları "sipariş değişti" diye reddedildi. Bir daha ayrışmasın.
+      const cek = (p) => {
+        const src = fsx.readFileSync(pth.join(KOK, p), 'utf8');
+        const m = src.match(/const ICERIK_ALAN = \[([\s\S]*?)\];/);
+        return m ? m[1].match(/"[^"]+"/g).map((x) => x.slice(1, -1)) : null;
+      };
+      const fnL = cek('functions/index.js'), tmrL = cek('siparis-takip/index.html'), yemL = cek('yem/index.html');
+      dogru('ICERIK_ALAN üç kopyada da var', !!fnL && !!tmrL && !!yemL);
+      dogru('TMR aynası sunucuyla BİREBİR (sıra dahil)', JSON.stringify(fnL) === JSON.stringify(tmrL));
+      dogru('Yem aynası sunucuyla BİREBİR (sıra dahil)', JSON.stringify(fnL) === JSON.stringify(yemL));
+      dogru('imeceKartTutar üç listede de var',
+        [fnL, tmrL, yemL].every((L2) => L2.includes('imeceKartTutar')));
+
+      // 39b — LİSTE KAPISI: danışman liste fiyatı olmayan üründe direkt satış primi 0 olmalı
+      // (cironun %100'ü değil). Gerçek orderKomisyon koşturulur.
+      {
+        // 25. bölümdeki gov2/ort deseninin aynısı: orderKomisyon HTML'den sökülüp koşturulur.
+        const gov3 = (ad) => {
+          const i = H.indexOf('function ' + ad + '(');
+          let d = 0, b = false;
+          for (let k = i; k < H.length; k++) {
+            const c = H[k];
+            if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+          return '';
+        };
+        const DB2 = {meta: {tdIskonto: 6}, komisyoncular: [{id: 'd1', name: 'Dan', type: 'danisman'}],
+          customers: [{id: 'c1', name: 'M', danismanId: 'd1'}]};
+        const ort3 = {
+          DB: DB2,
+          komById: (id) => DB2.komisyoncular.find((k) => k.id === id) || null,
+          custById: (id) => DB2.customers.find((c) => c.id === id) || null,
+          plasById: () => null, prodByCode: () => null,
+          lineUnit: () => 0, orderPL: () => null, orderPLForPrim: () => null, tariffPrice: () => 0,
+          // SODA: danışman listesi YOK (0) · BK-300: 900
+          primTarifeFiyat: (_pl, _o, code, kad) =>
+            (kad === 'danismanListe' ? (code === 'BK-300' ? 900 : 0) : 0),
+          TD_ISKONTO_DEFAULT: 6,
+        };
+        const K3 = new Function(...Object.keys(ort3), [gov3('ordBayi'), gov3('ordDanisman'),
+          gov3('ordDanismanDamgali'), gov3('orderKomisyon'),
+          'return {orderKomisyon};'].join('\n'))(...Object.values(ort3));
+        const o = {id: 'o1', customerId: 'c1', danismanId: 'd1', status: 'teslim',
+          lines: [{code: 'SODA', qty: 150, price: 320}], nakliye: 0};
+        const r = K3.orderKomisyon(o);
+        esit('listesiz üründe prim 0 (48.000 DEĞİL)', r.tutar, 0);
+        dogru('det satırı liste=0 taşıyor (döküm süzsün)', r.det.length === 1 && r.det[0].liste === 0 && r.det[0].prim === 0);
+        // listesi OLAN ürün normal prim üretmeye devam etmeli: alış 900×0,94=846 → (950−846)×100
+        const o2 = {id: 'o2', customerId: 'c1', danismanId: 'd1', status: 'teslim',
+          lines: [{code: 'BK-300', qty: 100, price: 950}], nakliye: 0};
+        esit('listeli ürün primi değişmedi: (950−846)×100', Math.round(K3.orderKomisyon(o2).tutar), 10400);
+        // karışık sipariş: yalnız listeli satır prim üretir
+        const o3 = {id: 'o3', customerId: 'c1', danismanId: 'd1', status: 'teslim',
+          lines: [{code: 'BK-300', qty: 100, price: 950}, {code: 'SODA', qty: 150, price: 320}], nakliye: 0};
+        esit('karışık siparişte SODA satırı prim eklemiyor', Math.round(K3.orderKomisyon(o3).tutar), 10400);
+      }
+      dogru('liste kapısı kodda (bayi dalıyla aynı desen)',
+        /const lp=\(liste>0&&satis>0\)\?\(satis-alis\)\*q:0/.test(H));
+
+      // 39c — çapraz onay butonu İMZASIZ: kuyruk imzası sipariş imzasıyla yapısal tutmaz,
+      // buton sipariş oluştuğu anda ölüyordu. mod:oid biçimi beklenenH=null → kontrol atlanır.
+      const FN2 = fsx.readFileSync(pth.join(KOK, 'functions', 'index.js'), 'utf8');
+      dogru('çapraz buton kuyruk imzası TAŞIMIYOR',
+        /callback_data: "moapprove:t:" \+ r\.targetId\}\]\];/.test(FN2) &&
+        !/moapprove:t:" \+ r\.targetId \+ ":" \+ imzaHash/.test(FN2));
+      dogru('değişiklik mesajı butonu imzasını KORUYOR (bayat koruması orada kalmalı)',
+        /callback_data: "moapprove:" \+ mod \+ ":" \+ d\.id \+ ":" \+ d\.imzaH/.test(FN2));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

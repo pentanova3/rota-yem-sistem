@@ -788,7 +788,13 @@ exports.caprazBildir = onDocumentWritten({document: "apps/cross", region: "us-ce
     } else if (r.to === "tmr") {
       text = "🆕 YENİ SİPARİŞ — MUHASEBE ONAYI BEKLİYOR (Yem'den çapraz)\n\n" + ortak +
         "\n\nÖnce muhasebe, ardından üretim onayı alınır 👇";
-      buttons = [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + r.targetId + ":" + imzaHash(siparisImza(r))}]];
+      // İMZASIZ buton (denetim 12.08.2026): r apps/cross KUYRUK kaydıdır — gerçek sipariş
+      // istemci kuyruğu işlediğinde AYRI şekille oluşur (customerId/teslimTarihi dolu, "teslim"
+      // alanı yok). Kuyruk imzası sipariş imzasıyla YAPISAL olarak asla tutmaz: buton, sipariş
+      // oluştuğu anda "içerik değişti" diye ölüyordu (tam tersi: sipariş henüz YOKKEN geçiyordu).
+      // İmza boş → moconfirm bayat-kontrolünü atlar; içerik denetimini yaz() değişiklik mesajları
+      // ve iptal kontrolü zaten yapar.
+      buttons = [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + r.targetId}]];
     } else { continue; }
     try {
       // buttons null olabilir (yem bilgi hattı) → reply_markup HİÇ konmaz.

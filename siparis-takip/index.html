@@ -692,7 +692,11 @@ function orderKomisyon(o,komOverride){
       if(l.price==='')satis=0;
       else if(l.price!=null)satis=+l.price||0;
       else satis=liste;   // fiyat damgalı değil → as-of liste (prodByCode/güncel YOK)
-      const q=+l.qty||0;const lp=satis>0?(satis-alis)*q:0;prim+=lp;
+      // LİSTE KAPISI (denetim 12.08.2026): danışman liste fiyatı OLMAYAN üründe (CA SABUNU,
+      // SODA, gübre...) alış 0 çıkar ve prim = satış cirosunun TAMAMI olurdu (₺48.000'lik satışa
+      // ₺48.000 prim). Bayi-üzeri daldaki (torbali>0&&fab>0) kapısının aynısı: listesiz ürün
+      // prim ÜRETMEZ — dökümdeki "danışman listesi olmayan ürün prim üretmez" varsayımıyla hizalı.
+      const q=+l.qty||0;const lp=(liste>0&&satis>0)?(satis-alis)*q:0;prim+=lp;
       if(l.code)det.push({code:l.code,liste,alis,satis,qty:q,prim:lp});
     });
     const kargo=+o.nakliye||0;prim-=kargo;
@@ -3130,7 +3134,7 @@ function fabrikaLink(o){return 'https://rota-yem.web.app/fabrika-onay/?t='+encod
 // İKİ KOPYA SAPMAZ: sapınca bayat onay koruması sessizce devre dışı kalır.
 const ICERIK_ALAN = ["customerId", "bayiId", "aliciBayi", "aliciMusteri", "portalMusteri",
   "teslimTarihi", "fiyatKademe", "priceListId", "nakliye", "faturaManuel",
-  "imeceSecili", "imeceAy", "odeme", "vade", "nakliyeBirim", "nakliyeTipi", "hammaliyeBirim",
+  "imeceSecili", "imeceAy", "imeceKartTutar", "odeme", "vade", "nakliyeBirim", "nakliyeTipi", "hammaliyeBirim",
   "iskontoOran", "iskontoTL", "ozelListeId", "araciId", "araciKomisyon"];
 function siparisImza(o) {
   if (!o) return "";
