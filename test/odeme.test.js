@@ -1969,7 +1969,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         TD_ISKONTO_DEFAULT: 6,
       };
       const KOM = new Function(...Object.keys(ort), [gov2('ordBayi'), gov2('ordDanisman'),
-        gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
+        gov2('ordDanismanDamgali'), gov2('tdIskontoAyar'), gov2('ordTdIsk'), gov2('orderKomisyon'),
         'return {orderKomisyon, ordDanisman, ordDanismanDamgali};'].join('\n'))(...Object.values(ort));
 
       // alis = 1000 × (1−0,06) = 940 · satis = 1100 → prim = (1100−940) × 100 = 16.000
@@ -2040,7 +2040,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       // priceListAsOf / orderPriceDate / orderPL / orderPLForPrim / tariffPrice / primTarifeFiyat / orderKomisyon
       const FN = new Function(...Object.keys(ort), [
         gov2('priceListAsOf'), gov2('orderPriceDate'), gov2('orderPL'), gov2('orderPLForPrim'),
-        gov2('tariffPrice'), gov2('primTarifeFiyat'), gov2('ordDanisman'), gov2('ordDanismanDamgali'), gov2('orderKomisyon'),
+        gov2('tariffPrice'), gov2('primTarifeFiyat'), gov2('ordDanisman'), gov2('ordDanismanDamgali'), gov2('tdIskontoAyar'), gov2('ordTdIsk'), gov2('orderKomisyon'),
         'return {priceListAsOf, orderPLForPrim, orderKomisyon, tariffPrice, primTarifeFiyat};'
       ].join('\n'))(...Object.values(ort));
 
@@ -2528,7 +2528,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
           TD_ISKONTO_DEFAULT: 6,
         };
         const K3 = new Function(...Object.keys(ort3), [gov3('ordBayi'), gov3('ordDanisman'),
-          gov3('ordDanismanDamgali'), gov3('orderKomisyon'),
+          gov3('ordDanismanDamgali'), gov3('tdIskontoAyar'), gov3('ordTdIsk'), gov3('orderKomisyon'),
           'return {orderKomisyon};'].join('\n'))(...Object.values(ort3));
         const o = {id: 'o1', customerId: 'c1', danismanId: 'd1', status: 'teslim',
           lines: [{code: 'SODA', qty: 150, price: 320}], nakliye: 0};
@@ -2632,6 +2632,132 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         const A3 = BA('b1', '2026');
         esit('damgasız kayıtta canlı hesap yedeği', A3.totBrut, 60000);
       }
+    }
+
+    // ══ 41 · PAKET B — GERİYE YÜRÜME KİLİTLERİ (12.08 denetimi) ═════════════════════════
+    {
+      const gvB = (ad) => {
+        const i = H.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) {
+          const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+
+      // 41a — tdIskonto DAMGASI: meta değişse damgalı sipariş kaymaz; 0 artık 0'dır
+      {
+        const DBt = {meta: {tdIskonto: 6}};
+        const T = new Function('DB', 'TD_ISKONTO_DEFAULT',
+          gvB('tdIskontoAyar') + gvB('ordTdIsk') + ';return {tdIskontoAyar,ordTdIsk};')(DBt, 6);
+        esit('damgalı sipariş kendi oranını okur', T.ordTdIsk({tdIsk: 8}), 8);
+        esit('damgasız sipariş canlı ayara düşer', T.ordTdIsk({}), 6);
+        DBt.meta.tdIskonto = 9;
+        esit('meta 9 olunca DAMGALI sipariş 8 KALIR (geçmiş kaymaz)', T.ordTdIsk({tdIsk: 8}), 8);
+        esit('damgasız 9 olur (eski kayıtlar bilinen sınır)', T.ordTdIsk({}), 9);
+        DBt.meta.tdIskonto = 0;
+        esit('|| tuzağı kapandı: 0 girilirse 0 (sessizce %6 DEĞİL)', T.tdIskontoAyar(), 0);
+        DBt.meta.tdIskonto = null;
+        esit('boş ayar varsayılana döner', T.tdIskontoAyar(), 6);
+        esit('damga 0 da geçerli damga', T.ordTdIsk({tdIsk: 0}), 0);
+      }
+      dogru('orderKomisyon damga öncelikli oran okuyor', /const isk=ordTdIsk\(o\);/.test(H));
+      dogru('saveOrder tdIsk damgası basıyor (yalnız ilk kayıtta)',
+        /if\(o\.tdIsk==null\)o\.tdIsk=tdIskontoAyar\(\);/.test(H));
+      {
+        const FN4 = require('fs').readFileSync(require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+        dogru('SUNUCU da tdIsk damgalıyor (3 sipariş oluşturma yolu)',
+          (FN4.match(/tdIsk: tdIskFN\(DB\)/g) || []).length === 3 && /function tdIskFN\(DB\)/.test(FN4));
+      }
+      {
+        const ARAMA2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
+        dogru('arama.js aynı damga kuralında',
+          /const isk=\(o&&o\.tdIsk!=null&&o\.tdIsk!==''\)\?\(\+o\.tdIsk\|\|0\):_tv;/.test(ARAMA2));
+      }
+
+      // 41b — bayiIskOranlar: komisyonRate damgası kart tarafından çiğnenmiyor
+      {
+        const BI = new Function('komById', gvB('bayiIskOranlar') + ';return bayiIskOranlar;')(() => null);
+        const kart = {ozelIskonto: 6, rate: 5};
+        esit('ozelIskonto damgalı: damga çifti (rate)', BI({ozelIskonto: 4, komisyonRate: 3}, kart).rate, 3);
+        esit('ozelIskonto damgalı: damga çifti (özel)', BI({ozelIskonto: 4, komisyonRate: 3}, kart).ozel, 4);
+        // ANA VAKA: yalnız komisyonRate damgalı eski sipariş + karta SONRADAN özel eklendi
+        const r2 = BI({komisyonRate: 3}, kart);
+        esit('rate damgası KORUNUR (kart %5 çiğnemez)', r2.rate, 3);
+        esit('kartın özel oranı damgalı siparişe KARIŞMAZ (çift düşüm yok)', r2.ozel, 0);
+        // hiç damga yok: kart geçerli (mevcut davranış)
+        const r3 = BI({}, kart);
+        esit('damgasızda kart özel', r3.ozel, 6);
+        esit('damgasızda kart rate', r3.rate, 5);
+        esit('damgasız + özel yok: kart rate', BI({}, {rate: 4}).rate, 4);
+      }
+
+      // 41c — geriye tarihli tarife yayını KAPISI (koşturmalı)
+      {
+        const cagri = {n: 0, msg: ''};
+        const ctxT = {
+          priceLists: () => [{date: '2026-03-23'}, {date: '2026-08-03'}],
+          DB: {orders: [
+            {status: 'teslim', teslimEdildiTarih: '2026-07-10'},
+            {status: 'teslim', teslimEdildiTarih: '2026-08-05'},
+            {status: 'beklemede', teslimTarihi: '2026-07-15'},   // teslim edilmemiş — SAYILMAZ
+            {status: 'teslim', teslimEdildiTarih: '2026-06-01'}, // tarihten önce — SAYILMAZ
+          ]},
+          satisMi: (o) => o.status === 'teslim',
+          satisTarihi: (o) => o.teslimEdildiTarih || o.date || '',
+          fmtDate: (d) => String(d),
+          confirm: (m) => { cagri.n++; cagri.msg = m; return false; },
+        };
+        const TU = new Function(...Object.keys(ctxT), gvB('tarifeTarihUyari') + ';return tarifeTarihUyari;')(...Object.values(ctxT));
+        dogru('İLERİ tarihli yayın sorusuz geçer', TU('2026-08-15') === true && cagri.n === 0);
+        dogru('GERİYE tarihli yayın onaya takılır', TU('2026-07-01') === false && cagri.n === 1);
+        dogru('uyarı etkilenen sipariş SAYISINI veriyor (2 teslim ≥ 01.07)', /2 siparişin/.test(cagri.msg));
+        dogru('AYNI tarihli yayın da onaya takılır (as-of son ekleneni seçer)',
+          (cagri.n = 0, TU('2026-08-03') === false && cagri.n === 1));
+      }
+      dogru('publishTariff kapıdan geçiyor', /if\(!tarifeTarihUyari\(date\)\)return;/.test(H));
+      dogru('Excel yayını da kapıdan geçiyor', /if\(!tarifeTarihUyari\(tarih\)\)\{toast\('Yayın iptal edildi'\);return;\}/.test(H));
+
+      // 41d — delTariff damga koruması
+      dogru('damgalı siparişi olan tarife SİLİNEMEZ',
+        /const _bagli=DB\.orders\.filter\(o=>o&&o\.priceListId===id\)\.length;\s*\n\s*if\(_bagli>0\)\{alert\(/.test(H));
+
+      // 41e — müşteri iskonto damgası + rapor filtresi
+      dogru('custIskontoOf damga öncelikli',
+        /function custIskontoOf\(o\)\{return \(o&&o\.musteriIsk!=null&&o\.musteriIsk!==''\)\?/.test(H));
+      dogru('saveOrder müşteri iskontosunu KARTTAN damgalıyor (döngü yok)',
+        /if\(o\.musteriIsk==null&&o\.customerId&&!o\.aliciBayi\)o\.musteriIsk=custIskontoKart\(o\);/.test(H));
+      dogru('müşteri değişince damga sıfırlanıyor (yeni müşterinin kartı geçerli)',
+        /editOrder\.customer=c\?c\.name:'';editOrder\.musteriIsk=null;/.test(H));
+      dogru('rapor filtresi sipariş kanıtına bakıyor',
+        /return e\.damgali>0 \|\| \(\+e\.cust\.iskonto>0\) \|\| e\.ilave>0 \|\| e\.dbs>0;/.test(H));
+      {
+        // KOŞTURMALI: kart iskontosu 0'a çekilmiş müşterinin damgalı geçmiş dönemi rapordan DÜŞMÜYOR
+        const ctxM = {
+          DB: {orders: [
+            {id: 'o1', customerId: 'c1', status: 'teslim', teslimEdildiTarih: '2026-07-10', no: 1,
+              musteriIsk: 5, total: 95000, lines: [{code: 'A', qty: 100}]},
+            {id: 'o2', customerId: 'c2', status: 'teslim', teslimEdildiTarih: '2026-07-11', no: 2,
+              total: 98000, lines: [{code: 'A', qty: 100}]},   // damgasız + kart 0 → kademe farkı, DÜŞMELİ
+          ]},
+          custById: (id) => (id === 'c1' ? {id: 'c1', name: 'M1', iskonto: 0} : {id: 'c2', name: 'M2', iskonto: 0}),
+          satisMi: (o) => o.status === 'teslim',
+          satisTarihi: (o) => o.teslimEdildiTarih || '',
+          orderListTotal: () => 100000, orderNetHesap: (o) => +o.total,
+          orderTotal: (o) => +o.total, ilaveIskonto: () => 0, dbsIskonto: () => 0,
+          round2: (n) => Math.round((+n || 0) * 100) / 100, fmtN: (n) => String(n),
+        };
+        const MI = new Function(...Object.keys(ctxM), gvB('musteriIskontoData') + ';return musteriIskontoData;')(...Object.values(ctxM));
+        const R = MI('2026-07-01', '2026-07-31');
+        esit('damgalı müşteri satırı KALIYOR (kart 0 olsa da)', R.rows.length, 1);
+        dogru('kalan satır damgalı müşteri', R.rows[0].cust.id === 'c1');
+        esit('iskonto ve ciro rapordan kaybolmadı', R.rows[0].musIsk, 5000);
+        esit('damgasız kademe-farkı satırı yine dışarıda', R.rows.filter((e) => e.cust.id === 'c2').length, 0);
+      }
+
+      // 41f — ödemesi olan danışman satırdan kaybolmuyor
+      dogru('yetim ödeme satırı ekleniyor (çift ödeme görünür olsun)',
+        /if\(!k\|\|k\.type!=='danisman'\)return;\s*\n\s*danRows\.push\(\{kom:k,ciro:0,tonaj:0,tutar:0,ham:0,adet:0,ayar:0,odemeYetim:true\}\);/.test(H));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
@@ -2851,6 +2977,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       new Function(...Object.keys(ort), [
         sbt('FIY_ALAN'), govde('fiyatNormHam'), govde('fiyatNorm'), govde('fiyatSayi'),
         govde('fiyatAliasMap'), govde('fiyatSatirlari'), govde('fiyatEslesme'), govde('fiyatPlanCikar'),
+        'var tarifeTarihUyari=function(){return true};',
         govde('fiyatUygulaYayinla'), 'fiyatUygulaYayinla();',
       ].join('\n'))(...Object.values(ort));
       return {DB, ...durum, bul: (c) => DB.products.find((p) => p.code === c)};

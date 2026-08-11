@@ -657,6 +657,12 @@ function custPlas(c){
   return null;
 }
 function custMine(c){var me=myPlasiyer();if(!me||!c)return false;var p=custPlas(c);return !!(p&&p.id===me.id);}
+// ── DANIŞMAN İSKONTO ORANI (denetim 12.08.2026) ─────────────────────────────
+// Oran artık SİPARİŞE DAMGALANIR (o.tdIsk, saveOrder'da). Damga yoksa (eski/Excel
+// kayıtları) canlı ayara düşülür — mevcut davranış, sıfır kayıp geçiş.
+// tdIskontoAyar: '||' tuzağı kapatıldı — 0 girilirse 0'dır, sessizce %6'ya DÖNMEZ.
+function tdIskontoAyar(){const v=(DB&&DB.meta)?DB.meta.tdIskonto:null;return (v==null||v==='')?TD_ISKONTO_DEFAULT:(+v||0);}
+function ordTdIsk(o){return (o&&o.tdIsk!=null&&o.tdIsk!=='')?(+o.tdIsk||0):tdIskontoAyar();}
 function orderKomisyon(o,komOverride){
   // Komisyoncu çözümü: açık override → sipariş anında damgalanan komisyoncuId → ordDanisman/ordBayi
   // (bunlar damga yoksa müşteri/bayi kartına düşer). Son iki adım OLMADAN Excel'den aktarılıp ataması
@@ -664,7 +670,7 @@ function orderKomisyon(o,komOverride){
   const kom=komOverride||((o&&o.komisyoncuId)?komById(o.komisyoncuId):null)||ordDanisman(o)||ordBayi(o);
   if(!o||!kom)return {kom:null,rate:0,tutar:0,type:''};
   if(kom.type==='danisman'){
-    const isk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
+    const isk=ordTdIsk(o);   // damga öncelikli — meta değişse GEÇMİŞ prim kaymaz
     const det=[];let prim=0;
     if(o.aliciBayi){
       // BAYİ ÜZERİNDEN: bayiye satışta, bayinin bağlı danışmanı çuval başı farkı kazanır.
@@ -2393,7 +2399,7 @@ function pickKomField(type,name){
   renderOrderModal();
 }
 // Müşteri seçilince: firma, teslim kademesi ve bayi/danışman ataması OTOMATİK gelir (müşteri kartından).
-function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';if(c){if(c.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);if(c.bayiId){editOrder.bayiId=c.bayiId;editOrder.danismanId='';}else{editOrder.bayiId='';editOrder.danismanId=c.danismanId||'';}}else{editOrder.bayiId='';editOrder.danismanId='';}if(isPlasiyer())editOrder.fiyatKademe='fabrika';clearLinePrices();renderOrderModal()}
+function onPickCustomer(id){const c=custById(id);editOrder.customerId=id;editOrder.customer=c?c.name:'';editOrder.musteriIsk=null;if(c){if(c.firma)editOrder.firma=c.firma;editOrder.fiyatKademe=detectKademe(c.city);if(c.bayiId){editOrder.bayiId=c.bayiId;editOrder.danismanId='';}else{editOrder.bayiId='';editOrder.danismanId=c.danismanId||'';}}else{editOrder.bayiId='';editOrder.danismanId='';}if(isPlasiyer())editOrder.fiyatKademe='fabrika';clearLinePrices();renderOrderModal()}
 // ===== Aranabilir açılır liste (combobox) =====
 // comboHTML({id, items:[{v,l,s}], value, ph, pick:'fnAdi', ro}) — pick(v) seçimde çağrılır.
 function comboHTML(o2){
@@ -2464,7 +2470,12 @@ function applyTariffToLines(){if(editOrder&&editOrder.aliciBayi){applyBayiPrices
 // Bayiye satış birim fiyatı: FABRİKA fiyatı × (1 − bayi iskontosu). Örn. 850, %3 → 824,50.
 // MÜŞTERİ İSKONTOSU: seçili kademe (Fabrika/Yakın/Uzak) fiyatından otomatik düşülür; elle girilen fiyat (_locked) korunur.
 // Bayi müşterisine satışta (aliciBayi) müşteri iskontosu DEĞİL bayi iskontosu geçerli — fatura bayie kesildiği için.
-function custIskontoOf(o){const c=(o&&o.customerId)?custById(o.customerId):null;return c?Math.max(0,Math.min(100,+c.iskonto||0)):0}
+// Müşteri iskontosu — DAMGA ÖNCELİKLİ (denetim 12.08.2026): o.musteriIsk saveOrder'da
+// yazılır. Kayıtlı siparişte yeniden fiyatlama (İMECE aç-kapa, kademe değişimi) artık
+// BUGÜNÜN kartını değil sipariş anındaki oranı kullanır — kart sonradan değişince
+// bekleyen eski siparişin faturası sessizce kaymaz. Damgasız eskilerde canlı kart (yedek).
+function custIskontoKart(o){const c=(o&&o.customerId)?custById(o.customerId):null;return c?Math.max(0,Math.min(100,+c.iskonto||0)):0}
+function custIskontoOf(o){return (o&&o.musteriIsk!=null&&o.musteriIsk!=='')?Math.max(0,Math.min(100,+o.musteriIsk||0)):custIskontoKart(o)}
 // İMECE'de taban KREDİ KARTI fiyatıdır (havale/DBS peşin indirimi içerir, vadeli satışta taban olamaz).
 // Kredi kartı fiyatı girilmemişse normal kademeye düşer — bu SESSİZ olmasın diye modalda uyarı çıkar (imeceEksikFiyat).
 function custUnitPrice(o,code){if(!code)return 0;const kk=imeceAliciAktif(o)?(tariffPrice(orderPL(o),code,'krediKarti')||((prodByCode(code)||{}).krediKarti||0)):0;const base=kk||tariffPrice(orderPL(o),code,o.fiyatKademe)||((prodByCode(code)||{})[o.fiyatKademe||'fabrika']||0);const isk=custIskontoOf(o);return base>0?Math.round(base*(1-isk/100)*100)/100:0}
@@ -2480,11 +2491,17 @@ function bayiIskOranlar(o,bayi){
   if(o&&Object.prototype.hasOwnProperty.call(o,'ozelIskonto')&&o.ozelIskonto!=null&&o.ozelIskonto!==''){
     ozel=+o.ozelIskonto||0;
     rate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:kartRate;
+  }else if(o&&o.komisyonRate!=null&&o.komisyonRate!==''){
+    // KOMİSYON DAMGASI TEK BAŞINA (denetim 12.08): ozelIskonto alanı OLMAYAN sipariş,
+    // zincir özelliğinden ÖNCE kaydedilmiştir — o gün kartta özel iskonto yoktu.
+    // Damga o günün TAM oranıdır: bugünkü kartın özel oranıyla KARIŞTIRILMAZ (çift
+    // düşüm olur) ve karta sonradan özel eklenince geçmiş prim kaymaz (eski davranış
+    // %3 damgayı yok sayıp kartı okuyor, prim 12.400→4.700 düşüyordu).
+    ozel=0; rate=+o.komisyonRate;
   }else if(kartOzel>0){
     ozel=kartOzel; rate=kartRate;
   }else{
-    ozel=0;
-    rate=(o&&o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:kartRate;
+    ozel=0; rate=kartRate;
   }
   return {ozel:Math.max(0,Math.min(100,+ozel||0)),rate:Math.max(0,Math.min(100,+rate||0))};
 }
@@ -2723,6 +2740,10 @@ function saveOrder(){
   delete o._acilis;   // yalnız modal ömrü boyunca yaşayan karşılaştırma tabanı — bloba YAZILMAZ
   delete o._kilitAcik;   // sevk kilidi açması YALNIZ o oturum içindir; bloba yazılsaydı kilit herkes için KALICI açılırdı
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
+  // + danışman iskonto oranı damgası (denetim 12.08): meta.tdIskonto sonradan değişse
+  // bu siparişin primi KAYMAZ. Yalnız İLK kayıtta damgalanır — düzenlemede korunur.
+  if(o.tdIsk==null)o.tdIsk=tdIskontoAyar();
+  if(o.musteriIsk==null&&o.customerId&&!o.aliciBayi)o.musteriIsk=custIskontoKart(o);   // müşteri iskonto damgası (KARTTAN — custIskontoOf döngü yapar)
   if(o.bayiId){const bk=komById(o.bayiId);if(bk){if(o.komisyonRate==null)o.komisyonRate=+bk.rate||0;if(o.ozelIskonto==null)o.ozelIskonto=+bk.ozelIskonto||0;}else{if(o.komisyonRate==null)o.komisyonRate=0;if(o.ozelIskonto==null)o.ozelIskonto=0;}}else{o.komisyonRate=null;o.ozelIskonto=null;}o.komisyoncuId=o.danismanId||o.bayiId||'';if(o.komisyoncuId){const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);
     // idx=-1 (kayıt başka cihazda silinmiş / sıfırlanmış / yedekten dönülmüş) → DB.orders[-1]=o
@@ -3763,7 +3784,7 @@ function setKomType(t){editKom.type=t;editKom.rate=(t==='danisman'?TD_ISKONTO_DE
 function renderKomModal(){
   const o=editKom;
   const isDan=o.type==='danisman';
-  const tdIsk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
+  const tdIsk=tdIskontoAyar();
   const rateField=isDan
     ? `<div class="fld"><label>İskonto (Sabit)</label><div style="padding:9px 11px;background:var(--slate-100);border-radius:6px;font-weight:700;color:var(--slate-600)">%${fmtN(tdIsk)}</div><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Prim: (Satış − Liste×(1−%${fmtN(tdIsk)})) × Miktar − Kargo</div></div>`
     : `<div class="fld"><label>Özel İskonto (%)</label><input type="number" step="0.01" min="0" max="100" value="${o.ozelIskonto||''}" placeholder="Örn: 6" onchange="editKom.ozelIskonto=this.value===''?0:+this.value"><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Alım tutarından <b>önce</b> uygulanır (yoksa boş bırakın)</div></div>
@@ -3834,16 +3855,18 @@ function musteriIskontoData(from,to){
     var liste=orderListTotal(o), net=orderNetHesap(o);
     var musIsk=Math.max(0,round2(liste-net)), ilave=ilaveIskonto(o), dbsT=dbsIskonto(o);
     if(musIsk<=0&&ilave<=0&&dbsT<=0)return;   // yalnız-DBS'li sipariş de rapora girer (yoksa fatura toplamı tutmaz)
-    var e=byCust[c.id]||(byCust[c.id]={cust:c,musIsk:0,ilave:0,dbs:0,fatura:0,adet:0,satirlar:[]});
+    var e=byCust[c.id]||(byCust[c.id]={cust:c,musIsk:0,ilave:0,dbs:0,fatura:0,adet:0,damgali:0,satirlar:[]});
+    if(+o.musteriIsk>0)e.damgali++;   // sipariş ANINDA iskontolu olduğunun kanıtı (denetim 12.08)
     e.musIsk=round2(e.musIsk+musIsk);e.ilave=round2(e.ilave+ilave);e.dbs=round2(e.dbs+dbsT);e.fatura=round2(e.fatura+orderTotal(o));e.adet++;
     e.satirlar.push({tarih:satisTarihi(o),no:o.no,urun:(o.lines||[]).map(function(l){return l.code+'×'+fmtN(l.qty)}).join(', '),musIsk:musIsk,ilave:ilave,dbs:dbsT,fatura:orderTotal(o)});
     totMus+=musIsk;totIlave+=ilave;totDbs+=dbsT;totFat+=orderTotal(o);
   });
-  // Raporda yalnız GERÇEK iskontolu müşteriler: kartında iskonto oranı olan,
-  // veya dönemde DBS / ilave iskonto uygulanmış olanlar. Liste–net farkı (kademe vb.)
-  // tek başına yeter sayılmaz — bunlar müşteri kartından zaten görülür.
+  // Raporda yalnız GERÇEK iskontolu müşteriler. Ölçüt SİPARİŞ KANITI (denetim 12.08):
+  // dönemde iskonto damgalı sipariş VARSA satır kalır — kart bugün sıfırlansa bile geçmiş
+  // dönemin iskontosu ve cirosu rapordan KAYBOLMAZ (5.000 ₺ iskonto + 95.000 ₺ ciro vakası).
+  // Kart oranı yalnız DAMGASIZ eski kayıtlar için yedek ölçüttür; kademe farkı yine yetmez.
   var rows=Object.values(byCust).filter(function(e){
-    return (+e.cust.iskonto>0) || e.ilave>0 || e.dbs>0;
+    return e.damgali>0 || (+e.cust.iskonto>0) || e.ilave>0 || e.dbs>0;
   }).sort(function(a,b){return (b.musIsk+b.ilave+b.dbs)-(a.musIsk+a.ilave+a.dbs);});
   totMus=0;totIlave=0;totDbs=0;totFat=0;
   rows.forEach(function(e){totMus+=e.musIsk;totIlave+=e.ilave;totDbs+=e.dbs;totFat+=e.fatura;});
@@ -3929,6 +3952,17 @@ function renderKomisyon(c,tb){
   if(komRepTo)_odemeList=_odemeList.filter(function(p){return !p.odemeTarihi||p.odemeTarihi<=komRepTo;});
   const paid={};_odemeList.forEach(p=>{paid[p.komisyoncuId]=(paid[p.komisyoncuId]||0)+(+p.odenenTutar||0)});
   const danRows=Object.values(agg).sort((a,b)=>b.tutar-a.tutar);
+  // ÖDEME YETİM KALMASIN (denetim 12.08.2026): danışman ataması A→B değişince A'nın
+  // hakediş satırı agg'den düşer ama ödemeleri komisyoncuId ile A'da kalır. Satır
+  // tamamen kaybolursa A'ya ödenen para 'Ödenen' toplamından buharlaşır ve aynı prim
+  // B'ye İKİNCİ KEZ ödenebilir. Ödemesi olup hakedişi görünmeyen danışmana 0-hakedişli
+  // satır eklenir — bakiyesi EKSİ görünür, fazla/yanlış ödeme gözden kaçmaz.
+  Object.keys(paid).forEach(kid=>{
+    if(agg[kid])return;
+    const k=komById(kid);
+    if(!k||k.type!=='danisman')return;
+    danRows.push({kom:k,ciro:0,tonaj:0,tutar:0,ham:0,adet:0,ayar:0,odemeYetim:true});
+  });
   const totPrim=danRows.reduce((s,r)=>s+r.tutar,0);
   const totPaid=danRows.reduce((s,r)=>s+(paid[r.kom.id]||0),0);
   const _donemEt=(komRepFrom||komRepTo)?((komRepFrom?fmtDate(komRepFrom):'başlangıç')+' – '+(komRepTo?fmtDate(komRepTo):'bugün')):'Tüm zamanlar';
@@ -3942,7 +3976,7 @@ function renderKomisyon(c,tb){
   const totIskY=bayiRows.reduce((s,r)=>s+r.A.totIsk,0);
   const totIlaveY=bayiRows.reduce((s,r)=>s+(r.A.totIlave||0),0);
   const totAlimY=bayiRows.reduce((s,r)=>s+r.A.totFatura,0);
-  const tdIsk=(DB.meta&&DB.meta.tdIskonto)||TD_ISKONTO_DEFAULT;
+  const tdIsk=tdIskontoAyar();
   tb.innerHTML=`<button class="btn btn-gray" onclick="window.print()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır</button>`;
   let h=`<div class="filters">
     <span style="font-size:12px;color:var(--slate-500);font-weight:600">Dönem:</span>
@@ -4338,10 +4372,24 @@ function openPublishTariff(){
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=m;
 }
+// GERİYE/AYNI TARİHLİ YAYIN KİLİDİ (denetim 12.08.2026): danışman primi Liste/Alış'ı
+// teslim günü as-of tarifesinden okur (firma kararı e898521). Geriye tarihli her yayın,
+// o tarihten sonra TESLİM EDİLMİŞ tüm siparişlerin primini yeniden hesaplatır — ödenmiş
+// hakedişler kayar. Yasaklamıyoruz (fiyat dosyası geç gelebilir, gerçek yürürlük geçmiş
+// olabilir) ama etkiyi SAYARAK açıkça onaylatıyoruz. Aynı tarihli yayında priceListAsOf
+// son ekleneni seçtiği için o da geriye yürür — kapsam dahilinde.
+function tarifeTarihUyari(dateISO){
+  const ls=priceLists();if(!ls.length)return true;
+  const enYeni=ls.map(p=>String(p.date).slice(0,10)).sort().pop();
+  if(String(dateISO)>enYeni)return true;
+  const n=DB.orders.filter(o=>satisMi(o)&&satisTarihi(o)>=String(dateISO)).length;
+  return confirm('DİKKAT — GERİYE TARİHLİ TARİFE YAYINI\n\nYürürlük ('+fmtDate(dateISO)+'), arşivdeki en yeni tarifeden ('+fmtDate(enYeni)+') eski ya da ona eşit.\n\nBu tarihten sonra teslim edilmiş '+n+' siparişin danışman prim tabanı bu tarifeyle YENİDEN hesaplanacak; ödenmiş hakedişler kayabilir.\n\nYine de yayınlansın mı?');
+}
 function publishTariff(){
   if(!isAdmin())return;
   const date=(document.getElementById('plDate')||{}).value||todayISO();
   const note=((document.getElementById('plNote')||{}).value||'').trim();
+  if(!tarifeTarihUyari(date))return;
   const prevId=DB.meta.activePriceListId;
   publishSnapshot(date,note);
   logAct('Yeni fiyat tarifesi yayınladı: '+fmtDate(date));
@@ -4639,6 +4687,7 @@ function fiyatUygulaYayinla(){
     if(FY.esle[x.key]!==undefined)A[x.key]=FY.esle[x.key];   // YALNIZ bilerek yapılan seçim kalıcı olur;
   });                                                        // otomatik eşleşme yazılmaz ki ad/kod değişince kendini toparlasın
   const prevId=DB.meta.activePriceListId;
+  if(!tarifeTarihUyari(tarih)){toast('Yayın iptal edildi');return;}
   publishSnapshot(tarih,not||'Excel\'den yüklendi');
   logAct('Excel\'den fiyat yüklendi ('+P.plan.length+' ürün, '+P.deg.length+' değişiklik) — tarife: '+fmtDate(tarih));
   saveDB();closeModal();toast(P.plan.length+' ürün güncellendi, tarife yayınlandı');render();
@@ -4680,6 +4729,11 @@ function delTariff(id){
   if(!isAdmin())return;
   const pl=priceListById(id);if(!pl)return;
   if(id===DB.meta.activePriceListId){alert('Güncel tarife silinemez. Önce başka bir tarifeyi "Güncel Yap" ile aktif edin.');return;}
+  // DAMGA KORUMASI (denetim 12.08.2026): bu tarifeye priceListId ile bağlı sipariş varsa
+  // silmek, o siparişlerin brüt/fiyat tabanını SESSİZCE başka (genelde daha eski) tarifeye
+  // düşürür — raporlanan geçmiş kayar, kesilmiş faturanın dayanak PDF'i de yok olur.
+  const _bagli=DB.orders.filter(o=>o&&o.priceListId===id).length;
+  if(_bagli>0){alert('Bu tarifeye '+_bagli+' sipariş damgalı — SİLİNEMEZ.\n\nSilinirse o siparişlerin brüt/prim tabanı başka tarifeye düşer ve geçmiş raporlar kayar. Tarife arşivde kalmalı.');return;}
   if(!confirm(fmtDate(pl.date)+' tarifesini ('+(pl.note||'not yok')+') silmek istiyor musunuz? Bu işlem geri alınamaz.'))return;
   DB.priceLists=priceLists().filter(p=>p.id!==id);
   logAct('Fiyat tarifesi silindi: '+fmtDate(pl.date));saveDB();render();toast('Tarife silindi');

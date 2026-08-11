@@ -2288,6 +2288,13 @@ const MUSTERI_ALANLAR = ["no", "date", "customer", "odeme", "fiyatKademe", "stat
 // (1) portal siparişi DBS indirimini HİÇ almaz, (2) sipariş iç ekranda ilk kez düzenlendiğinde
 // tutar sessizce %3 düşer, (3) aynı alıcı kanala göre farklı fatura alır. Bu yüzden burada damgalanır.
 const DBS_ORAN_VARSAYILAN = 3;
+// Danışman iskonto oranı damgası (istemci tdIskontoAyar aynası — denetim 12.08.2026):
+// sunucuda oluşturulan siparişler de oranı KAYIT ANINDA kilitler; meta sonradan değişse
+// geçmiş prim kaymaz. 0 geçerli değerdir ('||' ile varsayılana DÜŞMEZ).
+function tdIskFN(DB) {
+  const v = DB && DB.meta ? DB.meta.tdIskonto : null;
+  return (v == null || v === "") ? 6 : (+v || 0);
+}
 function dbsOranHesapla(DB, odemeTipi) {
   if (String(odemeTipi || "") !== "dbs") return 0;
   const v = DB && DB.meta ? DB.meta.dbsOran : null;
@@ -2722,7 +2729,7 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         plasiyerId: (bayiKaydi && bayiKaydi.plasiyerId) || "",
         bayiPlasiyerId: (bayiKaydi && bayiKaydi.plasiyerId) || "",
         status: "beklemede", lines, total: toplam,
-        dbsOran: dbsOranSip, imeceAy: 0, imeceOran: 0, imeceFark: 0,   // oranlar sipariş anında damgalanır (geçmiş kaymasın)
+        dbsOran: dbsOranSip, imeceAy: 0, imeceOran: 0, imeceFark: 0, tdIsk: tdIskFN(DB),   // oranlar sipariş anında damgalanır (geçmiş kaymasın)
         aliciMusteri, aliciMusteriId,   // siparişin gittiği bayi müşterisi (teslim/izleme hedefi); boşsa bayi kendisi için
         customerId: "", customer: "", firma: "", odeme: "", kargo: "", nakliye: 0,
         not: "", alan: "Bayi Portalı", kaynak: "bayi-portal",   // not BOŞ: iç listede "Not Var" clutter'ı yerine BAYİDEN etiketi çıkar (#9)
@@ -2907,7 +2914,7 @@ function yemPortalSiparis({customerId, customer, teslimTarihi, lines, alan, kayn
     // "mevcut kayıt" sanıp atlar. Damgasız kalsaydı fabrika nakliyeyi girdiğinde KDV eklenmezdi.
     // İstemcideki NAKLIYE_KDV_ORAN ile AYNI olmalı (yem/index.html).
     nakliyeKdv: NAKLIYE_KDV_ORAN_FN,
-    dbsOran: +dbsOran || 0, imeceAy: 0, imeceOran: 0, imeceFark: 0,
+    dbsOran: +dbsOran || 0, imeceAy: 0, imeceOran: 0, imeceFark: 0, tdIsk: tdIskFN(DB),
     // YEM HATTI TEK KAPILI (firma kararı): ayrı üretim onayı YOK — statüyü muhasebe onayı ilerletir.
     // yemOnayGerek dolu bırakılırsa istemci eski iki kapılı akışa düşer ve sipariş 'beklemede'de kalır.
     not: "", kaynak, yemOnayGerek: false, hist: [],
@@ -3060,7 +3067,7 @@ exports.danisman = onRequest({region: "us-central1", cors: true, secrets: [TG_TO
           aliciBayi: false, customerId: musteriId, customer: musteri.name || "", firma: musteri.firma || "",
           danismanId, komisyoncuId: danismanId, plasiyerId: musteri.plasiyerId || "",
           fiyatKademe: "", status: "beklemede", lines, total: toplam,
-          dbsOran: dbsOranSip, imeceAy: 0, imeceOran: 0, imeceFark: 0,
+          dbsOran: dbsOranSip, imeceAy: 0, imeceOran: 0, imeceFark: 0, tdIsk: tdIskFN(DB),
           odeme: "", kargo: "", nakliye: 0,   // KARGO'yu danışman girmez — fabrika/iç personel ekler (o zaman komisyondan düşülür). Burada 0.
           not: "", alan: "Danışman Portalı", kaynak: "danisman-portal",
           priceListId: (DB.meta && DB.meta.activePriceListId) || "",

@@ -128,7 +128,10 @@ const tmrTotal=o=>{const m=manuelFatura(o);if(m!=null)return m;if(o&&o.total!=nu
 function effAyarVal(raw,ay){if(!ay||!ay.mode)return raw;if(ay.mode==='yok')return 0;if(ay.mode==='tutar')return +ay.tutar||0;return raw;}
 function orderKomisyon(o,kom){
   if(!o||!kom)return {tutar:0};
-  const isk=(D().meta&&D().meta.tdIskonto)||6;
+  // DAMGA ÖNCELİKLİ (denetim 12.08) — panel ordTdIsk aynası: o.tdIsk varsa damga,
+  // yoksa canlı ayar (0 girilebilir, '||' ile %6'ya düşmez).
+  const _tv=(D().meta&&D().meta.tdIskonto!=null&&D().meta.tdIskonto!=='')?(+D().meta.tdIskonto||0):6;
+  const isk=(o&&o.tdIsk!=null&&o.tdIsk!=='')?(+o.tdIsk||0):_tv;
   if(kom.type==='danisman'){
     let prim=0;
     if(o.aliciBayi){
