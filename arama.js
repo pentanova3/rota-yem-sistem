@@ -154,8 +154,13 @@ function bayiAlimOzet(bayiId,yil){
   const os=D().orders.filter(o=>o.aliciBayi&&satisMi(o)&&(ordBayi(o)||{}).id===bayiId&&satisTarihi(o).slice(0,4)===String(yil));
   let brut=0,fat=0,iskonto=0;const ceyrek=[0,0,0,0];
   os.forEach(o=>{
-    const pl=orderPLForPrim(o);let b=0;
-    (o.lines||[]).forEach(l=>{if(!l.code)return;b+=primTarifeFiyat(pl,o,l.code,'fabrika')*(+l.qty||0);});
+    // BRÜT: DAMGA ÖNCELİKLİ (denetim 12.08.2026) — panel bayiAlimData ve sunucu bayi ucuyla
+    // AYNI kural. Eski as-of fabrika hesabı İMECE'de kredi kartı tabanını görmüyordu (iskonto 0
+    // çıkıyordu) ve damgalı tarifeyi yok sayıyordu (panelden ±binlerce TL sapma). Damga yoksa
+    // (23.07 öncesi eski kayıt) eski as-of hesabı yedek olarak kalır.
+    let b=(+o.brutListe>0)?(+o.brutListe):0;
+    if(!(b>0)){const pl=orderPLForPrim(o);
+      (o.lines||[]).forEach(l=>{if(!l.code)return;b+=primTarifeFiyat(pl,o,l.code,'fabrika')*(+l.qty||0);});}
     const ft=tmrTotal(o);const iskHam=Math.max(0,b-ft);const isk=effAyarVal(iskHam,o.iskAyar);
     const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
     brut+=b;fat+=ft;iskonto+=isk;
@@ -786,7 +791,7 @@ function ansRehber(q){
       `<p class="ka-p">Bu arama, Rota portalındaki <b>açık modüllerin</b> site içi Google’ıdır. Muhasebe &amp; finans (kasa, banka, tahsilat, maaş) <b>kapalıdır</b>.</p>`+
       `<div class="ka-sub">Modüller</div>`+table([{t:'Modül'},{t:'Ne işe yarar'},{t:''}],rows)+
       `<div class="ka-sub">Hızlı örnekler</div><ul class="ka-ul">${ornekler.map(o=>`<li><a href="#" onclick="kaAsk(${JSON.stringify(o)});return false">${esc(o)}</a></li>`).join('')}</ul>`+
-      (sssHits.slice(0,3).map(({s})=>card('SSS — '+esc(s.bas),`<p class="ka-p">${s.cevap}</p>`+(s.href?`<a class="ka-link" href="${s.href}">Aç →</a>`:'')).join('')));
+      (sssHits.slice(0,3).map(({s})=>card('SSS — '+esc(s.bas),`<p class="ka-p">${s.cevap}</p>`+(s.href?`<a class="ka-link" href="${s.href}">Aç →</a>`:''))).join('')));
   }
   return null;
 }

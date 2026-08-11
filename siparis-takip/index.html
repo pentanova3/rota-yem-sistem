@@ -1277,10 +1277,12 @@ function bayiAlimData(bayiId,yil){
     .sort((a,b)=>satisTarihi(a).localeCompare(satisTarihi(b)));
   const rows=[];let totB=0,totI=0,totF=0,totIham=0,totIlv=0,totDbs=0,totTon=0,ayarSay=0;const ceyrek=[0,0,0,0];
   os.forEach(o=>{
-    // BRÜT TEK KAYNAK: orderListTotal (bayide fabrika kademesi + liste bulunamayan satırda net yedeği).
-    // Ayrı bir döngü tutulursa liste fiyatı çözülemeyen satır burada 0, orada net sayılıp iç rapor ile
-    // bayi portalı ayrışır (Brüt sütunu Fatura'dan küçük çıkabiliyordu).
-    const brut=orderListTotal(o);
+    // BRÜT: DAMGA ÖNCELİKLİ (denetim 12.08.2026). Sunucu bayi portalı o.brutListe damgasını
+    // okuyor; iç rapor canlı orderListTotal ile hesaplıyordu → tarife arşivi değişince
+    // (geriye tarihli yayın, delTariff) iç rapor kayıyor, portal sabit kalıyor ve iki yüzey
+    // AYNI sipariş için farklı iskonto raporluyordu (8.784 ↔ 18.784 vakası). Kural artık
+    // functions bayi ucuyla birebir: damga varsa damga, yoksa canlı hesap (eski kayıtlar).
+    const brut=(+o.brutListe>0)?round2(+o.brutListe):orderListTotal(o);
     const fat=orderTotal(o);const iskHam=Math.max(0,brut-fat);const isk=effIsk(o,iskHam);   // ayar sonrası efektif iskonto
     const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
     if(o.iskAyar&&o.iskAyar.mode)ayarSay++;

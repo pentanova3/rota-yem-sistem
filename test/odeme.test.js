@@ -2557,6 +2557,83 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /callback_data: "moapprove:" \+ mod \+ ":" \+ d\.id \+ ":" \+ d\.imzaH/.test(FN2));
     }
 
+    // ══ 40 · PAKET A — RAPOR TUTARLILIĞI (iç rapor ↔ portal ↔ arama aynı rakam) ═════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const KOK = pth.join(__dirname, '..');
+      const ARAMA = fsx.readFileSync(pth.join(KOK, 'arama.js'), 'utf8');
+      const FN3 = fsx.readFileSync(pth.join(KOK, 'functions', 'index.js'), 'utf8');
+      // 40a — arama.js SÖZDİZİMİ: 06e00bb'de gelen kırık paren arama modülünü tarayıcıda
+      // HİÇ yükletmiyordu (site içi arama ölüydü). Modül olarak parse edilmeli.
+      {
+        const os2 = require('os');
+        const tmp = pth.join(os2.tmpdir(), 'arama-syntax-check.mjs');
+        fsx.writeFileSync(tmp, ARAMA);
+        const rr = require('child_process').spawnSync(process.execPath, ['--check', tmp], {encoding: 'utf8'});
+        dogru('arama.js ES modül olarak parse ediliyor (06e00bb kırığı dönmesin)', rr.status === 0,
+          rr.status === 0 ? '' : rr.stderr.split('\n')[0]);
+      }
+      // 40b — brüt DAMGA öncelikli: üç yüzey aynı kural
+      dogru('iç rapor (bayiAlimData) brütü damgadan okuyor',
+        /const brut=\(\+o\.brutListe>0\)\?round2\(\+o\.brutListe\):orderListTotal\(o\);/.test(H));
+      dogru('arama (bayiAlimOzet) brütü damgadan okuyor',
+        /let b=\(\+o\.brutListe>0\)\?\(\+o\.brutListe\):0;/.test(ARAMA));
+      dogru('sunucu (bayi ucu) brütü damgadan okuyor',
+        /out\.brut = Math\.round\(\(\+o\.brutListe > 0\) \? \(\+o\.brutListe\) : brut\);/.test(FN3));
+      // 40c — sunucu payload iskonto AYARINI uyguluyor (bayi ham görmesin)
+      dogru('sunucu iskAyar "yok" → 0', /if \(iAy && iAy\.mode === "yok"\) isk = 0;/.test(FN3));
+      dogru('sunucu iskAyar "tutar" → ayarlı tutar',
+        /else if \(iAy && iAy\.mode === "tutar"\) isk = Math\.max\(0, Math\.round\(\+iAy\.tutar \|\| 0\)\);/.test(FN3));
+      // KOŞTURMALI: sunucu iskonto kuralının kopyası — üç mod
+      {
+        const kural = (brut, total, iAy) => {
+          let isk = Math.max(0, Math.round(brut - (+total || 0)));
+          if (iAy && iAy.mode === 'yok') isk = 0;
+          else if (iAy && iAy.mode === 'tutar') isk = Math.max(0, Math.round(+iAy.tutar || 0));
+          return isk;
+        };
+        esit('ayarsız: ham iskonto', kural(90000, 81144, null), 8856);
+        esit('mode=yok: 0', kural(90000, 81144, {mode: 'yok'}), 0);
+        esit('mode=tutar: ayarlı (portal 8.856 yerine 3.000 görecek)', kural(90000, 81144, {mode: 'tutar', tutar: 3000}), 3000);
+        esit('negatif ayar 0 sayılır', kural(90000, 81144, {mode: 'tutar', tutar: -500}), 0);
+      }
+      // 40d — KOŞTURMALI: bayiAlimData brüt seçimi (damga varsa damga, yoksa canlı)
+      {
+        // bayiAlimData HTML'den sökülüp mock bağlamla koşturulur (motor listesinde yok).
+        const gv = (ad) => {
+          const i = H.indexOf('function ' + ad + '(');
+          let d = 0, b = false;
+          for (let k = i; k < H.length; k++) {
+            const c = H[k];
+            if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+          return '';
+        };
+        const oDamgali = {id: 'x1', aliciBayi: true, bayiId: 'b1', status: 'teslim',
+          teslimEdildiTarih: '2026-08-01', date: '2026-08-01', brutListe: 90000, total: 81216,
+          lines: [{code: 'DG-10', qty: 100, price: 812.16}]};
+        const ctx4 = {
+          DB: {orders: [oDamgali]},
+          satisMi: (o) => o.status === 'teslim',
+          satisTarihi: (o) => o.teslimEdildiTarih || o.date || '',
+          ordBayi: () => ({id: 'b1'}),
+          // CANLI hesap KASITLI SAPTIRILDI (60.000): damga okunuyorsa sonuç 90.000 çıkmalı.
+          orderListTotal: () => 60000,
+          orderTotal: (o) => +o.total,
+          round2: (n) => Math.round((+n || 0) * 100) / 100,
+          effIsk: (_o, raw) => raw, ilaveIskonto: () => 0, dbsIskonto: () => 0, orderTon: () => 0,
+          fmtN: (n) => String(n),
+        };
+        const BA = new Function(...Object.keys(ctx4), gv('bayiAlimData') + ';return bayiAlimData;')(...Object.values(ctx4));
+        const A2 = BA('b1', '2026');
+        esit('damgalı siparişte brüt = damga (canlı hesap 60.000 dese bile)', A2.totBrut, 90000);
+        esit('iskonto = damga − fatura', A2.totIsk, Math.round((90000 - 81216) * 100) / 100);
+        // damgasız eski kayıt canlı hesaba düşmeli
+        oDamgali.brutListe = 0;
+        const A3 = BA('b1', '2026');
+        esit('damgasız kayıtta canlı hesap yedeği', A3.totBrut, 60000);
+      }
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

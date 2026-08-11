@@ -2785,7 +2785,15 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
           brut += liste * (+l.qty || 0);
         });
         out.brut = Math.round((+o.brutListe > 0) ? (+o.brutListe) : brut);
-        out.iskonto = Math.max(0, Math.round(out.brut - (+o.total || 0)));
+        // İSKONTO AYARI (denetim 12.08.2026): iç sistem sipariş bazında iskonto verme/azaltma
+        // uygular (iskAyar) ve panel raporu + bayiye giden antetli PDF + CSV hepsi AYARLI tutarı
+        // gösterir. Portal ham (brüt−fatura) gösteriyordu → bayi portalda 8.856 ₺, resmi raporda
+        // 3.000 ₺ görüp itiraz ediyordu. effAyarVal kuralının sunucu kopyası:
+        let isk = Math.max(0, Math.round(out.brut - (+o.total || 0)));
+        const iAy = o.iskAyar;
+        if (iAy && iAy.mode === "yok") isk = 0;
+        else if (iAy && iAy.mode === "tutar") isk = Math.max(0, Math.round(+iAy.tutar || 0));
+        out.iskonto = isk;
         out.hat = "tmr";
         // SATIŞ KURALI damgası: bayinin gördüğü çeyreklik iskonto/tonaj iç raporla AYNI olsun.
         // Sipariş listesi tüm durumları göstermeye devam eder (takip), yalnız İSKONTO ekranı süzer.
