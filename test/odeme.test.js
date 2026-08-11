@@ -1934,7 +1934,10 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru(ad + ' (' + nm + ') satış kuralına bağlı', !!g && /satisMi|raporTarihi/.test(g));
       dogru(ad + ' ham o.date ile ay/yıl kırmıyor', !!g && !/o\.date\.slice\(0,\s*[47]\)/.test(g));
     });
-    dogru('danışman primi yalnız teslim edilenden', /\(o\.komisyoncuId\|\|o\.bayiId\|\|o\.danismanId\)&&satisMi\(o\)/.test(H));
+    dogru('danışman primi yalnız teslim edilenden (ordDanisman — damgasız kart dahil)',
+      /DB\.orders\.filter\(o=>satisMi\(o\)&&ordDanisman\(o\)\)/.test(H));
+    dogru('döküm ile aynı danışman çözümü',
+      /const e=ordDanisman\(o\);return e&&e\.id===komId&&satisMi\(o\)/.test(H));
     dogru('danışman detayı yalnız teslim edilenden', /e&&e\.id===komId&&satisMi\(o\)/.test(H));
     dogru('genel rapor yalnız teslim edilenden', /let orders=raporOrders\(\)\.filter\(satisMi\);/.test(H));
     dogru('İMECE vade farkı yalnız teslim edilenden', /satisMi\(o\)&&!o\.tarihsel&&imeceFark\(o\)>0/.test(H));
@@ -2066,6 +2069,16 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
 
       const AUG7 = Object.assign({}, TEMMUZ, {teslimEdildiTarih: '2026-08-07', priceListId: ''});
       esit('7 Ağustos → Aug6 liste 830', Math.round(FN.orderKomisyon(AUG7).det[0].liste), 830);
+    }
+
+    // ── HAKEDİŞ TABLOSU ≡ DÖKÜM (firma 11.08): aynı sipariş kümesi, aynı prim ─────────────
+    {
+      dogru('tablo filtresi damga şartı KALDIRILDI',
+        !/\(o\.komisyoncuId\|\|o\.bayiId\|\|o\.danismanId\)&&satisMi\(o\)/.test(H));
+      dogru('effPrim / ödeme dan override kullanıyor',
+        /orderKomisyon\(o,\s*dan\)/.test(H) || /orderKomisyon\(o,ordDanisman\(o\)\)/.test(H));
+      dogru('ayar ekranı dan override',
+        /orderKomisyon\(o,dan\)\.tutar/.test(H));
     }
 
     // ── PRİMİ SIFIR OLAN SATIR DÖKÜMDE GÖSTERİLMEZ (firma isteği 07.08) ─────────────────

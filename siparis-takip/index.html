@@ -711,7 +711,10 @@ function effAyarVal(raw,ay){
   if(ay.mode==='tutar')return +ay.tutar||0;
   return raw;
 }
-function effPrim(o){return effAyarVal((orderKomisyon(o).tutar)||0,o&&o.primAyar);}   // danışman net primi (ayar sonrası)
+function effPrim(o){
+  const dan=ordDanisman(o);
+  return effAyarVal((orderKomisyon(o,dan).tutar)||0,o&&o.primAyar);
+}   // danışman net primi (ayar sonrası; dan override — bayi damgasında 0 olmasın)
 function effIsk(o,rawIsk){return effAyarVal(rawIsk||0,o&&o.iskAyar);}                // bayi iskontosu (ayar sonrası)
 function ayarOzet(ay){if(!ay||!ay.mode)return '';return (ay.mode==='yok'?'Verilmedi':'Tutar: '+fmtTL(+ay.tutar||0))+' · '+esc(ay.by||'?')+' · '+(ay.ts?fmtDateShort(ay.ts):'')+(ay.sebep?(' · '+esc(ay.sebep)):'');}
 // Tüm sipariş bazlı ayarlamalar (yalnız site — dökümlerde gösterilmez): kim, hangi sipariş, ne kadar düşürüldü
@@ -720,7 +723,7 @@ function tumAyarlamalar(){
   // SATIŞ KURALI: ayarlama denetimi de prim/iskonto tablolarıyla aynı kümeden okunmalı, yoksa
   // "yapılan ayarlamalar" listesi tablolarla mutabık olmaz.
   (DB.orders||[]).filter(satisMi).forEach(function(o){
-    if(o.primAyar&&o.primAyar.mode){var dan=ordDanisman(o);var raw=(orderKomisyon(o).tutar)||0;var net=effAyarVal(raw,o.primAyar);list.push({tip:'Prim',kisi:dan?dan.name:'—',no:o.no,tarih:o.date,ham:raw,net:net,dusen:raw-net,ay:o.primAyar});}
+    if(o.primAyar&&o.primAyar.mode){var dan=ordDanisman(o);var raw=(orderKomisyon(o,dan).tutar)||0;var net=effAyarVal(raw,o.primAyar);list.push({tip:'Prim',kisi:dan?dan.name:'—',no:o.no,tarih:o.date,ham:raw,net:net,dusen:raw-net,ay:o.primAyar});}
     if(o.iskAyar&&o.iskAyar.mode){var bayi=ordBayi(o);var raw2=bayiIskHam(o);var net2=effAyarVal(raw2,o.iskAyar);list.push({tip:'İskonto',kisi:bayi?bayi.name:'—',no:o.no,tarih:o.date,ham:raw2,net:net2,dusen:raw2-net2,ay:o.iskAyar});}
   });
   return list.sort(function(a,b){return (b.tarih||'').localeCompare(a.tarih||'');});
@@ -3893,10 +3896,11 @@ function musteriIskontoKartHTML(){
 }
 function renderKomisyon(c,tb){
   if(!canSeePrice()){c.innerHTML='<div class="card tbl-empty" style="padding:50px">Komisyon bilgilerini görme yetkiniz yok.</div>';return}
-  // filter orders by date
-  // SATIŞ KURALI: komisyon YALNIZ teslim edilen siparişten doğar. (Eskiden burada durum kontrolü
-  // hiç yoktu — iptal ve teslim edilmemiş siparişler de prim/iskonto tablolarına giriyordu.)
-  let orders=DB.orders.filter(o=>(o.komisyoncuId||o.bayiId||o.danismanId)&&satisMi(o));
+  // SATIŞ KURALI: komisyon YALNIZ teslim edilen siparişten doğar.
+  // Danışman çözümü dökümle BİREBİR: ordDanisman (müşteri/bayi kartı fallback dahil).
+  // Eskiden (komisyoncuId||bayiId||danismanId) şartı damgasız ama kartı dolu siparişi TABLODAN düşürüp
+  // dökümde bırakıyordu → hak edilen ≠ döküm toplamı.
+  let orders=DB.orders.filter(o=>satisMi(o)&&ordDanisman(o));
   if(komRepFrom)orders=orders.filter(o=>satisTarihi(o)>=komRepFrom);
   if(komRepTo)orders=orders.filter(o=>satisTarihi(o)<=komRepTo);
   // Danışman primi: dönem filtresine göre toplanır (ikili siparişte de sayılır)
@@ -3969,7 +3973,7 @@ function komDetayData(komId,from,to){
   if(from)orders=orders.filter(o=>satisTarihi(o)>=from);
   if(to)orders=orders.filter(o=>satisTarihi(o)<=to);
   orders.sort((a,b)=>satisTarihi(a).localeCompare(satisTarihi(b)));
-  const rows=[];let totTutar=0,totPrim=0,totKargo=0,totTon=0,netHam=0,netEff=0,ayarSay=0;const aylik={};const ayarlar=[];
+  const rows=[];let totTutar=0,totPrim=0,totKargo=0,totTon=0,totCiro=0,netHam=0,netEff=0,ayarSay=0;const aylik={};const ayarlar=[];
   orders.forEach(o=>{
     const cust=custById(o.customerId);const adres=cust?(cust.city||''):'';
     const bayiAd=(ordBayi(o)||{}).name||'';
@@ -3989,19 +3993,19 @@ function komDetayData(komId,from,to){
       totTutar+=tutar;totPrim+=x.primEff;});
     // Hiç prim üretmeyen ama NAKLİYESİ olan sipariş: kargo tablodan düşmesin diye tek satır kalır.
     if(!_gor.length&&kargo>0){rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:false,urun:'—',miktar:0,liste:0,alis:0,satis:0,tutar:0,kargo,prim:0});}
-    totKargo+=kargo;totTon+=orderTon(o);netHam+=(r.tutar||0);netEff+=effNet;
+    totKargo+=kargo;totTon+=orderTon(o);totCiro+=orderTotal(o);netHam+=(r.tutar||0);netEff+=effNet;
     if(o.primAyar&&o.primAyar.mode){ayarSay++;ayarlar.push({no:o.no,tarih:satisTarihi(o),ham:r.tutar||0,net:effNet,ay:o.primAyar});}
     const ayKey=satisTarihi(o).slice(0,7);                      // YYYY-MM — fiilen teslim edilen ay
     if(ayKey){const a=aylik[ayKey]||(aylik[ayKey]={siparis:0,tonaj:0,prim:0});a.siparis++;a.tonaj+=orderTon(o);a.prim+=effNet;}  // net prim (ayar sonrası)
   });
-  const netPrim=netEff;   // ödeme bakiyesi ayar sonrası net üzerinden
+  const netPrim=netEff;   // ödeme bakiyesi ayar sonrası net üzerinden — hakediş tablosuyla BİREBİR
   // ödemeler (dönem filtresine göre)
   let odemeler=(DB.komisyonOdemeler||[]).filter(p=>p.komisyoncuId===komId);
   if(from)odemeler=odemeler.filter(p=>!p.odemeTarihi||p.odemeTarihi>=from);
   if(to)odemeler=odemeler.filter(p=>!p.odemeTarihi||p.odemeTarihi<=to);
   odemeler.sort((a,b)=>(a.odemeTarihi||'').localeCompare(b.odemeTarihi||''));
   const totOdenen=odemeler.reduce((s,p)=>s+(+p.odenenTutar||0),0);
-  return {kom,rows,aylik,totTutar,totPrim,totKargo,totTon,netPrim,netHam,ayarlar,ayarSay,odemeler,totOdenen,kalanBakiye:netPrim-totOdenen,from,to};
+  return {kom,rows,aylik,totTutar,totCiro,totPrim,totKargo,totTon,netPrim,netHam,ayarlar,ayarSay,odemeler,totOdenen,kalanBakiye:netPrim-totOdenen,from,to};
 }
 function komDetayCSV(komId){
   const d=komDetayData(komId,komRepFrom,komRepTo);
@@ -4073,7 +4077,7 @@ function openKomDetay(komId){
       ${d.odemeler.length===0?'<p class="not">Bu dönemde ödeme kaydı bulunmuyor — hakedişin tamamı bakiyededir.</p>':''}</div>`;
     o={tip:'Teknik Danışman Prim Dökümü',ad:d.kom.name,altad:'Teknik Danışman'+(d.kom.city?' · '+d.kom.city:''),
       kunye:[{k:'Dönem',v:donem},{k:'Uygulanan iskonto',v:'%'+tdIsk},{k:'Kalem',v:d.rows.length}],
-      ozet:[{k:'Teslim Edilen Tonaj',v:fmtTon(d.totTon)+' t'},{k:'Teslim Edilen Ciro',v:fmtTL(d.totTutar)},{k:'Toplam Hakediş',v:fmtTL(d.netPrim),n:'kargo düşülmüş'},
+      ozet:[{k:'Teslim Edilen Tonaj',v:fmtTon(d.totTon)+' t'},{k:'Teslim Edilen Ciro',v:fmtTL(d.totCiro!=null?d.totCiro:d.totTutar)},{k:'Toplam Hakediş',v:fmtTL(d.netPrim),n:'kargo düşülmüş'},
         {k:'Ödenen',v:fmtTL(d.totOdenen),n:d.odemeler.length+' ödeme'},
         {k:'Kalan Bakiye',v:fmtTL(d.kalanBakiye),vurgu:true}],
       govde,araclar,imzaSol,imzaSag,baslikEtiket:d.kom.name+' · Prim Dökümü'};
@@ -4116,7 +4120,7 @@ function komAyarOrders(){
     var os=DB.orders.filter(function(o){var e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);});
     if(komRepFrom)os=os.filter(function(o){return satisTarihi(o)>=komRepFrom;});
     if(komRepTo)os=os.filter(function(o){return satisTarihi(o)<=komRepTo;});
-    return os.map(function(o){var raw=orderKomisyon(o).tutar||0;return {o:o,kind:'prim',raw:raw,eff:effAyarVal(raw,o.primAyar),ay:o.primAyar};})
+    return os.map(function(o){var dan=ordDanisman(o);var raw=orderKomisyon(o,dan).tutar||0;return {o:o,kind:'prim',raw:raw,eff:effAyarVal(raw,o.primAyar),ay:o.primAyar};})
       .sort(function(a,b){return satisTarihi(b.o).localeCompare(satisTarihi(a.o));});
   }
   var A=bayiAlimData(komId,window.bayiRepYil);
@@ -4161,7 +4165,7 @@ function setAyMode(v){window.__ayMode=v;document.querySelectorAll('#ayModeBtns b
 function openAyarDialog(orderId,kind){
   var o=DB.orders.find(function(x){return x.id===orderId;});if(!o)return;
   var ay=(kind==='prim'?o.primAyar:o.iskAyar)||{};
-  var raw=kind==='prim'?(orderKomisyon(o).tutar||0):bayiIskHam(o);
+  var raw=kind==='prim'?(orderKomisyon(o,ordDanisman(o)).tutar||0):bayiIskHam(o);
   var mode=ay.mode||'tam';
   var kindLbl=kind==='prim'?'Prim':'İskonto';
   window.__ayMode=mode;
@@ -4179,7 +4183,7 @@ function openAyarDialog(orderId,kind){
 function saveAyar(orderId,kind){
   var o=DB.orders.find(function(x){return x.id===orderId;});if(!o)return;
   var mode=window.__ayMode||'tam';
-  var raw=kind==='prim'?(orderKomisyon(o).tutar||0):bayiIskHam(o);
+  var raw=kind==='prim'?(orderKomisyon(o,ordDanisman(o)).tutar||0):bayiIskHam(o);
   var key=kind==='prim'?'primAyar':'iskAyar',kindLbl=kind==='prim'?'Prim':'İskonto';
   var tutar=0;
   if(mode==='tutar'){tutar=+document.getElementById('ayTutar').value||0;if(tutar<0){toast('Tutar negatif olamaz');return}if(tutar>raw+0.5){toast('Tutar ham tutardan büyük olamaz');return}}
@@ -4203,7 +4207,7 @@ function openKomOdeme(komId){
   // total earned (all time)
   // SATIŞ KURALI: hakediş yalnız TESLİM edilen siparişten doğar (İskonto&Komisyon tablosuyla BİREBİR).
   // Kural yoksa ödeme ekranı tablodan farklı rakam gösterir → fazla ödeme riski.
-  const earned=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);}).reduce((s,o)=>s+effAyarVal(orderKomisyon(o).tutar,o.primAyar),0);
+  const earned=DB.orders.filter(o=>{const e=ordDanisman(o);return e&&e.id===komId&&satisMi(o);}).reduce((s,o)=>s+effAyarVal(orderKomisyon(o,ordDanisman(o)).tutar,o.primAyar),0);
   const paidT=ods.reduce((s,p)=>s+(+p.odenenTutar||0),0);
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><h2>${esc(kom.name)} · Hakediş & Ödeme</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
