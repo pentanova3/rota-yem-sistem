@@ -1402,7 +1402,7 @@ function tmrTonajHesap(DB, now) {
     let coded = false;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
-      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      const t = (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000;
       prodTot[l.code] = (prodTot[l.code] || 0) + t;
       toplam += t;
       coded = true;
@@ -1423,7 +1423,7 @@ function tmrTonajHesap(DB, now) {
     let coded = false;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
-      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      const t = (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000;
       bekTon += t;
       prodTotAy[l.code] = (prodTotAy[l.code] || 0) + t;
       coded = true;
@@ -1512,7 +1512,7 @@ function haftaOzetHesap(DB, now) {
       let coded = false, oTon = 0;
       (o.lines || []).forEach((l) => {
         if (!l || !l.code) return;
-        const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+        const t = (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000;
         prodTon[l.code] = (prodTon[l.code] || 0) + t;
         ton += t; oTon += t; coded = true;
       });
@@ -1615,7 +1615,7 @@ function ayTonajOf(DB, ym) {
     let ton = 0;
     (DB.orders || []).forEach((o) => {
       if (!satisMiFN(o) || satisTarihiFN(o).slice(0, 7) !== ym) return;
-      (o.lines || []).forEach((l) => { if (l && l.code) ton += (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000; });
+      (o.lines || []).forEach((l) => { if (l && l.code) ton += (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000; });
     });
     return ton;
   }
@@ -1656,7 +1656,7 @@ function danismanTonajOf(DB, ym) {
     const did = danismanIdFN(DB, o);
     if (!did) return;                                     // danışmansız sipariş sayılmaz
     let t = 0;
-    (Array.isArray(o.lines) ? o.lines : []).forEach((l) => { if (l && l.code) t += (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000; });
+    (Array.isArray(o.lines) ? o.lines : []).forEach((l) => { if (l && l.code) t += (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000; });
     if (t > 0) out[did] = (out[did] || 0) + t;
   });
   return out;
@@ -1678,7 +1678,7 @@ function aylikRaporHesap(DB, ym) {
     let coded = false, oTon = 0;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
-      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      const t = (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000;
       prodTon[l.code] = (prodTon[l.code] || 0) + t;
       ton += t; oTon += t; coded = true;
     });
@@ -1700,7 +1700,7 @@ function aylikRaporHesap(DB, ym) {
     let coded = false;
     (o.lines || []).forEach((l) => {
       if (!l || !l.code) return;
-      const t = (+l.qty || 0) * prodKgOf(DB.products, l.code) / 1000;
+      const t = (+l.qty || 0) * ((+l.kg > 0) ? (+l.kg) : prodKgOf(DB.products, l.code)) / 1000;
       bekTon += t;
       prodTonAy[l.code] = (prodTonAy[l.code] || 0) + t;
       coded = true;

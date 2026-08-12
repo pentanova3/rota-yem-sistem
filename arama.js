@@ -123,7 +123,7 @@ function ordDanisman(o){
   }
   return id?komById(id):null;
 }
-const tmrTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=tonOf(l.code,l.qty);});return t;};
+const tmrTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=((+l.kg>0)?(+l.qty||0)*(+l.kg)/1000:tonOf(l.code,l.qty));});return t;};   // kg damgası öncelikli (panel orderTon aynası)
 const tmrTotal=o=>{const m=manuelFatura(o);if(m!=null)return m;if(o&&o.total!=null&&o.total!=='')return +o.total||0;return orderTotal(o);};
 function effAyarVal(raw,ay){if(!ay||!ay.mode)return raw;if(ay.mode==='yok')return 0;if(ay.mode==='tutar')return +ay.tutar||0;return raw;}
 function orderKomisyon(o,kom){
@@ -136,8 +136,15 @@ function orderKomisyon(o,kom){
     let prim=0;
     if(o.aliciBayi){
       const bayi=ordBayi(o);if(!bayi)return {tutar:0};
-      const bOzel=(o.ozelIskonto!=null&&o.ozelIskonto!=='')?+o.ozelIskonto:(+bayi.ozelIskonto||0);
-      const bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);const pl=orderPLForPrim(o);
+      // Panel bayiIskOranlar AYNASI (denetim 12.08): damga varsa TEK BAŞINA kullanılır —
+      // eski davranış damgalı rate ile bugünkü kart özelini KARIŞTIRIYOR, panelden farklı
+      // prim raporluyordu (çift düşüm).
+      let bOzel,bRate;
+      if(o.ozelIskonto!=null&&o.ozelIskonto!==''){bOzel=+o.ozelIskonto||0;bRate=(o.komisyonRate!=null&&o.komisyonRate!=='')?+o.komisyonRate:(+bayi.rate||0);}
+      else if(o.komisyonRate!=null&&o.komisyonRate!==''){bOzel=0;bRate=+o.komisyonRate;}
+      else if((+bayi.ozelIskonto||0)>0){bOzel=+bayi.ozelIskonto;bRate=+bayi.rate||0;}
+      else{bOzel=0;bRate=+bayi.rate||0;}
+      const pl=orderPLForPrim(o);
       const bCarpan=(1-bOzel/100)*(1-bRate/100);
       (o.lines||[]).forEach(l=>{const fab=primTarifeFiyat(pl,o,l.code,'fabrika');const torb=primTarifeFiyat(pl,o,l.code,'danismanListe');if(fab>0&&torb>0)prim+=(fab*bCarpan-torb*(1-isk/100))*(+l.qty||0);});
       return {tutar:prim,viaBayi:true};

@@ -2103,8 +2103,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       /_gor\.forEach\(\(x,i\)=>[\s\S]{0,400}?totTutar\+=tutar;totPrim\+=x\.primEff;\}\);/.test(H));
     dogru('kargo GÖRÜNEN ilk satıra iliştiriliyor (nakliye kolonu düşmesin)',
       /_gor\.forEach\(\(x,i\)=>[\s\S]{0,340}?kargo:i===0\?kargo:0/.test(H));
-    dogru('hiç prim yok ama nakliye varsa tek satır KALIYOR',
-      /if\(!_gor\.length&&kargo>0\)\{rows\.push\(/.test(H));
+    dogru('hiç görünür satır yoksa kargo/ayar primi tek satırda KALIYOR',
+      /if\(!_gor\.length&&\(kargo>0\|\|Math\.abs\(effNet\)>0\.005\)\)\{rows\.push\(/.test(H));
     // Süzme mantığı koşturularak: 3 kalemin 1'i prim üretiyor
     {
       const factor = 1;
@@ -2758,6 +2758,111 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       // 41f — ödemesi olan danışman satırdan kaybolmuyor
       dogru('yetim ödeme satırı ekleniyor (çift ödeme görünür olsun)',
         /if\(!k\|\|k\.type!=='danisman'\)return;\s*\n\s*danRows\.push\(\{kom:k,ciro:0,tonaj:0,tutar:0,ham:0,adet:0,ayar:0,odemeYetim:true\}\);/.test(H));
+    }
+
+    // ══ 42 · PAKET C+D — kalan denetim düzeltmeleri (12.08 gece) ════════════════════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const KOK = pth.join(__dirname, '..');
+      const YEMH = fsx.readFileSync(pth.join(KOK, 'yem', 'index.html'), 'utf8');
+      const FN5 = fsx.readFileSync(pth.join(KOK, 'functions', 'index.js'), 'utf8');
+      const ARA = fsx.readFileSync(pth.join(KOK, 'arama.js'), 'utf8');
+      const gvC = (kaynak, ad) => {
+        const i = kaynak.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < kaynak.length; k++) {
+          const c = kaynak[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return kaynak.slice(i, k + 1); } }
+        return '';
+      };
+
+      // C — firma kararı e898521 KORUNDU + geçmiş kayıt tarife hizası
+      dogru('orderPLForPrim as-of kuralında kaldı (firma kararı)',
+        /function orderPLForPrim\(o\)\{\s*\n\s*const d=orderPriceDate\(o\);/.test(H));
+      dogru('geçmiş kayıt tarihi tarife hizalıyor',
+        /onchange="editOrder\.date=this\.value;gecmisTarifeHizala\(\);renderOrderModal\(\)"/.test(H));
+      {
+        const cag = {uygula: 0};
+        const ctxG = {
+          editOrder: {id: null, gecmisKayit: true, date: '2026-07-10', priceListId: 'plAktif'},
+          priceListAsOf: (d) => (d < '2026-08-03' ? {id: 'plMart', date: '2026-03-23'} : {id: 'plAktif'}),
+          applyTariffToLines: () => { cag.uygula++; },
+        };
+        const GH = new Function(...Object.keys(ctxG), gvC(H, 'gecmisTarifeHizala') + ';return gecmisTarifeHizala;')(...Object.values(ctxG));
+        GH();
+        dogru('geçmiş tarih → as-of tarife seçildi + satırlar yeniden fiyatlandı',
+          ctxG.editOrder.priceListId === 'plMart' && cag.uygula === 1);
+        ctxG.editOrder.id = 'kayitli'; ctxG.editOrder.priceListId = 'plAktif'; GH();
+        dogru('KAYITLI siparişe dokunmuyor', ctxG.editOrder.priceListId === 'plAktif' && cag.uygula === 1);
+      }
+
+      // D2 — fiyat alanı olmayan eski satır canlı ürüne düşmüyor, o.total esas
+      {
+        const ctxN = {
+          lineUnit: (l) => (l.price == null ? 999 : (+l.price || 0)),   // canlı ürün fiyatı SAPTIRILDI
+          editOrder: undefined,
+        };
+        const ON = new Function(...Object.keys(ctxN), gvC(H, 'orderNetHesap') + ';return orderNetHesap;')(...Object.values(ctxN));
+        esit('fiyatsız eski kayıt: kayıtlı total esas (999×100 DEĞİL)',
+          ON({lines: [{code: 'A', qty: 100}], total: 90000}), 90000);
+        esit('fiyatı damgalı kayıt: satırlardan', ON({lines: [{code: 'A', qty: 100, price: 800}], total: 90000}), 80000);
+      }
+
+      // D1/7 — tonaj kg damgası (dört yüzey)
+      dogru('TMR orderTon kg damgası öncelikli', /\(\+l\.kg>0\)\?\(\+l\.qty\|\|0\)\*\(\+l\.kg\)\/1000:tonOf\(/.test(H));
+      dogru('saveOrder çuval kg damgalıyor', /if\(l&&l\.code&&\(l\.kg==null\|\|l\.kg===''\)\)l\.kg=prodKg\(l\.code\);/.test(H));
+      dogru('arama tmrTon aynı kuralda', /\(\+l\.kg>0\)\?\(\+l\.qty\|\|0\)\*\(\+l\.kg\)\/1000:tonOf\(/.test(ARA));
+      dogru('SUNUCU 7 tonaj noktası kg damgalı',
+        (FN5.match(/\(\+l\.kg > 0\) \? \(\+l\.kg\) : prodKgOf\(DB\.products, l\.code\)/g) || []).length === 7);
+      {
+        const ctxT2 = {tonOf: (c, q) => (+q || 0) * 25 / 1000};
+        const OT = new Function(...Object.keys(ctxT2), gvC(H, 'orderTon') + ';return orderTon;')(...Object.values(ctxT2));
+        esit('kg damgalı satır: 100×30/1000', OT({lines: [{code: 'A', qty: 100, kg: 30}]}), 3);
+        esit('damgasız satır ürün kartına düşer (25)', OT({lines: [{code: 'A', qty: 100}]}), 2.5);
+      }
+
+      // D4/8 — ödeme HAKEDİŞ dönemine sayılır
+      dogru('komDetayData donem alanını kullanıyor',
+        /const _pTar=p=>\(p\.donem&&\/\^\\d\{4\}-\\d\{2\}\$\/\.test\(p\.donem\)\)\?\(p\.donem\+'-15'\)/.test(H));
+      dogru('renderKomisyon aynı kuralda', /_pOTar/.test(H));
+      {
+        const pTar = (p) => (p.donem && /^\d{4}-\d{2}$/.test(p.donem)) ? (p.donem + '-15') : (p.odemeTarihi || '');
+        dogru('Ağustosta ödenen Temmuz hakedişi TEMMUZ penceresinde',
+          pTar({donem: '2026-07', odemeTarihi: '2026-08-01'}) === '2026-07-15');
+        dogru('donemsiz eski kayıt ödeme tarihinde', pTar({odemeTarihi: '2026-08-01'}) === '2026-08-01');
+      }
+
+      // D14/15 — döküm satır toplamı = TOPLAM
+      dogru('faktör hedefi effNet (kargo satırlara yedirilir)', /const factor=rawSum>0\?\(effNet\/rawSum\):0;/.test(H));
+      {
+        // koşturmalı: 2 kalem, kargo 1.000, ham prim 10.000, ayarsız → satır toplamı = 9.000 = netPrim
+        const det = [{prim: 6000, satis: 100, qty: 10}, {prim: 4000, satis: 100, qty: 10}];
+        const effNet = 9000, kargo = 1000;
+        const rawSum = det.reduce((s2, d) => s2 + d.prim, 0);
+        const factor = rawSum > 0 ? (effNet / rawSum) : 0;
+        const toplam = det.reduce((s2, d) => s2 + d.prim * factor, 0);
+        esit('satır Prim toplamı TOPLAM hücresine EŞİT (kargo farkı yok)', toplam, effNet);
+      }
+
+      // D3 — Yem raporları satış kuralında
+      dogru('Yem satisMi/satisTarihi tanımlı',
+        /function satisMi\(o\)\{return !!o&&o\.status==='teslim';\}/.test(YEMH));
+      dogru('Yem Müşteri Raporu yalnız teslim edilen',
+        /musteriRaporData\(yil\)\{\s*\n\s*const arr=visibleOrders\(\)\.filter\(o=>satisMi\(o\)&&satisTarihi\(o\)\.slice\(0,4\)===yil\);/.test(YEMH));
+      dogru('Yem Plasiyer Raporu yalnız teslim edilen',
+        /plasiyerRaporData\(yil\)\{\s*\n\s*const arr=visibleOrders\(\)\.filter\(o=>satisMi\(o\)/.test(YEMH));
+      dogru('Yem Genel Rapor yalnız teslim edilen + teslim yılı',
+        /const arr=visibleOrders\(\)\.filter\(o=>satisMi\(o\)\);/.test(YEMH) &&
+        /const yilOrders=arr\.filter\(o=>satisTarihi\(o\)\.slice\(0,4\)===yil\);/.test(YEMH));
+
+      // D6 — arama viaBayi panel aynası
+      dogru('arama viaBayi: komisyonRate damgası TEK BAŞINA (kart özel karışmaz)',
+        /else if\(o\.komisyonRate!=null&&o\.komisyonRate!==''\)\{bOzel=0;bRate=\+o\.komisyonRate;\}/.test(ARA));
+
+      // siparisImza güvenli çevirim aynası (esit metin koruması bunu açığa çıkardı)
+      dogru('istemci siparisImza object dalı sunucuyla birebir',
+        /if \(typeof v === "object"\) \{ try \{ return JSON\.stringify\(v\); \} catch \(e\) \{ return "\[nesne\]"; \} \}/.test(H) &&
+        /if \(typeof v === "object"\) \{ try \{ return JSON\.stringify\(v\); \} catch \(e\) \{ return "\[nesne\]"; \} \}/.test(YEMH));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────

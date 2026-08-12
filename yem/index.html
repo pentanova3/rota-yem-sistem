@@ -1109,10 +1109,16 @@ function odemeDamgala(o){
   // olur ve DBS 0 damgalanır → çapraz siparişte %3 fazla tahsilat. Bu yüzden kayıt varlığı şart.
   const kayitVar=!!(o.id&&e&&Object.keys(e).length>0);
   const portaldenAtandi=!!(kayitVar&&(e.customerId===''||e.customerId==null)&&o.customerId);
+  // KAYIT YOKSA AÇILIŞ GÖRÜNTÜSÜ (denetim 12.08.2026): başka cihazda silinmiş siparişte
+  // alıcı gerçekten değiştirildiyse damga YENİDEN atılmalı — taban, TMR'deki gibi kayıt
+  // yoksa modal açılış anlık görüntüsüdür. Çapraz sipariş (_acilis'siz) etkilenmez:
+  // orada damgasiz dalı zaten yeniden damgalar.
+  const tabanVar=kayitVar||!!(o._acilis&&Object.prototype.hasOwnProperty.call(o._acilis,'customerId'));
+  const tb=kayitVar?e:(o._acilis||{});
   // DBS oranı: alıcı değişimi VE vade değişimi tetikler — vade eklenince DBS kalkmalı, kaldırılınca geri gelmeli.
   // (Vade değişimi dahil edilmezse kayıtlı siparişte hem DBS hem vade farkı uygulanır.)
-  const aliciDegisti=kayitVar&&e.customerId!==o.customerId;
-  const vadeDegisti=(+o.imeceAy||0)!==(+e.imeceAy||0);
+  const aliciDegisti=tabanVar&&tb.customerId!==o.customerId;
+  const vadeDegisti=(+o.imeceAy||0)!==(+tb.imeceAy||0);
   // DB'de kaydı OLMAYAN ve henüz damgalanmamış sipariş (çapraz sipariş: id atanmış ama push edilmemiş)
   // YENİ sayılır — aksi halde "değişmemiş kayıt" sanılıp DBS 0 kalır (%3 fazla tahsilat).
   const damgasiz=!kayitVar&&(o.dbsOran==null||o.dbsOran==='');
@@ -1612,7 +1618,12 @@ function openOrder(id){
     editOrder=JSON.parse(JSON.stringify(_o));
     // AÇILIŞ ANLIK GÖRÜNTÜSÜ (TMR ile EŞ): sipariş modal açıkken başka cihazda silinirse kapı,
     // geri eklenen KLONU 'eski' sanıp kendi kendini karşılaştırır ve AŞILIR. Taban burada saklanır.
-    editOrder._acilis={status:_o.status,imza:(typeof siparisImza==='function'?siparisImza(_o):'')};
+    // Alıcı/vade/DBS açılış görüntüsü (denetim 12.08.2026): kayıt başka cihazda silinirse
+    // odemeDamgala tabansız kalıyor, alıcı GERÇEKTEN değiştirilse bile "değişmedi" sayılıp
+    // eski alıcının DBS damgası yeni alıcıya taşınıyordu (%3 hak edilmemiş indirim / fazla
+    // fatura). TMR'deki _acilis deseninin aynısı.
+    editOrder._acilis={status:_o.status,imza:(typeof siparisImza==='function'?siparisImza(_o):''),
+      customerId:_o.customerId,imeceAy:+_o.imeceAy||0,dbsOran:_o.dbsOran};
   }else{
     if(!canEdit()){toast('Yetkiniz yok');return}
     editOrder={id:null,no:null,date:todayISO(),createdAt:'',teslimTarihi:'',alan:'',customerId:'',customer:'',
@@ -2298,6 +2309,9 @@ function siparisImza(o) {
     const v = o[k];
     if (v == null || v === "") return "";
     if (typeof v === "boolean") return v ? "1" : "0";
+    // GÜVENLİ ÇEVİRİM: blob istemciden gelir; {toString:null} gibi bir nesne String(v)'de TypeError atar
+    // ve tüm tespit bloğunu düşürürdü (sevk kilidi + onay düşürme baypası).
+    if (typeof v === "object") { try { return JSON.stringify(v); } catch (e) { return "[nesne]"; } }
     return String(v);
   }).join("~");
   return F + "~~" + L;
@@ -2955,8 +2969,13 @@ function renderReports(c,tb){
 }
 
 // ===== MÜŞTERİ RAPORU: kim, ne kadar ton, ne kazandık, ne kadar iskonto/nakliye/hammaliye =====
+// ══ SATIŞ KURALI (firma kararı 07.08 — TMR ile AYNI): teslim edilmeyen sipariş satış
+// değildir; raporlar yalnız teslim edileni, fiilen teslim edildiği yıl ile sayar.
+// (Denetim 12.08: Yem raporları kuralın DIŞINDA kalmıştı — bekleyenler ciro sayılıyordu.)
+function satisMi(o){return !!o&&o.status==='teslim';}
+function satisTarihi(o){return satisMi(o)?String((o.teslimEdildiTarih||o.teslimTarihi||o.date)||''):'';}
 function musteriRaporData(yil){
-  const arr=visibleOrders().filter(o=>o.status!=='iptal'&&(o.date||'').slice(0,4)===yil);
+  const arr=visibleOrders().filter(o=>satisMi(o)&&satisTarihi(o).slice(0,4)===yil);
   const M={};
   arr.forEach(o=>{
     const id=o.customerId||('_'+o.customer);
@@ -3072,7 +3091,7 @@ function musteriDetay(id,ad,yil){
 
 // ===== PLASİYER RAPORU (yönetici): her plasiyer ne kadar sattı — ton, tutar, müşteri =====
 function plasiyerRaporData(yil){
-  const arr=visibleOrders().filter(o=>o.status!=='iptal'&&(o.date||'').slice(0,4)===yil);
+  const arr=visibleOrders().filter(o=>satisMi(o)&&satisTarihi(o).slice(0,4)===yil);   // satış kuralı
   const P={};
   arr.forEach(o=>{
     const pl=ordPlasiyer(o);const id=pl?pl.id:'_merkez';
@@ -3167,10 +3186,10 @@ function plasiyerDetay(id,yil){
 }
 
 function renderGenelRapor(c){
-  const arr=visibleOrders().filter(o=>o.status!=='iptal');
+  const arr=visibleOrders().filter(o=>satisMi(o));   // satış kuralı: yalnız teslim edilen
   const yillar=orderYears();
   const yil=repYil||yillar[0]||String(new Date().getFullYear());
-  const yilOrders=arr.filter(o=>(o.date||'').slice(0,4)===yil);
+  const yilOrders=arr.filter(o=>satisTarihi(o).slice(0,4)===yil);
   const showPrice=canSeePrice();
   // aylık kırılım
   const aylik=Array.from({length:12},(_,i)=>{

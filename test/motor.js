@@ -61,6 +61,14 @@ function dogru(ad, kosul, not) {
   else { _hata++; _hatalar.push(ad + (not ? ' — ' + not : '')); console.log('  \x1b[31m✗ ' + ad + '\x1b[0m' + (not ? '  ' + not : '')); }
 }
 function esit(ad, a, b, tol) {
+  // METİN KORUMASI (denetim 12.08): sayıya çevrilemeyen metin +x ile NaN olur, ||0 ile 0'a
+  // düşerdi ve esit('x','abc','def') SESSİZCE geçerdi — "ayna birebir" sınıfı korumalar boşa
+  // dönüyordu. Sayı olmayan argüman geldiğinde katı === karşılaştırmasına geçilir.
+  const metin = (x) => typeof x === 'string' && x.trim() !== '' && isNaN(+x);
+  if (metin(a) || metin(b)) {
+    dogru(ad, a === b, 'beklenen ' + JSON.stringify(b) + ' · gelen ' + JSON.stringify(a));
+    return;
+  }
   const t = tol == null ? 0.005 : tol;
   dogru(ad, Math.abs((+a || 0) - (+b || 0)) <= t, 'beklenen ' + TL(b) + ' · gelen ' + TL(a));
 }

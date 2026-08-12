@@ -859,7 +859,7 @@ function gecmisKayitKutuHTML(o){
       <span>Geçmiş sipariş girişi${o.id?' — kayıtlı':''}</span>
     </label>
     <div style="font-weight:600;margin-top:5px;line-height:1.5">${on
-      ? 'Telegram onay mesajı gönderilmez, müşteriye WhatsApp sorulmaz, onay zinciri çalışmaz. Sipariş tarihini ve son durumu doğrudan girin.'
+      ? 'Telegram onay mesajı gönderilmez, müşteriye WhatsApp sorulmaz, onay zinciri çalışmaz. Sipariş tarihini ve son durumu doğrudan girin.'+(dbsAliciAktif(o)?'<br><b style="color:#B45309">DBS uyarısı:</b> alıcı BUGÜN DBS\'li — %'+fmtN(dbsOranAyar())+' indirim bugünkü duruma göre damgalanacak. Sipariş tarihinde DBS yoksa tutarı <b>Manuel fatura</b> alanından elle girin.':'')
       : 'Olmuş bitmiş bir siparişi sisteme yüklüyorsanız işaretleyin — bildirimler ve onay zinciri devre dışı kalır.'}</div>
   </div>`;
 }
@@ -915,7 +915,11 @@ function orderPriceDate(o){
 }
 /** Damgalı tarife (sipariş formu seçimi) varsa onu; yoksa teslim/sipariş gününe göre arşiv; son çare güncel. */
 function orderPL(o){return priceListById(o&&o.priceListId)||priceListAsOf(orderPriceDate(o))||activePriceList()}
-/** Prim hakedişinde tarife YALNIZ yürürlük gününe göre — eski sipariş yeni güncel tarifeyle ezilmesin. */
+/** Prim hakedişinde tarife YALNIZ yürürlük gününe göre — eski sipariş yeni güncel tarifeyle ezilmesin.
+    (FİRMA KARARI e898521 — 11.08: prim Liste/Alış'ı TESLİM GÜNÜ tarifesine kilitli. Denetim
+    bulgu 13 damga önceliği önerdi; karar korunmuştur. Bulgunun zararlı yarısı — geçmiş tarihli
+    kayıtta satışın bugünün tarifesinden damgalanıp alışın as-of'tan okunması — saveOrder'daki
+    gecmisKayit tarife hizalamasıyla kapatıldı: satış da as-of tarifeden fiyatlanır.) */
 function orderPLForPrim(o){
   const d=orderPriceDate(o);
   if(d)return priceListAsOf(d)||activePriceList();
@@ -940,8 +944,12 @@ function round2(x){return Math.round((+x||0)*100)/100;}
 // Hesaplanan net (liste × iskonto sonrası birim × miktar). Manuel fatura tutarı bunu EZER.
 function orderNetHesap(o){
   if(o.lines&&o.lines.length){
-    let t=0,fiyatli=false;
-    o.lines.forEach(l=>{const u=lineUnit(l,o.fiyatKademe);if(u>0)fiyatli=true;t+=(+l.qty||0)*u;});
+    let t=0,fiyatli=false,fiyatsizVar=false;
+    o.lines.forEach(l=>{if(l&&l.code&&l.price==null)fiyatsizVar=true;const u=lineUnit(l,o.fiyatKademe);if(u>0)fiyatli=true;t+=(+l.qty||0)*u;});
+    // FİYAT ALANI OLMAYAN eski satır (l.price hiç yazılmamış) lineUnit'te CANLI ürün fiyatına
+    // düşer — ürün kartındaki zam geçmiş cironun hesabını kaydırırdı (denetim 12.08). Böyle
+    // satır varsa kayıtlı o.total esastır; açık formda değil (orada satırlar tazelenir).
+    if(fiyatsizVar&&+o.total>0&&!(typeof editOrder!=='undefined'&&editOrder&&o===editOrder))return +o.total;
     if(fiyatli)return t;                                    // fiyat girilmiş → 0'lık satır GERÇEKTEN 0'dır
     // AÇIK FORMDA bayat damgalı tutarı gösterme: satırlar sıfırlanmışken eski toplamı göstermek
     // hatayı GİZLİYORDU (ekranda 90.000 ₺, kayıtta 0 ₺'lık satır). Yalnız fiyatsız ESKİ kayıtta düş.
@@ -1413,7 +1421,10 @@ const AYLAR_TR=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağu
 window.AYLAR_TR=AYLAR_TR;
 const GUN_TR=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
 let panelWeekStart=null,panelChart=null,panelGrafik=null;   // panelGrafik: 'ciro' | 'tonaj' | 'onsip'
-function orderTon(o){return (o&&Array.isArray(o.lines)?o.lines:[]).reduce((s,l)=>s+(l&&l.code?tonOf(l.code,l.qty):0),0);}
+// KG DAMGASI ÖNCELİKLİ (denetim 12.08): çuval kg'si sipariş anında satıra yazılır (l.kg).
+// Ürün kartında ambalaj sonradan değiştirilirse (25 kg → 30 kg) GEÇMİŞ tonaj kaymaz.
+// Damgasız eski satırlar ürün kartına düşer (bilinen sınır).
+function orderTon(o){return (o&&Array.isArray(o.lines)?o.lines:[]).reduce((s,l)=>s+(l&&l.code?((+l.kg>0)?(+l.qty||0)*(+l.kg)/1000:tonOf(l.code,l.qty)):0),0);}
 function panelGrafikSec(k){panelGrafik=k;render();}
 function mondayOf(dateStr){const dt=new Date(dateStr);const dow=dt.getDay();const off=dow===0?-6:1-dow;const m=new Date(dt);m.setDate(dt.getDate()+off);m.setHours(0,0,0,0);return m}
 function isoOf(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -2001,7 +2012,7 @@ function renderOrderModal(){
       ${gecmisKayitKutuHTML(o)}
       <div class="fgrid c3">
         <div class="fld"><label>Sipariş Alındı</label>${gecmisKayitMi(o)
-          ? `<input type="date" value="${o.date||todayISO()}" max="${todayISO()}" onchange="editOrder.date=this.value;renderOrderModal()" title="Geçmiş sipariş girişi — siparişin GERÇEK tarihini girin"><div class="fld-hint warn">geçmiş giriş: gerçek sipariş tarihini girin</div>`
+          ? `<input type="date" value="${o.date||todayISO()}" max="${todayISO()}" onchange="editOrder.date=this.value;gecmisTarifeHizala();renderOrderModal()" title="Geçmiş sipariş girişi — siparişin GERÇEK tarihini girin"><div class="fld-hint warn">geçmiş giriş: gerçek sipariş tarihini girin</div>`
           : `<input value="${o.id?fmtDateTime(o.createdAt||o.date):'Kayıtta otomatik atanır'}" disabled title="Sistem tarafından otomatik">`}</div>
         <div class="fld"><label>Teslim Tarihi <span style="color:var(--red-500)">*</span></label><input type="date" value="${o.teslimTarihi||''}" min="${o.date||todayISO()}" ${icRO?'disabled':''} onchange="editOrder.teslimTarihi=this.value" style="${!o.teslimTarihi&&!ro?'border-color:var(--amber-500);background:#FFFBEB':''}"></div>
         <div class="fld"><label>Durum${isPlasiyer()?' <span style="font-weight:600;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0">— fabrika yönetir</span>':(durumYeniKilit(o)?' <span style="font-weight:600;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0">— sonradan ilerletilir</span>':'')}</label><select ${(ro||isPlasiyer())?'disabled':''} onchange="onChangeStatus(this.value)">${optDurum().filter(s=>!(s.v==='sevk'&&isSelfPickup(o)&&o.status!=='sevk')).map(s=>`<option value="${s.v}" ${o.status===s.v?'selected':''} ${(durumYeniKilit(o)&&s.v!=='beklemede'&&s.v!==o.status)?'disabled':''}>${esc(s.l)}</option>`).join('')}</select></div>
@@ -2743,6 +2754,7 @@ function saveOrder(){
   // + danışman iskonto oranı damgası (denetim 12.08): meta.tdIskonto sonradan değişse
   // bu siparişin primi KAYMAZ. Yalnız İLK kayıtta damgalanır — düzenlemede korunur.
   if(o.tdIsk==null)o.tdIsk=tdIskontoAyar();
+  (o.lines||[]).forEach(l=>{if(l&&l.code&&(l.kg==null||l.kg===''))l.kg=prodKg(l.code);});   // çuval kg damgası (tonaj geçmişi kaymasın)
   if(o.musteriIsk==null&&o.customerId&&!o.aliciBayi)o.musteriIsk=custIskontoKart(o);   // müşteri iskonto damgası (KARTTAN — custIskontoOf döngü yapar)
   if(o.bayiId){const bk=komById(o.bayiId);if(bk){if(o.komisyonRate==null)o.komisyonRate=+bk.rate||0;if(o.ozelIskonto==null)o.ozelIskonto=+bk.ozelIskonto||0;}else{if(o.komisyonRate==null)o.komisyonRate=0;if(o.ozelIskonto==null)o.ozelIskonto=0;}}else{o.komisyonRate=null;o.ozelIskonto=null;}o.komisyoncuId=o.danismanId||o.bayiId||'';if(o.komisyoncuId){const r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonTutar=0;o.komisyonType='';}
   if(o.id){const idx=DB.orders.findIndex(x=>x.id===o.id);
@@ -2974,10 +2986,21 @@ function waOrder(id){const o=DB.orders.find(x=>x.id===id);if(o){if(ensureOnayTok
 // doğrudan girilmeli (kutunun kendi açıklaması da bunu söylüyor). Bu istisna kalkarsa
 // Excel/geçmiş aktarımı iki adıma çıkar ve toplu yükleme kullanılamaz hale gelir.
 function durumYeniKilit(o){return !!(o&&!o.id&&!o.gecmisKayit);}
+// GEÇMİŞ KAYIT TARİFE HİZASI (denetim bulgu 13'ün zararlı yarısı — firma kararı e898521
+// korunarak): geçmiş tarihli girişte form varsayılanı GÜNCEL tarifeydi; satış bugünün
+// fiyatından damgalanıyor, prim alışı ise as-of eski tarifeden okunuyor ve prim şişiyordu.
+// Tarih girilince tarife otomatik O GÜNÜN arşivine çekilir ve satırlar ondan fiyatlanır —
+// satış ile alış aynı tabana oturur. Kullanıcı seçiciden yine elle değiştirebilir.
+function gecmisTarifeHizala(){
+  if(!editOrder||editOrder.id||!editOrder.gecmisKayit||!editOrder.date)return;
+  const asof=priceListAsOf(editOrder.date);
+  if(asof&&asof.id!==editOrder.priceListId){editOrder.priceListId=asof.id;applyTariffToLines();}
+}
 function gecmisKayitDegisti(on){
   editOrder.gecmisKayit=on;
   // Geçmiş modunda seçilen ileri durum, mod kapatılınca normal siparişe SIZMAMALI.
   if(!on&&!editOrder.id&&editOrder.status!=='beklemede')editOrder.status='beklemede';
+  if(on)gecmisTarifeHizala();
   renderOrderModal();
 }
 function onChangeStatus(v){
@@ -3168,6 +3191,9 @@ function siparisImza(o) {
     const v = o[k];
     if (v == null || v === "") return "";
     if (typeof v === "boolean") return v ? "1" : "0";
+    // GÜVENLİ ÇEVİRİM: blob istemciden gelir; {toString:null} gibi bir nesne String(v)'de TypeError atar
+    // ve tüm tespit bloğunu düşürürdü (sevk kilidi + onay düşürme baypası).
+    if (typeof v === "object") { try { return JSON.stringify(v); } catch (e) { return "[nesne]"; } }
     return String(v);
   }).join("~");
   return F + "~~" + L;
@@ -3948,8 +3974,10 @@ function renderKomisyon(c,tb){
   // Ödeme bakiyesi: prim dönemiyle AYNI pencerede. Dönem seçiliyken tüm zamanlar ödemeyi
   // düşmek sahte negatif bakiye üretir (dökümle çelişki → fazla/eksik ödeme riski).
   let _odemeList=(DB.komisyonOdemeler||[]);
-  if(komRepFrom)_odemeList=_odemeList.filter(function(p){return !p.odemeTarihi||p.odemeTarihi>=komRepFrom;});
-  if(komRepTo)_odemeList=_odemeList.filter(function(p){return !p.odemeTarihi||p.odemeTarihi<=komRepTo;});
+  // komDetayData ile AYNI dönem eşleme kuralı (donem=hakediş ayı öncelikli)
+  const _pOTar=function(p){return (p.donem&&/^\d{4}-\d{2}$/.test(p.donem))?(p.donem+'-15'):(p.odemeTarihi||'');};
+  if(komRepFrom)_odemeList=_odemeList.filter(function(p){var d=_pOTar(p);return !d||d>=komRepFrom;});
+  if(komRepTo)_odemeList=_odemeList.filter(function(p){var d=_pOTar(p);return !d||d<=komRepTo;});
   const paid={};_odemeList.forEach(p=>{paid[p.komisyoncuId]=(paid[p.komisyoncuId]||0)+(+p.odenenTutar||0)});
   const danRows=Object.values(agg).sort((a,b)=>b.tutar-a.tutar);
   // ÖDEME YETİM KALMASIN (denetim 12.08.2026): danışman ataması A→B değişince A'nın
@@ -4033,7 +4061,10 @@ function komDetayData(komId,from,to){
     const effNet=effAyarVal(r.tutar||0,o.primAyar);   // ayar sonrası net prim (kargo düşülmüş)
     // DÖKÜM: satır primini net'e ölçekle — böylece satırlar toplamı net'e eşittir ve ayarlama görünmez.
     const kargo=r.kargo||0;const rawSum=(r.det||[]).reduce((s,d)=>s+(d.prim||0),0);
-    const factor=rawSum>0?((effNet+kargo)/rawSum):0;
+    // FAKTÖR HEDEFİ = effNet (denetim 12.08): eski hedef effNet+kargo idi — Prim sütununu
+    // toplayan danışman TOPLAM'dan kargo kadar FAZLA buluyordu. Kargo artık satırlara
+    // orantılı yedirilir; Kargo sütunu bilgi amaçlı durur, satır toplamı = TOPLAM.
+    const factor=rawSum>0?(effNet/rawSum):0;
     // PRİMİ SIFIR OLAN SATIR GÖSTERİLMEZ (firma isteği 07.08): danışman listesi olmayan ürün
     // (CA SABUNU vb.) prim üretmez, dökümü kalabalıklaştırır. Toplamlar YALNIZ görünen satırlardan
     // birikir — aksi halde danışman kolonu toplayınca tablodaki TOPLAM ile tutmaz.
@@ -4043,8 +4074,9 @@ function komDetayData(komId,from,to){
     _gor.forEach((x,i)=>{const d=x.d;const tutar=d.satis*d.qty;
       rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:!!d.viaBayi,urun:d.code,miktar:d.qty,liste:d.liste,alis:d.alis,satis:d.satis,tutar,kargo:i===0?kargo:0,prim:x.primEff});
       totTutar+=tutar;totPrim+=x.primEff;});
-    // Hiç prim üretmeyen ama NAKLİYESİ olan sipariş: kargo tablodan düşmesin diye tek satır kalır.
-    if(!_gor.length&&kargo>0){rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:false,urun:'—',miktar:0,liste:0,alis:0,satis:0,tutar:0,kargo,prim:0});}
+    // Hiç görünür satır yok ama kargo VEYA ayarla verilmiş prim var (rawSum=0 + effNet>0):
+    // tek satır kalır — TOPLAM ile satırlar çelişmesin, ayar tutarı tablodan kaybolmasın.
+    if(!_gor.length&&(kargo>0||Math.abs(effNet)>0.005)){rows.push({tarih:satisTarihi(o),musteri:o.customer,adres,bayi:bayiAd,viaBayi:false,urun:'—',miktar:0,liste:0,alis:0,satis:0,tutar:0,kargo,prim:effNet});totPrim+=effNet;}
     totKargo+=kargo;totTon+=orderTon(o);totCiro+=orderTotal(o);netHam+=(r.tutar||0);netEff+=effNet;
     if(o.primAyar&&o.primAyar.mode){ayarSay++;ayarlar.push({no:o.no,tarih:satisTarihi(o),ham:r.tutar||0,net:effNet,ay:o.primAyar});}
     const ayKey=satisTarihi(o).slice(0,7);                      // YYYY-MM — fiilen teslim edilen ay
@@ -4053,8 +4085,13 @@ function komDetayData(komId,from,to){
   const netPrim=netEff;   // ödeme bakiyesi ayar sonrası net üzerinden — hakediş tablosuyla BİREBİR
   // ödemeler (dönem filtresine göre)
   let odemeler=(DB.komisyonOdemeler||[]).filter(p=>p.komisyoncuId===komId);
-  if(from)odemeler=odemeler.filter(p=>!p.odemeTarihi||p.odemeTarihi>=from);
-  if(to)odemeler=odemeler.filter(p=>!p.odemeTarihi||p.odemeTarihi<=to);
+  // DÖNEM EŞLEME (denetim 12.08): ödeme kaydındaki 'donem' (YYYY-AA) hangi HAKEDİŞE
+  // ödendiğini söyler — pencereye ona göre girer. Ağustos'ta ödenen Temmuz hakedişi
+  // artık Temmuz'da görünür; 'bu ay' bakiyesi sahte eksiye düşmez. Donem'siz eski
+  // kayıtlar ödeme tarihine düşer (mevcut davranış).
+  const _pTar=p=>(p.donem&&/^\d{4}-\d{2}$/.test(p.donem))?(p.donem+'-15'):(p.odemeTarihi||'');
+  if(from)odemeler=odemeler.filter(p=>{const d=_pTar(p);return !d||d>=from;});
+  if(to)odemeler=odemeler.filter(p=>{const d=_pTar(p);return !d||d<=to;});
   odemeler.sort((a,b)=>(a.odemeTarihi||'').localeCompare(b.odemeTarihi||''));
   const totOdenen=odemeler.reduce((s,p)=>s+(+p.odenenTutar||0),0);
   return {kom,rows,aylik,totTutar,totCiro,totPrim,totKargo,totTon,netPrim,netHam,ayarlar,ayarSay,odemeler,totOdenen,kalanBakiye:netPrim-totOdenen,from,to};
