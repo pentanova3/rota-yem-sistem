@@ -2914,7 +2914,10 @@ function yemPortalSiparis({customerId, customer, teslimTarihi, lines, alan, kayn
     // "mevcut kayıt" sanıp atlar. Damgasız kalsaydı fabrika nakliyeyi girdiğinde KDV eklenmezdi.
     // İstemcideki NAKLIYE_KDV_ORAN ile AYNI olmalı (yem/index.html).
     nakliyeKdv: NAKLIYE_KDV_ORAN_FN,
-    dbsOran: +dbsOran || 0, imeceAy: 0, imeceOran: 0, imeceFark: 0, tdIsk: tdIskFN(DB),
+    // tdIsk BİLEREK YOK (taze denetim 12.08): bu fonksiyon modül kapsamında, DB burada
+    // tanımsız — tdIskFN(DB) her portal yem siparişini ReferenceError ile düşürüyordu.
+    // Yem hattında danışman komisyonu olmadığından damga zaten anlamsız.
+    dbsOran: +dbsOran || 0, imeceAy: 0, imeceOran: 0, imeceFark: 0,
     // YEM HATTI TEK KAPILI (firma kararı): ayrı üretim onayı YOK — statüyü muhasebe onayı ilerletir.
     // yemOnayGerek dolu bırakılırsa istemci eski iki kapılı akışa düşer ve sipariş 'beklemede'de kalır.
     not: "", kaynak, yemOnayGerek: false, hist: [],

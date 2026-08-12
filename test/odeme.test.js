@@ -2666,8 +2666,12 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /if\(o\.tdIsk==null\)o\.tdIsk=tdIskontoAyar\(\);/.test(H));
       {
         const FN4 = require('fs').readFileSync(require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
-        dogru('SUNUCU da tdIsk damgalıyor (3 sipariş oluşturma yolu)',
-          (FN4.match(/tdIsk: tdIskFN\(DB\)/g) || []).length === 3 && /function tdIskFN\(DB\)/.test(FN4));
+        // 2 TMR yolu damgalar; YEM yolunda BİLEREK YOK (yemPortalSiparis modül kapsamında,
+        // DB tanımsız — tdIskFN(DB) her portal yem siparişini ReferenceError ile düşürüyordu).
+        dogru('SUNUCU tdIsk damgası: 2 TMR yolu + yem yolunda YOK',
+          (FN4.match(/tdIsk: tdIskFN\(DB\)/g) || []).length === 2 && /function tdIskFN\(DB\)/.test(FN4) &&
+          !/imeceFark: 0, tdIsk: tdIskFN\(DB\),\n\s*sevkTarih/.test(FN4) &&
+          /tdIsk BİLEREK YOK/.test(FN4));
       }
       {
         const ARAMA2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
@@ -2856,6 +2860,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /const yilOrders=arr\.filter\(o=>satisTarihi\(o\)\.slice\(0,4\)===yil\);/.test(YEMH));
 
       // D6 — arama viaBayi panel aynası
+      dogru('arama direkt satışta LİSTE KAPISI (panel aynası — listesiz ürün prim üretmez)',
+        /if\(liste>0&&satis>0\)prim\+=/.test(ARA));
       dogru('arama viaBayi: komisyonRate damgası TEK BAŞINA (kart özel karışmaz)',
         /else if\(o\.komisyonRate!=null&&o\.komisyonRate!==''\)\{bOzel=0;bRate=\+o\.komisyonRate;\}/.test(ARA));
 

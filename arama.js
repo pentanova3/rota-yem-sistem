@@ -153,7 +153,9 @@ function orderKomisyon(o,kom){
     (o.lines||[]).forEach(l=>{
       const liste=primTarifeFiyat(plDir,o,l.code,'danismanListe');
       var satis=0; if(l.price==='')satis=0; else if(l.price!=null)satis=+l.price||0; else satis=liste;
-      if(satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);
+      // LİSTE KAPISI — panel aynası (taze denetim 12.08): danışman listesi olmayan üründe
+      // alış 0 sayılıp cironun TAMAMI prim yazılıyordu (48.000 ₺ satışa 48.000 ₺ hakediş).
+      if(liste>0&&satis>0)prim+=(satis-liste*(1-isk/100))*(+l.qty||0);
     });
     return {tutar:prim-(+o.nakliye||0)};
   }
