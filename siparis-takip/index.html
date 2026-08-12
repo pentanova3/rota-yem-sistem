@@ -2753,6 +2753,9 @@ function saveOrder(){
   // Komisyon oran/iskontosunu sipariş anında kilitle (bayi=% ciro · danışman=prim)
   // + danışman iskonto oranı damgası (denetim 12.08): meta.tdIskonto sonradan değişse
   // bu siparişin primi KAYMAZ. Yalnız İLK kayıtta damgalanır — düzenlemede korunur.
+  // NOT (Cursor A2, 12.08): aşağıda yazılan komisyonTutar/komisyonType BİLGİ AMAÇLI izdir —
+  // hiçbir rapor okumaz (primAyar rapor anında uygulanır, döküm kırılımı tek sayıdan çıkmaz;
+  // hakediş damgalı GİRDİLERDEN canlı hesaplanır). Rapor bu alana BAĞLANMAZ.
   if(o.tdIsk==null)o.tdIsk=tdIskontoAyar();
   (o.lines||[]).forEach(l=>{if(l&&l.code&&(l.kg==null||l.kg===''))l.kg=prodKg(l.code);});   // çuval kg damgası (tonaj geçmişi kaymasın)
   if(o.musteriIsk==null&&o.customerId&&!o.aliciBayi)o.musteriIsk=custIskontoKart(o);   // müşteri iskonto damgası (KARTTAN — custIskontoOf döngü yapar)
@@ -4301,7 +4304,8 @@ function openKomOdeme(komId){
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" onclick="event.stopPropagation()">
     <div class="modal-hd"><h2>${esc(kom.name)} · Hakediş & Ödeme</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
     <div class="modal-bd">
-      <div class="kpis" style="margin-bottom:14px"><div class="kpi"><div class="kl">Toplam Hakediş</div><div class="kv" style="font-size:16px">${fmtTL(earned)}</div></div><div class="kpi g"><div class="kl">Ödenen</div><div class="kv" style="font-size:16px">${fmtTL(paidT)}</div></div><div class="kpi r"><div class="kl">Kalan</div><div class="kv" style="font-size:16px">${fmtTL(earned-paidT)}</div></div></div>
+      <div style="font-size:11px;color:var(--slate-500);margin-bottom:8px">Buradaki rakamlar <b>tüm zamanların carisidir</b> — İskonto &amp; Komisyon tablosu ise seçili dönemi gösterir; iki rakam bilerek farklı olabilir.</div>
+      <div class="kpis" style="margin-bottom:14px"><div class="kpi"><div class="kl">Toplam Hakediş <span style="font-weight:500;text-transform:none;letter-spacing:0">(tüm zamanlar)</span></div><div class="kv" style="font-size:16px">${fmtTL(earned)}</div></div><div class="kpi g"><div class="kl">Ödenen</div><div class="kv" style="font-size:16px">${fmtTL(paidT)}</div></div><div class="kpi r"><div class="kl">Kalan</div><div class="kv" style="font-size:16px">${fmtTL(earned-paidT)}</div></div></div>
       <div class="sub-hd">Yeni Ödeme / Hakediş Kaydı</div>
       <div class="fgrid c3">
         <div class="fld"><label>Dönem</label><input type="month" id="koDonem" value="${todayISO().slice(0,7)}"></div>
@@ -4771,6 +4775,19 @@ function delTariff(id){
   // düşürür — raporlanan geçmiş kayar, kesilmiş faturanın dayanak PDF'i de yok olur.
   const _bagli=DB.orders.filter(o=>o&&o.priceListId===id).length;
   if(_bagli>0){alert('Bu tarifeye '+_bagli+' sipariş damgalı — SİLİNEMEZ.\n\nSilinirse o siparişlerin brüt/prim tabanı başka tarifeye düşer ve geçmiş raporlar kayar. Tarife arşivde kalmalı.');return;}
+  // AS-OF KORUMASI (Cursor bulgusu A4, 12.08): prim tabanı orderPLForPrim ile TESLİM GÜNÜNE
+  // as-of çözülür — damgadan bağımsız (firma kararı e898521). Bu tarifenin yürürlük penceresine
+  // (kendi tarihi → sonraki tarife tarihi) fiyat-tarihi düşen sipariş varsa, silmek o pencereyi
+  // bir ÖNCEKİ tarifeye kaydırır ve geçmiş primler değişir. priceListId saymak yetmez.
+  const _dts=priceLists().map(p=>String(p.date).slice(0,10)).sort();
+  const _bu=String(pl.date).slice(0,10);
+  const _sonraki=_dts.filter(d=>d>_bu)[0]||'9999-12-31';
+  const _asof=DB.orders.filter(o=>{
+    if(!o||o.priceListId===id)return false;
+    const d=orderPriceDate(o);
+    return !!d&&d>=_bu&&d<_sonraki;
+  }).length;
+  if(_asof>0){alert('Bu tarifenin yürürlük penceresine ('+fmtDate(_bu)+' – '+fmtDate(_sonraki==='9999-12-31'?todayISO():_sonraki)+') '+_asof+' siparişin fiyat tarihi düşüyor — SİLİNEMEZ.\n\nSilinirse o siparişlerin danışman prim tabanı (as-of) bir önceki tarifeye kayar.');return;}
   if(!confirm(fmtDate(pl.date)+' tarifesini ('+(pl.note||'not yok')+') silmek istiyor musunuz? Bu işlem geri alınamaz.'))return;
   DB.priceLists=priceLists().filter(p=>p.id!==id);
   logAct('Fiyat tarifesi silindi: '+fmtDate(pl.date));saveDB();render();toast('Tarife silindi');
@@ -5824,6 +5841,9 @@ function _fiyatUygula(o){   // saveOrder ile aynı: bayi→bayiUnitPrice, değil
   (o.lines||[]).forEach(function(l){l.price=(o.aliciBayi?bayiUnitPrice(o,l.code):custUnitPrice(o,l.code))||0;});
   if(o.bayiId){var bk=komById(o.bayiId);if(bk){if(o.komisyonRate==null)o.komisyonRate=+bk.rate||0;if(o.ozelIskonto==null)o.ozelIskonto=+bk.ozelIskonto||0;}}else{o.komisyonRate=null;o.ozelIskonto=null;}
   o.komisyoncuId=o.danismanId||o.bayiId||'';
+  // komisyonTutar BİLGİ AMAÇLI iz — hiçbir rapor OKUMAZ (bilinçli: primAyar rapor anında
+  // uygulanır ve döküm satır kırılımı tek sayıdan üretilemez; hakediş, damgalı GİRDİLERDEN
+  // — tdIsk, komisyonRate, l.price, as-of tarife — canlı hesaplanır). Rapor buna bağlanmaz.
   if(o.komisyoncuId){var r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonTutar=0;o.komisyonType='';}
   if(o.dbsOran==null)o.dbsOran=0;   // toplu fiyat düzeltme aracı DBS'i GERİYE DÖNÜK uygulamaz (eski ciro kaymasın)
   if(o.imeceOran==null)o.imeceOran=0;   // aynısı vade farkı için

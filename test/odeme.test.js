@@ -2871,6 +2871,52 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /if \(typeof v === "object"\) \{ try \{ return JSON\.stringify\(v\); \} catch \(e\) \{ return "\[nesne\]"; \} \}/.test(YEMH));
     }
 
+    // ══ 43 · CURSOR TEYİT TURU (A2/A3/A4 — A1 zaten 61de3b9'da kapanmıştı) ══════════════
+    {
+      const gvD = (ad) => {
+        const i = H.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) {
+          const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+      // A2 — komisyonTutar ölü bilgi alanı: hiçbir rapor OKUMAZ (bilinçli; belgelendi)
+      // Üç yazım noktası: saveOrder (2 atama) + Excel _fiyatUygula (2) + Excel bayi-danışman
+      // düzeltme aracı (1) = 5. Altıncısı çıkarsa biri OKUMAYA başlamış olabilir — bilinçli tavan.
+      dogru('komisyonTutar yalnız yazılır (saveOrder + 2 Excel aracı), rapor okumaz',
+        /komisyonTutar BİLGİ AMAÇLI iz/.test(H) && /Rapor bu alana BAĞLANMAZ/.test(H) &&
+        (H.match(/o\.komisyonTutar/g) || []).length === 5 &&
+        !/komisyonTutar/.test(gvD('renderKomisyon')) && !/komisyonTutar/.test(gvD('komDetayData')) &&
+        !/komisyonTutar/.test(gvD('openKomDetay')) && !/komisyonTutar/.test(gvD('effPrim')));
+      // A3 — ödeme modalı tüm-zamanlar olduğunu SÖYLÜYOR
+      dogru('openKomOdeme rakamlarının tüm-zaman olduğu etiketli',
+        /tüm zamanların carisidir/.test(H) && /Toplam Hakediş <span[^>]*>\(tüm zamanlar\)/.test(H));
+      // A4 — delTariff as-of penceresi koruması (KOŞTURMALI)
+      {
+        const uyari = {alert: '', confirm: 0};
+        const LS = [{id: 'p1', date: '2026-03-23'}, {id: 'p2', date: '2026-08-03'}, {id: 'p3', date: '2026-08-06'}];
+        const ctxD = {
+          isAdmin: () => true,
+          priceListById: (id) => LS.find((p) => p.id === id) || null,
+          priceLists: () => LS,
+          DB: {meta: {activePriceListId: 'p3'},
+            orders: [{id: 'o1', priceListId: '', date: '2026-08-04', status: 'teslim', teslimEdildiTarih: '2026-08-04'}],
+            priceLists: LS},
+          orderPriceDate: (o) => o.teslimEdildiTarih || o.date || '',
+          alert: (m) => { uyari.alert = m; }, confirm: () => { uyari.confirm++; return false; },
+          fmtDate: (d) => String(d), todayISO: () => '2026-08-12',
+          logAct: () => {}, saveDB: () => {}, render: () => {}, toast: () => {},
+        };
+        const DT = new Function(...Object.keys(ctxD), gvD('delTariff') + ';return delTariff;')(...Object.values(ctxD));
+        DT('p2');   // 03.08 tarifesi: penceresi 03.08–06.08; o1 (04.08) as-of buna düşer
+        dogru('as-of penceresinde siparişi olan tarife SİLİNEMİYOR (damga olmasa da)',
+          /as-of|fiyat tarihi düşüyor/.test(uyari.alert) && uyari.confirm === 0);
+        uyari.alert = ''; DT('p1');   // 23.03 tarifesi: penceresi 23.03–03.08; sipariş yok → onaya düşer
+        dogru('penceresi boş tarife normal onay akışında', uyari.alert === '' && uyari.confirm === 1);
+      }
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
