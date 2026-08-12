@@ -3129,6 +3129,43 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         !/musteriIsk: Math\.max[\s\S]{0,400}?brutListe/.test(FN6));
     }
 
+    // ══ 48 · CURSOR N6-N9 + Excel priceListId (12.08 kapanış) ═══════════════════════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const ARA4 = fsx.readFileSync(pth.join(__dirname, '..', 'arama.js'), 'utf8');
+      const gvI = (kaynak, ad) => {
+        const i = kaynak.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < kaynak.length; k++) {
+          const c = kaynak[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return kaynak.slice(i, k + 1); } }
+        return '';
+      };
+      // N3+ — Excel aktarımı tarife damgası (kendi tarihinin as-of'u)
+      dogru('Excel aktarımı priceListId damgalıyor (as-of, kendi tarihi)',
+        /if\(!o\.priceListId\)\{const _pl=priceListAsOf\(orderPriceDate\(o\)\);if\(_pl\)o\.priceListId=_pl\.id;\}/.test(gvI(H, '_fiyatUygula')));
+      // N8 — bayi özetinde gerçek iskonto (KOŞTURMALI)
+      {
+        const KS = gvI(H, 'komSummaryHTML');
+        dogru('bayi özetinde iskonto bayiIskHam+ayar (₺0 değil)',
+          /:arr\.filter\(o=>o\.aliciBayi\)\.reduce\(\(s,o\)=>s\+effIsk\(o,bayiIskHam\(o\)\),0\);/.test(KS));
+        dogru('N7 — özet dönemine ekseni yazıldı (sipariş tarihine göre)',
+          /'Tüm zamanlar'\)\+' · sipariş tarihine göre'/.test(KS));
+      }
+      // N6 — arama damgasız brüt yedeği İMECE farkında
+      dogru('arama yedeği İMECE kredi kartı tabanını görüyor',
+        /const kk=o\.imeceSecili\?primTarifeFiyat\(pl,o,l\.code,'krediKarti'\):0;/.test(ARA4));
+      // N9 — arama Yem tonajı kg damga öncelikli (KOŞTURMALI)
+      {
+        const YT = new Function('yemKg',
+          (ARA4.match(/const yemTon=o=>\{[\s\S]*?return t\/1000;\};/) || [''])[0] + ';return yemTon;')(() => 50);
+        esit('arama Yem tonajı: damgalı 40×45 kg (kart 50 dese de)', YT({lines: [{code: 'B', qty: 40, kg: 45}]}), 1.8);
+        esit('damgasız satır kart 50', YT({lines: [{code: 'B', qty: 40}]}), 2);
+      }
+      dogru('arama ürün kırılımı iki hatta da kg damga öncelikli',
+        /ds\.src==='yem'\s*\n\s*\?\(\+l\.qty\|\|0\)\*\(\(\+l\.kg>0\)\?\+l\.kg:yemKg\(l\.code\)\)\/1000\s*\n\s*:\(\(\+l\.kg>0\)\?\(\+l\.qty\|\|0\)\*\(\+l\.kg\)\/1000:tonOf\(l\.code,l\.qty\)\)/.test(ARA4));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

@@ -175,7 +175,11 @@ function bayiAlimOzet(bayiId,yil){
     // (23.07 öncesi eski kayıt) eski as-of hesabı yedek olarak kalır.
     let b=(+o.brutListe>0)?(+o.brutListe):0;
     if(!(b>0)){const pl=orderPLForPrim(o);
-      (o.lines||[]).forEach(l=>{if(!l.code)return;b+=primTarifeFiyat(pl,o,l.code,'fabrika')*(+l.qty||0);});}
+      // İMECE farkında yedek (Cursor N6): panelde damgasız brüt İMECE'de kredi kartı
+      // tabanından ölçülür — yalnız fabrika okunursa iskonto negatife düşüp 0'a kırpılıyordu.
+      (o.lines||[]).forEach(l=>{if(!l.code)return;
+        const kk=o.imeceSecili?primTarifeFiyat(pl,o,l.code,'krediKarti'):0;
+        b+=(kk||primTarifeFiyat(pl,o,l.code,'fabrika'))*(+l.qty||0);});}
     const ft=tmrTotal(o);const iskHam=Math.max(0,b-ft);const isk=effAyarVal(iskHam,o.iskAyar);
     const q=Math.floor((+satisTarihi(o).slice(5,7)-1)/3);if(q>=0&&q<4)ceyrek[q]+=isk;
     brut+=b;fat+=ft;iskonto+=isk;
@@ -193,7 +197,7 @@ function danismanHakedis(danId){
 const yemProdByCode=c=>D().yemProducts.find(p=>norm(p.code)===norm(c))||null;
 function yemKg(code){const p=yemProdByCode(code);if(p&&+p.kg>0)return +p.kg;const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):50;return kg>0?kg:50;}
 const yemCuval=o=>(o.cuval!=null?+o.cuval:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0),0));
-const yemTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=(+l.qty||0)*yemKg(l.code);});return t/1000;};
+const yemTon=o=>{let t=0;(o.lines||[]).forEach(l=>{if(l.code)t+=(+l.qty||0)*((+l.kg>0)?+l.kg:yemKg(l.code));});return t/1000;};   // kg damgası öncelikli (Cursor N9 — panel orderKg aynası)
 const yemNet=o=>(o.urunNet!=null?+o.urunNet:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0)*(+l.price||0),0));
 const yemBrut=o=>(o.brut!=null?+o.brut:(o.lines||[]).reduce((s,l)=>s+(+l.qty||0)*((l.liste!=null&&l.liste!=='')?+l.liste:(+l.price||0)),0));
 const yemIskonto=o=>(o.iskontoTutar!=null?+o.iskontoTutar:Math.max(0,yemBrut(o)-yemNet(o)));
@@ -414,7 +418,9 @@ function ansEnCok(q){
     const os=donemFiltre(ds.orders,P);if(!os.length)return '';
     const agg={};
     os.forEach(o=>{
-      if(tip==='urun'){(o.lines||[]).forEach(l=>{if(l.code)agg[l.code]=(agg[l.code]||0)+(ds.src==='yem'?(+l.qty||0)*yemKg(l.code)/1000:tonOf(l.code,l.qty));});return;}
+      if(tip==='urun'){(o.lines||[]).forEach(l=>{if(l.code)agg[l.code]=(agg[l.code]||0)+(ds.src==='yem'
+        ?(+l.qty||0)*((+l.kg>0)?+l.kg:yemKg(l.code))/1000
+        :((+l.kg>0)?(+l.qty||0)*(+l.kg)/1000:tonOf(l.code,l.qty)));});return;}
       let key=null,t=ds.ton(o);
       if(tip==='musteri')key=o.customer||'—';
       if(tip==='bayi'){const b=ordBayi(o);key=b?b.name:null;}

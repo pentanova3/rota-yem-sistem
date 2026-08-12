@@ -1827,9 +1827,16 @@ function komSummaryHTML(){
   const arr=filteredOrders();
   const adet=arr.length;
   const ciro=arr.reduce((s,o)=>s+orderTotal(o),0);
-  const prim=arr.reduce((s,o)=>s+((orderKomisyon(o)||{}).tutar||0),0);
-  const period=((filt.month?AYLAR_TR[+filt.month-1]+' ':'')+(filt.year||'')).trim()||'Tüm zamanlar';
   const isDan=kom.type==='danisman';
+  // BAYİDE İSKONTO (Cursor N8): orderKomisyon bayi dalı bilinçli 0 döner (iskonto fatura
+  // anında fiyata gömülü) — özet kartı yanlış ₺0 gösteriyordu. Bayinin ALIMLARINDAKİ
+  // gerçek iskonto bayiIskHam+ayar üzerinden toplanır (İskonto & Komisyon tablosuyla eş).
+  const prim=isDan
+    ?arr.reduce((s,o)=>s+((orderKomisyon(o)||{}).tutar||0),0)
+    :arr.filter(o=>o.aliciBayi).reduce((s,o)=>s+effIsk(o,bayiIskHam(o)),0);
+  // N7 notu: bu özet SİPARİŞ tarihine göre süzülür (operasyonel liste); hakediş/iskonto
+  // raporları TESLİM tarihine göre çalışır — aynı ay etiketi iki farklı rakam verebilir.
+  const period=(((filt.month?AYLAR_TR[+filt.month-1]+' ':'')+(filt.year||'')).trim()||'Tüm zamanlar')+' · sipariş tarihine göre';
   return `<div class="kom-summary kom-summary-${kom.type}">
     <div class="ks-head"><span class="kom-chip kom-${kom.type}">${esc(kom.name)}</span><span class="ks-type">${isDan?'Teknik Danışman':'Bayi'}${kom.city?' · '+esc(kom.city):''}</span><span class="ks-period">${esc(period)}</span></div>
     <div class="ks-metrics"><div><span class="ks-n">${adet}</span><span class="ks-l">Sipariş</span></div><div><span class="ks-n">${fmtTL(ciro)}</span><span class="ks-l">Toplam Ciro</span></div>${canSeeKomisyon()?`<div><span class="ks-n">${fmtTL(prim)}</span><span class="ks-l">${isDan?'Toplam Prim':'Toplam İskonto'}</span></div>`:''}</div>
@@ -5873,6 +5880,10 @@ function _bayiMusBul(bayiId,sevkAd,sevkIl){
   return L.find(c=>!c.name&&_norm(c.city||'')===_norm(sevkIl||''));   // isimsiz + il eşleşen
 }
 function _fiyatUygula(o){   // saveOrder ile aynı: bayi→bayiUnitPrice, değilse→custUnitPrice; komisyon kilidi
+  // TARİFE DAMGASI (Cursor N3): geçmiş Excel siparişi KENDİ tarihinin as-of tarifesine
+  // sabitlenir — hem satır fiyatlama hem brüt damga o tarifeden çıkar; tarife arşivi
+  // sonradan değişse geçmiş kaymaz. (delTariff as-of penceresi bu damgayı da korur.)
+  if(!o.priceListId){const _pl=priceListAsOf(orderPriceDate(o));if(_pl)o.priceListId=_pl.id;}
   (o.lines||[]).forEach(function(l){l.price=(o.aliciBayi?bayiUnitPrice(o,l.code):custUnitPrice(o,l.code))||0;});
   if(o.bayiId){var bk=komById(o.bayiId);if(bk){if(o.komisyonRate==null)o.komisyonRate=+bk.rate||0;if(o.ozelIskonto==null)o.ozelIskonto=+bk.ozelIskonto||0;}}else{o.komisyonRate=null;o.ozelIskonto=null;}
   o.komisyoncuId=o.danismanId||o.bayiId||'';
