@@ -4283,8 +4283,10 @@ function renderKomAyar(){
     '</div></div>';
   modalYaz(m);   // yeniden çizimde kaydırma/animasyon sıçraması olmasın (bkz. modalYaz)
 }
-function bayiIskHam(o){   // brüt TEK KAYNAK: orderListTotal (bayiAlimData ile EŞ)
-  return Math.max(0,round2(orderListTotal(o)-orderTotal(o)));
+function bayiIskHam(o){   // brüt DAMGA ÖNCELİKLİ (Cursor N2): bayiAlimData/sunucu ile EŞ —
+  // canlı kalsaydı ayar diyaloğundaki "ham" tutar, tarife arşivi oynadığında tablodakinden saparди.
+  const b=(+o.brutListe>0)?round2(+o.brutListe):orderListTotal(o);
+  return Math.max(0,round2(b-orderTotal(o)));
 }
 function ayModeBtn(v,lbl,cur){return '<button type="button" data-v="'+v+'" class="btn '+(cur===v?'btn-pri':'btn-gray')+' btn-sm" onclick="setAyMode(\''+v+'\')">'+lbl+'</button>';}
 function setAyMode(v){window.__ayMode=v;document.querySelectorAll('#ayModeBtns button').forEach(function(b){b.className='btn '+(b.getAttribute('data-v')===v?'btn-pri':'btn-gray')+' btn-sm';});var w=document.getElementById('ayTutarWrap');if(w)w.style.display=(v==='tutar')?'':'none';}
@@ -5880,7 +5882,15 @@ function _fiyatUygula(o){   // saveOrder ile aynı: bayi→bayiUnitPrice, değil
   if(o.komisyoncuId){var r=orderKomisyon(o);o.komisyonType=r.type;o.komisyonTutar=r.tutar;}else{o.komisyonTutar=0;o.komisyonType='';}
   if(o.dbsOran==null)o.dbsOran=0;   // toplu fiyat düzeltme aracı DBS'i GERİYE DÖNÜK uygulamaz (eski ciro kaymasın)
   if(o.imeceOran==null)o.imeceOran=0;   // aynısı vade farkı için
+  // YENİ DAMGALAR (Cursor N3): saveOrder'ın bastığı tdIsk/musteriIsk/kg/brutListe burada da
+  // basılmalı — yoksa Excel'den giren siparişler damgasız kalıp canlı yedeklere düşüyor ve
+  // oran/ambalaj/tarife değişince geçmişleri elle girilenlerden FARKLI davranıyordu.
+  if(o.tdIsk==null)o.tdIsk=tdIskontoAyar();
+  if(o.musteriIsk==null&&o.customerId&&!o.aliciBayi)o.musteriIsk=custIskontoKart(o);
+  (o.lines||[]).forEach(function(l){if(l&&l.code&&(l.kg==null||l.kg===''))l.kg=prodKg(l.code);});
   o.total=orderTotal(o);
+  var _bl2=brutListeDamga(o);
+  if(_bl2>0)o.brutListe=_bl2; else delete o.brutListe;
 }
 async function excelSiparisYukle(){
   if(!isAdmin()){toast('Sadece yönetici');return}

@@ -1327,7 +1327,9 @@ function renderPanel(c,tb){
   const days=[];for(let i=0;i<7;i++){const d=new Date(monday);d.setDate(monday.getDate()+i);days.push(d)}
   const weekStart=isoOf(days[0]),weekEnd=isoOf(days[6]);
   const weekOrders=visibleOrders().filter(o=>{const d=kanbanDate(o);return d>=weekStart&&d<=weekEnd});   // plasiyer yalnız kendi kapsamını görür
-  const weekTotal=weekOrders.reduce((s,o)=>s+orderTotal(o),0);
+  // SATIŞ KURALI (Cursor N1): ciro yalnız TESLİM edilenden — eski hali bekleyen/sevk/İPTAL
+  // dahil tüm hafta siparişlerini topluyordu; TMR paneli teslim-bazlıyken Yem şişik gösteriyordu.
+  const weekTotal=weekOrders.filter(o=>satisMi(o)).reduce((s,o)=>s+orderTotal(o),0);
   const weekCuval=weekOrders.filter(o=>o.status!=='iptal').reduce((s,o)=>s+orderCuval(o),0);
   const pending=weekOrders.filter(o=>o.status==='beklemede').length;
   const ready=weekOrders.filter(o=>o.status==='hazir').length;
@@ -1343,7 +1345,7 @@ function renderPanel(c,tb){
   </div>`;
   h+=`<div class="kpis">
     <div class="kpi"><div class="kl">Bu Hafta Sipariş</div><div class="kv">${weekOrders.length}</div><div class="ks">${rangeLabel}</div></div>
-    ${canSeePrice()?`<div class="kpi g"><div class="kl">Bu Hafta Ciro</div><div class="kv" style="font-size:19px">${fmtTL(weekTotal)}</div></div>`:''}
+    ${canSeePrice()?`<div class="kpi g"><div class="kl">Bu Hafta Ciro</div><div class="kv" style="font-size:19px">${fmtTL(weekTotal)}</div><div class="ks">teslim edilen</div></div>`:''}
     <div class="kpi p"><div class="kl">Bu Hafta Çuval</div><div class="kv">${fmtN(weekCuval)}</div><div class="ks">iptal hariç</div></div>
     <div class="kpi a"><div class="kl">Bekleyen</div><div class="kv">${pending}</div><div class="ks">işlem bekliyor</div></div>
     <div class="kpi s"><div class="kl">Sevk Edildi</div><div class="kv">${shipped}</div><div class="ks">yola çıktı</div></div>

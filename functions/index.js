@@ -2690,7 +2690,7 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         const liste = fabOf(code);     // iskontosuz (fabrika) birim fiyat — sipariş anında kilitlenir (sonradan gösterim için)
         const price = bayiNet(code);   // FİYATI SUNUCU HESAPLAR — istemci fiyatı yok sayılır
         if (price <= 0) return;         // fabrika fiyatı tanımsız ürün 0 TL'ye sipariş edilmesin
-        lines.push({code, qty, price, liste});
+        lines.push({code, qty, price, liste, kg: prodKgOf(DB.products, code)});   // kg damgası (Cursor N4 ailesi)
       });
       if (!lines.length) { res.status(400).json({hata: "geçerli ürün satırı yok"}); return; }
       const teslimTarihi = /^\d{4}-\d{2}-\d{2}$/.test(String(bd.teslimTarihi || "")) ? String(bd.teslimTarihi) : "";
@@ -2710,6 +2710,10 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         id: "o" + Date.now().toString(36) + Math.floor(Math.random() * 1000),
         no: 0, date: nowISO.slice(0, 10), createdAt: nowISO, teslimTarihi,
         aliciBayi: true, bayiId, fiyatKademe: "bayi", komisyonRate: rate, ozelIskonto: ozelIskonto,
+        // BRÜT DAMGASI (Cursor N4): istemci saveOrder basıyor, portal siparişi basmıyordu —
+        // iç rapor canlı hesaba düşüyor, tarife arşivi oynayınca portal-kaynaklı siparişlerin
+        // geçmişi kayıyordu. Satırlar fabrika listesini (liste) zaten taşıyor.
+        brutListe: Math.round(lines.reduce((s2, l) => s2 + (+l.liste || 0) * (+l.qty || 0), 0) * 100) / 100,
         danismanId: (bayiKaydi && bayiKaydi.danismanId) || "",
         komisyoncuId: (bayiKaydi && bayiKaydi.danismanId) || bayiId,
         plasiyerId: (bayiKaydi && bayiKaydi.plasiyerId) || "",
@@ -3043,7 +3047,7 @@ exports.danisman = onRequest({region: "us-central1", cors: true, secrets: [TG_TO
           // _locked: fiyatı DANIŞMAN pazarlıkla girdi — iç ekranda İMECE işaretlenince applyTariffToLines
           // bu satırı kredi kartı tarifesine EZMESİN (danışmanın 900 ₺'si sessizce 700'e düşüyordu ve
           // "elle fiyat girilmiş" uyarısı da _locked aranmadığı için hiç çıkmıyordu).
-          lines.push({code, qty, price, _locked: true});
+          lines.push({code, qty, price, _locked: true, kg: prodKgOf(DB.products, code)});   // kg damgası
         });
         if (!lines.length) { res.status(400).json({hata: "geçerli ürün/fiyat satırı yok"}); return; }
         let toplamHam = 0; lines.forEach((l) => { toplamHam += l.qty * l.price; });
@@ -3054,6 +3058,9 @@ exports.danisman = onRequest({region: "us-central1", cors: true, secrets: [TG_TO
           id: "o" + Date.now().toString(36) + Math.floor(Math.random() * 1000),
           no: 0, date: nowISO.slice(0, 10), createdAt: nowISO, teslimTarihi,
           aliciBayi: false, customerId: musteriId, customer: musteri.name || "", firma: musteri.firma || "",
+          // Müşteri iskonto damgası (Cursor N5): istemci saveOrder karttan basıyor — portal da
+          // bassın ki kart sonradan değişince bu siparişin yeniden fiyatlaması kaymasın.
+          musteriIsk: Math.max(0, Math.min(100, +musteri.iskonto || 0)),
           danismanId, komisyoncuId: danismanId, plasiyerId: musteri.plasiyerId || "",
           fiyatKademe: "", status: "beklemede", lines, total: toplam,
           dbsOran: dbsOranSip, imeceAy: 0, imeceOran: 0, imeceFark: 0, tdIsk: tdIskFN(DB),

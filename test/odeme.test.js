@@ -701,7 +701,8 @@ baslik('7) KAYNAK EŞLİĞİ — DBS düzeltmeleri iki modülde de var mı');
   dogru('TMR: onay kapıları açılış tabanını kullanıyor',
     /o\.musteriOnay==='onaylandi'&&ordTaban\(o\)/.test(t) && /const _em=ordTaban\(o\);/.test(t));
   dogru('TMR: brutListe damgası satır bazlı güvenilirlik testi', /if\(l&&l\.code&&!\(listeBirimFiyat\(o,l\.code,kad\)>0\)\)return 0;/.test(t));
-  dogru('TMR: bayi brütü tek kaynak (bayiIskHam)', /orderListTotal\(o\)-orderTotal\(o\)/.test(t));
+  dogru('TMR: bayi brütü tek kaynak, damga öncelikli (bayiIskHam)',
+    /const b=\(\+o\.brutListe>0\)\?round2\(\+o\.brutListe\):orderListTotal\(o\);/.test(t)&&/round2\(b-orderTotal\(o\)\)/.test(t));
   dogru('TMR: kod değişince _locked düşüyor', /if\(f==='code'\)delete editOrder\.lines\[i\]\._locked;/.test(t));
   dogru('TMR: kutucuk kilidi sade (ro veya DBS+seçilmemiş)', /const kilit=ro\|\|\(dbsli&&!secili\);/.test(t));
   // imeceSeciliMi müşteri kartına ASLA bakmamalı — sipariş bazlı damga kuralının mührü.
@@ -738,7 +739,7 @@ baslik('7) KAYNAK EŞLİĞİ — DBS düzeltmeleri iki modülde de var mı');
   // Danışman portalı fiyatı pazarlıklıdır — İMECE işaretlenince tarifeye ezilmemeli.
   {
     const fn = require('fs').readFileSync(require('path').join(__dirname, '..', 'functions', 'index.js'), 'utf8');
-    dogru('SUNUCU: danışman portal satırı _locked', /lines\.push\(\{code, qty, price, _locked: true\}\)/.test(fn));
+    dogru('SUNUCU: danışman portal satırı _locked', /lines\.push\(\{code, qty, price, _locked: true, kg: prodKgOf\(DB\.products, code\)\}\)/.test(fn));
     dogru('SUNUCU: bayi brütü damgayı önceliyor', /\(\+o\.brutListe > 0\) \? \(\+o\.brutListe\) : brut/.test(fn));
     // Sunucu tek yuvarlamayla hesaplarsa istemciyle 1 kuruş ayrışır ve bu 1 kuruş, iç ekranda kayıtta
     // "tutar değişti" kapısını (eşik 0,005) tetikleyip müşteri onayını sahte yere düşürür.
@@ -3077,6 +3078,55 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       }
       // 46e — tasarım notları yerinde (pazarlık/DBS prim tabanını düşürmez — firma kararı kapısı)
       dogru('prim tasarım notu kodda', /manuel \(pazarlık\) fatura ve DBS\n\s*\/\/ indirimi prim tabanını DÜŞÜRMEZ/.test(H));
+    }
+
+    // ══ 47 · CURSOR N-SERİSİ — eksik YAZIM uçları kapandı (12.08) ═══════════════════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const YEM5 = fsx.readFileSync(pth.join(__dirname, '..', 'yem', 'index.html'), 'utf8');
+      const FN6 = fsx.readFileSync(pth.join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+      const gvH = (kaynak, ad) => {
+        const i = kaynak.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < kaynak.length; k++) {
+          const c = kaynak[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return kaynak.slice(i, k + 1); } }
+        return '';
+      };
+      // N1 — Yem hafta cirosu yalnız teslim edilen
+      dogru('Yem "Bu Hafta Ciro" satisMi süzgecinde + etiketli',
+        /const weekTotal=weekOrders\.filter\(o=>satisMi\(o\)\)\.reduce/.test(YEM5) &&
+        /Bu Hafta Ciro<\/div><div class="kv"[^>]*>\$\{fmtTL\(weekTotal\)\}<\/div><div class="ks">teslim edilen<\/div>/.test(YEM5));
+      // N2 — bayiIskHam damga öncelikli (KOŞTURMALI: canlı hesap saptırılır, damga kazanmalı)
+      {
+        const ctxB = {
+          orderListTotal: () => 60000,                     // canlı hesap KASITLI YANLIŞ
+          orderTotal: (o) => +o.total,
+          round2: (n) => Math.round((+n || 0) * 100) / 100,
+        };
+        const BH = new Function(...Object.keys(ctxB), gvH(H, 'bayiIskHam') + ';return bayiIskHam;')(...Object.values(ctxB));
+        esit('ayar diyaloğu hamı = damga − fatura (tabloyla EŞ)', BH({brutListe: 90000, total: 81216}), 8784);
+        esit('damgasız eski kayıt canlı hesaba düşer', BH({total: 55000}), 5000);
+      }
+      // N3 — Excel aracı saveOrder damgalarını basıyor
+      {
+        const FU = gvH(H, '_fiyatUygula');
+        dogru('_fiyatUygula tdIsk basıyor', /if\(o\.tdIsk==null\)o\.tdIsk=tdIskontoAyar\(\);/.test(FU));
+        dogru('_fiyatUygula musteriIsk basıyor (karttan)',
+          /if\(o\.musteriIsk==null&&o\.customerId&&!o\.aliciBayi\)o\.musteriIsk=custIskontoKart\(o\);/.test(FU));
+        dogru('_fiyatUygula kg basıyor', /l\.kg=prodKg\(l\.code\)/.test(FU));
+        dogru('_fiyatUygula brutListe basıyor (güvenilir değilse silerek)',
+          /var _bl2=brutListeDamga\(o\);\s*\n\s*if\(_bl2>0\)o\.brutListe=_bl2; else delete o\.brutListe;/.test(FU));
+      }
+      // N4/N5 — sunucu sipariş oluşturma damgaları
+      dogru('SUNUCU bayi siparişi brutListe damgalıyor (satır listelerinden)',
+        /brutListe: Math\.round\(lines\.reduce\(\(s2, l\) => s2 \+ \(\+l\.liste \|\| 0\) \* \(\+l\.qty \|\| 0\), 0\) \* 100\) \/ 100,/.test(FN6));
+      dogru('SUNUCU her iki TMR hattında satıra kg damgalıyor',
+        (FN6.match(/kg: prodKgOf\(DB\.products, code\)/g) || []).length === 2);
+      dogru('SUNUCU danışman-müşteri siparişine musteriIsk damgalıyor',
+        /musteriIsk: Math\.max\(0, Math\.min\(100, \+musteri\.iskonto \|\| 0\)\),/.test(FN6));
+      dogru('danışman hattında brutListe BİLEREK yok (pazarlık fiyatı — liste bilinmez)',
+        !/musteriIsk: Math\.max[\s\S]{0,400}?brutListe/.test(FN6));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
