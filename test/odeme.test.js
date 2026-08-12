@@ -2989,6 +2989,8 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         return '';
       };
       // Yem Genel Rapor: yıl VE ay aynı eksende (teslim tarihi)
+      dogru('Yem yıl listesi iki eksenli (yılbaşı devri satışı kaybolmaz)',
+        /orderYears\(\)\{return \[\.\.\.new Set\(DB\.orders\.flatMap\(o=>\[\(o\.date\|\|''\)\.slice\(0,4\),satisTarihi\(o\)\.slice\(0,4\)\]\)/.test(YEM3));
       dogru('Yem aylık kırılım teslim ayına bakıyor (yıl=teslim/ay=sipariş karışımı bitti)',
         /satisTarihi\(o\)\.slice\(5,7\)===mv/.test(YEM3) && !/\(o\.date\|\|''\)\.slice\(5,7\)===mv/.test(YEM3));
       // arama.js custById tanımlı ve çalışıyor

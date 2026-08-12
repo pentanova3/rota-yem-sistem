@@ -1374,7 +1374,10 @@ function renderPanel(c,tb){
 }
 
 // ---------- SİPARİŞLER ----------
-function orderYears(){return [...new Set(DB.orders.map(o=>(o.date||'').slice(0,4)).filter(Boolean))].sort().reverse()}
+// Yıl listesi SATIŞ tarihinden + sipariş tarihinden BİRLİKTE (taze denetim 12.08): raporlar
+// teslim yılıyla süzülüyor — liste yalnız o.date'ten üretilseydi Aralık'ta alınıp Ocak'ta
+// teslim edilen satış hiçbir yıl seçeneğinde görünmezdi (TMR'de aynı tuzak kapatılmıştı).
+function orderYears(){return [...new Set(DB.orders.flatMap(o=>[(o.date||'').slice(0,4),satisTarihi(o).slice(0,4)]).filter(Boolean))].sort().reverse()}
 function filteredOrders(){
   let arr=visibleOrders().slice();
   if(filt.status)arr=arr.filter(o=>o.status===filt.status);
