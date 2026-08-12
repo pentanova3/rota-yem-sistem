@@ -5110,7 +5110,6 @@ function tonajData(){
   const H=tonajHedefMap();
   const isCurMonth=(Y===String(now.getFullYear())&&M===String(now.getMonth()+1).padStart(2,'0'));
   const dayOfM=isCurMonth?now.getDate():daysInM;
-  const aktifGun=Object.keys(byDayTot).length;
   const takvimOrt=dayOfM?monthTot/dayOfM:0;
   const proj=isCurMonth?takvimOrt*daysInM:monthTot;
   const hedefM=+H[Y+'-'+M]||0;
@@ -5122,7 +5121,7 @@ function tonajData(){
   const _ton=(a)=>a.reduce((s,o)=>s+(o.lines||[]).reduce((x,l)=>x+lineTon(l),0),0);
   const aySiparis=_ton(tumu.filter(_ayda)),ayCikan=_ton(tumu.filter(o=>_ayda(o)&&satisMi(o)));
   const ayBekleyen=aySiparis-ayCikan;
-  return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam,tabanSevk,aySiparis,ayCikan,ayBekleyen};
+  return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam,tabanSevk,aySiparis,ayCikan,ayBekleyen};
 }
 function tonajBar(pct,col){const w=Math.max(0,Math.min(100,pct));return `<div style="background:var(--slate-200);height:7px;border-radius:4px;min-width:70px"><div style="width:${w}%;background:${col};height:7px;border-radius:4px"></div></div>`;}
 function tonajCols(prodTot,max){const arr=Object.entries(prodTot).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);return arr.length>max?{cols:arr.slice(0,max),other:arr.slice(max)}:{cols:arr,other:[]};}
@@ -5153,7 +5152,7 @@ function tonajRaporuHTML(){
     <span style="margin-left:auto;font-size:11px;color:var(--slate-400)">${D.tabanSevk?'Yalnız TESLİM EDİLEN siparişler (satış kuralı)':'Durumdan bağımsız tüm siparişler'} · iptaller hariç · tüm değerler TON</span>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} ${D.tabanSevk?'Teslim Edilen':'Sipariş Alınan'}</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div><div class="ks">${D.aktifGun} satış günü</div></div>
+    <div class="kpi"><div class="kl">${AYLAR_TR[+D.M-1]} ${D.tabanSevk?'Teslim Edilen':'Sipariş Alınan'}</div><div class="kv" style="font-size:18px">${fmtTon(D.monthTot)} t</div></div>
     ${D.ayBekleyen>0.05?`<div class="kpi a"><div class="kl">${AYLAR_TR[+D.M-1]} Bekleyen</div><div class="kv" style="font-size:18px">${fmtTon(D.ayBekleyen)} t</div><div class="ks">sipariş alındı, henüz teslim edilmedi</div></div>`:''}
     <div class="kpi ${D.hedefM?(pctM>=100?'g':(pctM>=70?'a':'r')):''}"><div class="kl">${AYLAR_TR[+D.M-1]} Hedef</div><div class="kv" style="font-size:18px">${D.hedefM?fmtTon(D.hedefM)+' t':'—'}</div><div class="ks">${D.hedefM?'Gerçekleşme %'+fmtN(Math.round(pctM)):'hedef girilmedi'}</div></div>
     ${D.isCurMonth?`<div class="kpi p"><div class="kl">Ay Sonu Projeksiyon</div><div class="kv" style="font-size:18px">${fmtTon(D.proj)} t</div><div class="ks">günlük ort. ${fmtTon(D.takvimOrt)} t × ${D.daysInM} gün</div></div>`:''}

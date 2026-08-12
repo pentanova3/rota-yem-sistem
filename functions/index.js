@@ -1394,9 +1394,8 @@ function tmrTonajHesap(DB, now) {
   const Y = now.getFullYear(), M = String(now.getMonth() + 1).padStart(2, "0");
   const curYM = Y + "-" + M;
   const orders = (DB.orders || []).filter((o) => satisMiFN(o) && satisTarihiFN(o).slice(0, 7) === curYM);
-  // İSTEMCİ tonajData() İLE BİREBİR: kodu olan HER satır sayılır (0 ton olsa da gün/ürün oluşur);
-  // aktifGun = kodu olan satırı bulunan farklı gün sayısı. Aksi halde ekrandaki "18 satış günü" tutmaz.
-  const prodTot = {}, gunler = {};
+  // İSTEMCİ tonajData() İLE BİREBİR: kodu olan HER satır sayılır (0 ton olsa da ürün oluşur).
+  const prodTot = {};
   let toplam = 0, siparis = 0;
   orders.forEach((o) => {
     let coded = false;
@@ -1407,9 +1406,8 @@ function tmrTonajHesap(DB, now) {
       toplam += t;
       coded = true;
     });
-    if (coded) { gunler[satisTarihiFN(o).slice(8, 10)] = true; siparis++; }   // gün = FİİLEN teslim günü
+    if (coded) siparis++;
   });
-  const aktifGun = Object.keys(gunler).length;
   // BEKLEYEN: alınmış ama henüz çıkmamış mal. Rapor yalnız sevk edileni sayar (firma kararı 31.07) —
   // bu satır olmadan ayın başında "0,0 t · 0 sipariş" görünüyor ve bekleyen siparişler yönetimden
   // TAMAMEN gizleniyor. 04.08.2026 sabahı tam bu oldu: 4 sipariş vardı, rapor sıfır dedi.
@@ -1431,24 +1429,20 @@ function tmrTonajHesap(DB, now) {
     if (coded) bekAdet++;
   });
   const hedef = (DB.meta && DB.meta.tonajHedef && +DB.meta.tonajHedef[curYM]) || 0;
-  return {Y, M, curYM, toplam, aktifGun, siparis, prodTot, prodTotAy, hedef, bekTon, bekAdet};
+  return {Y, M, curYM, toplam, siparis, prodTot, prodTotAy, hedef, bekTon, bekAdet};
 }
 // Telegram HTML mesajı — dikkat çekici başlık + hizalı <pre> tablolar.
 function tmrTonajMesaj(D, now) {
   const trTarih = String(now.getDate()).padStart(2, "0") + "." + String(now.getMonth() + 1).padStart(2, "0") + "." + now.getFullYear();
   const gunAd = GUN_TR_FN[now.getDay()];
-  const gunlukOrt = D.aktifGun ? D.toplam / D.aktifGun : 0;
   // özet tablosu (etiket sola, değer sağa hizalı — monospace <pre>)
   const sat = (lbl, val) => lbl.padEnd(17, " ") + String(val).padStart(11, " ");
-  // SIRA FİRMA TARAFINDAN BELİRLENDİ (04.08.2026) — değiştirme:
-  // 1 sevk edilen · 2 bekleyen · 3 toplam sipariş (sevk+bekleyen) · 4 satış günü · 5 günlük ort.
-  // Beş satır HER ZAMAN yazılır (bekleyen 0 olsa da) — sabit biçim, gözle kıyas kolay olsun.
+  // Satış günü / günlük ort. kaldırıldı (kafa karıştırıyordu: aktif teslim günü ≠ takvim günü).
+  // Üç satır HER ZAMAN yazılır (bekleyen 0 olsa da) — sabit biçim, gözle kıyas kolay olsun.
   const ozet = [
     sat("Teslim Edilen", fmtTonFN(D.toplam) + " t"),
     sat("Bekleyen", fmtTonFN(D.bekTon) + " t"),
     sat("Toplam Sipariş", (D.siparis + D.bekAdet) + " adet"),
-    sat("Satış Günü", D.aktifGun + " gün"),
-    sat("Günlük Ort.", fmtTonFN(gunlukOrt) + " t"),
   ].join("\n");
   let hedefBlok = "";
   if (D.hedef > 0) {
@@ -1522,7 +1516,7 @@ function haftaOzetHesap(DB, now) {
       const ad = o.customer || o.aliciMusteri || "—";
       custTon[ad] = (custTon[ad] || 0) + oTon;
     });
-    return {ton, siparis, aktifGun: Object.keys(gunler).length, gunler, custTon, prodTon};
+    return {ton, siparis, gunler, custTon, prodTon};
   };
   const bu = topla(isoBas, isoSon);
   const onceki = topla(oisoBas, oisoSon);
@@ -1538,17 +1532,14 @@ function trendEt(bu, onceki) {
 function haftaOzetMesaj(Dmonth, H, now) {
   const bu = H.bu, onceki = H.onceki;
   const trTarih = (d) => String(d.getDate()).padStart(2, "0") + " " + AYLAR_TR_FN[d.getMonth()];
-  const gunlukOrt = bu.aktifGun ? bu.ton / bu.aktifGun : 0;
   const sat = (lbl, val) => lbl.padEnd(15, " ") + String(val).padStart(13, " ");
-  // özet + trend
+  // özet + trend (satış günü / günlük ort. yok — kafa karıştırıyordu)
   const ozet = [
     sat("Teslim edilen", fmtTonFN(bu.ton) + " t"),
     sat("  geçen hafta", fmtTonFN(onceki.ton) + " t"),
     sat("  değişim", trendEt(bu.ton, onceki.ton)),
     "",
     sat("Sipariş", bu.siparis + " adet"),
-    sat("Satış günü", bu.aktifGun + " gün"),
-    sat("Günlük ort.", fmtTonFN(gunlukOrt) + " t"),
   ].join("\n");
   // günlük dağılım (Pzt → bugün)
   const gunSat = [];
@@ -1672,7 +1663,7 @@ function aylikRaporHesap(DB, ym) {
   const [Ys, Ms] = ym.split("-");
   const gecenYilYm = (String(+Ys - 1)) + "-" + Ms;
   const list = (DB.orders || []).filter((o) => satisMiFN(o) && satisTarihiFN(o).slice(0, 7) === ym);   // taban: fiilen TESLİM edilen
-  const prodTon = {}, custTon = {}, gunler = {}, haftaTon = {};
+  const prodTon = {}, custTon = {}, haftaTon = {};
   let ton = 0, siparis = 0;
   list.forEach((o) => {
     let coded = false, oTon = 0;
@@ -1684,7 +1675,6 @@ function aylikRaporHesap(DB, ym) {
     });
     if (!coded) return;
     siparis++;
-    gunler[satisTarihiFN(o)] = true;   // gün = FİİLEN teslim günü
     custTon[o.customer || o.aliciMusteri || "—"] = (custTon[o.customer || o.aliciMusteri || "—"] || 0) + oTon;
     const gun = +satisTarihiFN(o).slice(8, 10);   // hafta kırılımı da teslim gününe göre
     const hafta = Math.min(4, Math.floor((gun - 1) / 7));   // 5. haftanın kalanı 4. haftaya biner
@@ -1732,25 +1722,21 @@ function aylikRaporHesap(DB, ym) {
     if (g == null) ytdGecenTam = false; else ytdGecen += g;
   }
   return {ym, Y: Ys, M: Ms, gecenYilYm, oncekiYm, danismanBu, danismanOnceki, danismanAd,
-    ton, siparis, aktifGun: Object.keys(gunler).length,
+    ton, siparis,
     prodTon, prodTonAy, custTon, haftaTon, gecenYilTon, ytdBu, ytdGecen, ytdGecenTam, arsivAyi, bekTon, bekAdet,
     hedef: (DB.meta && DB.meta.tonajHedef && +DB.meta.tonajHedef[ym]) || 0};
 }
 function aylikRaporMesaj(A) {
   const ayAd = AYLAR_TR_FN[+A.M - 1] + " " + A.Y;
   const sat = (lbl, val) => lbl.padEnd(16, " ") + String(val).padStart(13, " ");
-  const gunlukOrt = A.aktifGun ? A.ton / A.aktifGun : 0;
   const ozet = (A.arsivAyi ? [
     sat("Tonaj", fmtTonFN(A.ton) + " t"),
     "(arşiv ayı — kırılım kaydı yok)",
   ] : [
-    // SIRA FİRMA TARAFINDAN BELİRLENDİ (04.08.2026) — günlük raporla AYNI:
-    // sevk · bekleyen · toplam sipariş · satış günü · günlük ort.
+    // Günlük raporla aynı özet (satış günü / günlük ort. yok)
     sat("Teslim edilen", fmtTonFN(A.ton) + " t"),
     sat("Bekleyen", fmtTonFN(A.bekTon) + " t"),
     sat("Toplam sipariş", (A.siparis + A.bekAdet) + " adet"),
-    sat("Satış günü", A.aktifGun + " gün"),
-    sat("Günlük ort.", fmtTonFN(gunlukOrt) + " t"),
   ]).join("\n");
   // GEÇEN YIL KIYASI — yalnız TONAJ (arşivde ciro/müşteri yok)
   let yoyBlok = "";
@@ -1878,7 +1864,7 @@ exports.tmrTonajGunluk = onSchedule({schedule: "0 10 * * 1-5", timeZone: "Europe
   const D = tmrTonajHesap(DB, now);
   try {
     await tg(token, "sendMessage", {chat_id: chat, text: tmrTonajMesaj(D, now), parse_mode: "HTML", disable_web_page_preview: true});
-    console.log("tmrTonaj gönderildi: " + D.curYM + " " + fmtTonFN(D.toplam) + " t / " + D.aktifGun + " gün");
+    console.log("tmrTonaj gönderildi: " + D.curYM + " " + fmtTonFN(D.toplam) + " t");
   } catch (e) { console.error("tmrTonaj gönderim", e); }
   // CUMA (getDay()===5): günlük rapordan sonra YÖNETİCİ HAFTALIK ÖZETİ de gönderilir.
   if (now.getDay() === 5) {
