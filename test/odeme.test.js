@@ -3031,6 +3031,54 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /const _fes=fiyatsizEskiTotal\(o\);if\(_fes!=null\)return _fes;/.test(H));
     }
 
+    // ══ 46 · DÜŞÜK ÖNCELİK TURU — kalan bilinçli açıklar kapandı (12.08) ════════════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const YEM4 = fsx.readFileSync(pth.join(__dirname, '..', 'yem', 'index.html'), 'utf8');
+      // 46a — tdIskonto '||' gösterim tuzağı bitti: hesap dışı 3 nokta da tdIskontoAyar
+      dogru('tdIskonto || tuzağı tamamen söküldü (Excel/PDF/ürün kartı)',
+        !/tdIskonto\)\|\|TD_ISKONTO_DEFAULT/.test(H));
+      // 46b — DBS damga okuma kelepçesi (bozuk damga negatif fatura üretmesin)
+      dogru('TMR dbsOran damga okuması kelepçeli',
+        /if\(o\.dbsOran!=null&&o\.dbsOran!==''\)return Math\.max\(0,Math\.min\(100,\+o\.dbsOran\|\|0\)\);/.test(H));
+      dogru('Yem dbsOran damga okuması kelepçeli',
+        /if\(o\.dbsOran!=null&&o\.dbsOran!==''\)return Math\.max\(0,Math\.min\(100,\+o\.dbsOran\|\|0\)\);/.test(YEM4));
+      // 46c — ileri tarihli teslim kapısı + tarihsel sınır uyarısı
+      dogru('teslim tarihi alanında max=bugün', /max="\$\{todayISO\(\)\}"[^>]*onchange="editOrder\.teslimEdildiTarih/.test(H));
+      dogru('kayıtta ileri tarih bugüne kırpılıyor + iz düşülüyor',
+        /if\(o\.teslimEdildiTarih>todayISO\(\)\)\{pushHist\(o,'teslim','İleri tarihli teslim günü/.test(H));
+      dogru('tarihsel sınıra teslim damgalanınca uyarı var',
+        /o\.teslimEdildiTarih\.slice\(0,7\)<=YON_TARIHSEL_SON\)toast/.test(H));
+      // 46d — silinmiş müşteri iskonto raporundan düşmüyor (KOŞTURMALI)
+      {
+        const gvG = (ad) => {
+          const i = H.indexOf('function ' + ad + '(');
+          let d = 0, b = false;
+          for (let k = i; k < H.length; k++) {
+            const c = H[k];
+            if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+          return '';
+        };
+        const ctxS = {
+          DB: {orders: [{id: 'o1', customerId: 'cSil', customer: 'Osman Gündoğdu', status: 'teslim',
+            teslimEdildiTarih: '2026-07-10', no: 9, musteriIsk: 5, total: 95000, lines: [{code: 'A', qty: 100}]}]},
+          custById: () => null,   // kart KALICI SİLİNMİŞ
+          satisMi: (o) => o.status === 'teslim',
+          satisTarihi: (o) => o.teslimEdildiTarih || '',
+          orderListTotal: () => 100000, orderNetHesap: (o) => +o.total,
+          orderTotal: (o) => +o.total, ilaveIskonto: () => 0, dbsIskonto: () => 0,
+          round2: (n) => Math.round((+n || 0) * 100) / 100, fmtN: (n) => String(n),
+        };
+        const MI2 = new Function(...Object.keys(ctxS), gvG('musteriIskontoData') + ';return musteriIskontoData;')(...Object.values(ctxS));
+        const R2 = MI2('2026-07-01', '2026-07-31');
+        esit('silinmiş müşterinin damgalı siparişi raporda KALIYOR', R2.rows.length, 1);
+        dogru('satır "kayıt silinmiş" etiketiyle', /kayıt silinmiş/.test(R2.rows[0].cust.name));
+        esit('iskontosu da sayılıyor', R2.rows[0].musIsk, 5000);
+      }
+      // 46e — tasarım notları yerinde (pazarlık/DBS prim tabanını düşürmez — firma kararı kapısı)
+      dogru('prim tasarım notu kodda', /manuel \(pazarlık\) fatura ve DBS\n\s*\/\/ indirimi prim tabanını DÜŞÜRMEZ/.test(H));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',

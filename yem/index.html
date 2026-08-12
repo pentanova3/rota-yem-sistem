@@ -999,7 +999,7 @@ function dbsOran(o){
     if(_e&&(_e.customerId===''||_e.customerId==null)&&o.customerId&&_e.dbsOran!=null&&_e.dbsOran!=='')return +_e.dbsOran||0;
     return dbsOranDamgaHesap(o);   // önizleme = kaydedilecek değer (dbsOranBaz dahil)
   }
-  if(o.dbsOran!=null&&o.dbsOran!=='')return +o.dbsOran||0;
+  if(o.dbsOran!=null&&o.dbsOran!=='')return Math.max(0,Math.min(100,+o.dbsOran||0));   // bozuk damga kelepçesi (TMR aynası)
   if(o.id)return 0;
   return dbsAliciAktif(o)?dbsOranAyar():0;
 }
