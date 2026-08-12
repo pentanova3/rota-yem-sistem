@@ -10,7 +10,7 @@ const ORTAK = ['round2', 'odemeTipiOf', 'dbsAliciAktif', 'dbsOranAyar', 'dbsOran
   'ordKayit', 'vadeDegistiMi', 'aliciDegistiMi', 'imeceOranSip', 'imeceFark',
   'imeceEksikFiyat', 'imeceElleFiyatli', 'dbsOranDamgaHesap', 'odemeDamgala'];
 // YALNIZ TMR'de aranan yeni İMECE hesap motoru (Yem altyapısı sonra kurulacak — firma kararı)
-const TMR_IMECE = ['ordTaban', 'manuelFatura', 'faturaArtisi', 'imeceKirp', 'imeceManuelMi', 'imeceSeciliMi', 'imeceSecilebilirMi',
+const TMR_IMECE = ['fiyatsizEskiTotal', 'ordTaban', 'manuelFatura', 'faturaArtisi', 'imeceKirp', 'imeceManuelMi', 'imeceSeciliMi', 'imeceSecilebilirMi',
   'imeceBirimVade', 'imeceSatirTutar', 'imeceOranKolon', 'imeceVadeToplam', 'imeceAnaTutar',
   'imeceKartTutar', 'imeceKismiMi', 'imeceVadeTabani', 'imeceNakitKalan',   // kısmi İMECE (08.08)
   'imeceFarkAy', 'imeceGenelToplam', 'listeBirimFiyat', 'orderListKademe', 'orderListTotal', 'brutListeDamga'];
@@ -1879,7 +1879,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         tonOf: (c, q) => (+q || 0) * (URUN[c] || 25) / 1000,
         tonajHedefMap: () => ({}),
       };
-      return new Function(...Object.keys(ort), KURAL + '\n' + govde('tonajData') + '\nreturn tonajData();')(...Object.values(ort));
+      return new Function(...Object.keys(ort), KURAL + '\n' + govde('lineTon') + '\n' + govde('tonajData') + '\nreturn tonajData();')(...Object.values(ort));
     };
     // no, sipariş günü, durum, adet, [fiilen teslim günü]
     const S = (no, gun, durum, adet, teslimG) => Object.assign(
@@ -2805,8 +2805,9 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         const ctxN = {
           lineUnit: (l) => (l.price == null ? 999 : (+l.price || 0)),   // canlı ürün fiyatı SAPTIRILDI
           editOrder: undefined,
+          round2: (n) => Math.round((+n || 0) * 100) / 100,
         };
-        const ON = new Function(...Object.keys(ctxN), gvC(H, 'orderNetHesap') + ';return orderNetHesap;')(...Object.values(ctxN));
+        const ON = new Function(...Object.keys(ctxN), gvC(H, 'fiyatsizEskiTotal') + gvC(H, 'orderNetHesap') + ';return orderNetHesap;')(...Object.values(ctxN));
         esit('fiyatsız eski kayıt: kayıtlı total esas (999×100 DEĞİL)',
           ON({lines: [{code: 'A', qty: 100}], total: 90000}), 90000);
         esit('fiyatı damgalı kayıt: satırlardan', ON({lines: [{code: 'A', qty: 100, price: 800}], total: 90000}), 80000);
@@ -2820,7 +2821,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         (FN5.match(/\(\+l\.kg > 0\) \? \(\+l\.kg\) : prodKgOf\(DB\.products, l\.code\)/g) || []).length === 7);
       {
         const ctxT2 = {tonOf: (c, q) => (+q || 0) * 25 / 1000};
-        const OT = new Function(...Object.keys(ctxT2), gvC(H, 'orderTon') + ';return orderTon;')(...Object.values(ctxT2));
+        const OT = new Function(...Object.keys(ctxT2), gvC(H, 'lineTon') + gvC(H, 'orderTon') + ';return orderTon;')(...Object.values(ctxT2));
         esit('kg damgalı satır: 100×30/1000', OT({lines: [{code: 'A', qty: 100, kg: 30}]}), 3);
         esit('damgasız satır ürün kartına düşer (25)', OT({lines: [{code: 'A', qty: 100}]}), 2.5);
       }
@@ -2915,6 +2916,117 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         uyari.alert = ''; DT('p1');   // 23.03 tarifesi: penceresi 23.03–03.08; sipariş yok → onaya düşer
         dogru('penceresi boş tarife normal onay akışında', uyari.alert === '' && uyari.confirm === 1);
       }
+    }
+
+    // ══ 44 · KG DAMGASI AİLESİ — tüm tonaj yüzeyleri tek kapıda (taze denetim) ══════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const YEM2 = fsx.readFileSync(pth.join(__dirname, '..', 'yem', 'index.html'), 'utf8');
+      const gvE = (kaynak, ad) => {
+        const i = kaynak.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < kaynak.length; k++) {
+          const c = kaynak[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return kaynak.slice(i, k + 1); } }
+        return '';
+      };
+      // TMR: satır bağlamında DOĞRUDAN tonOf çağrısı kalmadı (tek istisna: ön sipariş
+      // tahmini — orada sipariş yok, damga olamaz). Yeni bir toplayıcı tonOf(l.code,...)
+      // yazarsa bu sayaç patlar ve o yüzey damgayı atlıyor demektir.
+      dogru('TMR satır-bağlamlı tonOf çağrısı yalnız preOrderTon',
+        (H.match(/tonOf\(l\.code/g) || []).length === 3 &&      // yorum + lineTon içi + preOrderTon
+        /function lineTon\(l\)/.test(H));
+      dogru('tonajData lineTon kullanıyor (Tonaj ekranı ↔ Telegram artık aynı)',
+        !/tonOf\(l\.code/.test(gvE(H, 'tonajData')) && /lineTon\(l\)/.test(gvE(H, 'tonajData')));
+      dogru('yönetici raporu canlı serisi lineTon kullanıyor',
+        /const kg=lineTon\(l\)\*1000;/.test(H));
+      {
+        const ctxL = {tonOf: (c, q) => (+q || 0) * 25 / 1000};
+        const LT = new Function(...Object.keys(ctxL), gvE(H, 'lineTon') + ';return lineTon;')(...Object.values(ctxL));
+        esit('kg damgalı satır: 100×30 kg = 3 t (kart 25 dese de)', LT({code: 'A', qty: 100, kg: 30}), 3);
+        esit('damgasız satır ürün kartına düşer', LT({code: 'A', qty: 100}), 2.5);
+        esit('kodsuz satır 0', LT({qty: 100, kg: 30}), 0);
+      }
+      // YEM: orderKg damga öncelikli (kg-nakliye matrahı buradan geçer)
+      {
+        const ctxY = {prodByCode: () => ({kg: 50})};
+        const OKG = new Function(...Object.keys(ctxY), gvE(YEM2, 'orderKg') + ';return orderKg;')(...Object.values(ctxY));
+        esit('Yem: damgalı satır 40×45 kg (kart 50 dese de)', OKG({lines: [{code: 'B', qty: 40, kg: 45}]}), 1800);
+        esit('Yem: damgasız satır kart 50', OKG({lines: [{code: 'B', qty: 40}]}), 2000);
+        // FATURA ETKİSİ: kg-nakliye 2 ₺/kg — damga kartı değişiminden korur
+        const nakliye = (kgToplam) => kgToplam * 2;
+        esit('kg-nakliye matrahı damgayla sabit', nakliye(OKG({lines: [{code: 'B', qty: 40, kg: 45}]})), 3600);
+      }
+      dogru('Yem saveOrder çuval kg damgalıyor',
+        /if\(l\.kg==null\|\|l\.kg===''\)\{const p=prodByCode\(l\.code\);l\.kg=\(p&&\+p\.kg\)\|\|0;\}/.test(YEM2));
+      dogru('Yem Müşteri Raporu ürün detayı damga öncelikli',
+        /const _dk=\+\(\(l&&l\.kg\)\|\|0\);const p=prodByCode\(l\.code\),kg=\(\+l\.qty\|\|0\)\*\(_dk>0\?_dk:\(\(p&&p\.kg\)\|\|0\)\)/.test(YEM2));
+      // Muhasebe TR-para çözücüsü (1. adım) — koşturmalı
+      {
+        const MUH = fsx.readFileSync(pth.join(__dirname, '..', 'muhasebe', 'index.html'), 'utf8');
+        const TT = new Function(gvE(MUH, 'trTutar') + ';return trTutar;')();
+        esit('muhasebe: "12.500" → 12.500 TL (₺12,50 DEĞİL)', TT('12.500'), 12500);
+        esit('muhasebe: "12.500,50"', TT('12.500,50'), 12500.5);
+        esit('muhasebe: "12500.5" (EN biçimi de doğru)', TT('12500.5'), 12500.5);
+        dogru('Ödeme Ekle trTutar kullanıyor + 0 reddi',
+          /const tutar=trTutar\(prompt\('Tutar \(₺\):',''\)\);/.test(MUH) && /Tutar okunamadı/.test(MUH));
+        dogru('hücre ve açılış bakiyesi de trTutar', /const val=trTutar\(inp\.value\);/.test(MUH) &&
+          /DB\.meta\.acilisBakiye=trTutar\(v\);/.test(MUH));
+      }
+    }
+
+    // ══ 45 · SIRALI DÜZELTME TURU — dönem/tarih + fiyatsız kayıt (taze denetim) ═════════
+    {
+      const fsx = require('fs'), pth = require('path');
+      const YEM3 = fsx.readFileSync(pth.join(__dirname, '..', 'yem', 'index.html'), 'utf8');
+      const ARA3 = fsx.readFileSync(pth.join(__dirname, '..', 'arama.js'), 'utf8');
+      const gvF = (kaynak, ad) => {
+        const i = kaynak.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < kaynak.length; k++) {
+          const c = kaynak[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return kaynak.slice(i, k + 1); } }
+        return '';
+      };
+      // Yem Genel Rapor: yıl VE ay aynı eksende (teslim tarihi)
+      dogru('Yem aylık kırılım teslim ayına bakıyor (yıl=teslim/ay=sipariş karışımı bitti)',
+        /satisTarihi\(o\)\.slice\(5,7\)===mv/.test(YEM3) && !/\(o\.date\|\|''\)\.slice\(5,7\)===mv/.test(YEM3));
+      // arama.js custById tanımlı ve çalışıyor
+      {
+        const CB = new Function('D', gvF(ARA3, 'custById') + ';return custById;')(
+          () => ({customers: [{id: 'c1', name: 'M', danismanId: 'd9'}]}));
+        dogru('arama custById tanımlı ve buluyor', CB('c1').danismanId === 'd9' && CB('yok') === null && CB('') === null);
+      }
+      // Yerel tarih: todayISO + isoYerel UTC'ye kaymıyor
+      {
+        const TI = new Function(gvF(H, 'todayISO') + ';return todayISO;')();
+        const d = new Date();
+        const beklenen = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        dogru('todayISO YEREL günü veriyor (UTC değil)', TI() === beklenen);
+        dogru('Yem todayISO da yerel', /function todayISO\(\)\{const d=new Date\(\);return d\.getFullYear\(\)/.test(YEM3));
+        const IY = new Function(gvF(H, 'isoYerel') + ';return isoYerel;')();
+        // TR (UTC+3) gece yarısı: toISOString bir önceki günü verirdi — isoYerel vermez
+        dogru('isoYerel ay başını kaydırmıyor', IY(new Date(2026, 6, 1)) === '2026-07-01');
+        dogru('setKomRange isoYerel kullanıyor, toISOString kalmadı',
+          /komRepFrom=isoYerel\(new Date\(n\.getFullYear\(\),n\.getMonth\(\),1\)\)/.test(H) &&
+          !/setKomRange[\s\S]{0,240}?toISOString/.test(H));
+      }
+      // Fiyatsız eski kayıt: tek kapı + çift-DBS yok
+      {
+        const ctxF = {
+          round2: (n) => Math.round((+n || 0) * 100) / 100,
+          orderNetHesap: () => { throw new Error('bu yola girmemeli'); },
+          dbsIskonto: () => { throw new Error('DBS ikinci kez uygulanmamalı'); },
+        };
+        const FE = new Function(...Object.keys(ctxF), gvF(H, 'fiyatsizEskiTotal') + gvF(H, 'orderNetDbs') +
+          ';return {fiyatsizEskiTotal, orderNetDbs};')(...Object.values(ctxF));
+        const eski = {lines: [{code: 'A', qty: 100}], total: 87300, dbsOran: 3};
+        esit('fiyatsız kayıtta net = kayıtlı total (DBS yeniden DÜŞÜLMEDEN)', FE.orderNetDbs(eski), 87300);
+        dogru('fiyatlı kayıt kapıya takılmıyor', FE.fiyatsizEskiTotal({lines: [{code: 'A', qty: 1, price: 5}], total: 9}) === null);
+        dogru('fiyatsız ama total 0 → kapı devrede değil', FE.fiyatsizEskiTotal({lines: [{code: 'A', qty: 1}], total: 0}) === null);
+      }
+      dogru('editör istisnası fiyatsız kayda uygulanmıyor (modaldan kaydet ciroyu sıfırlamaz)',
+        /const _fes=fiyatsizEskiTotal\(o\);if\(_fes!=null\)return _fes;/.test(H));
     }
 
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────

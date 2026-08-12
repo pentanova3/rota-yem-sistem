@@ -470,10 +470,28 @@ function drawChart(w){
 }
 
 // ============ ETKİLEŞİM ============
+// TÜRKÇE PARA ÇÖZÜCÜ (taze denetim 12.08): tüm tutar girişleri buradan geçer.
+// Eski hâller iki tuzaktaydı: Ödeme Ekle ham parseFloat kullanıyordu ("12.500" → ₺12,50 —
+// bin kat küçük kayıt!), hücre/açılış çözücüsü ise TÜM noktaları silip "12500.5"i 125005
+// yapıyordu. Kural (fiyatSayi ile aynı): SON ayraç, 1-2 haneli kuyruk bırakıyorsa ondalıktır;
+// aksi halde binlik ayracıdır. "12.500"→12500 · "12.500,50"→12500.5 · "12500.5"→12500.5
+function trTutar(v){
+  if(v==null||v==='')return 0;
+  if(typeof v==='number')return isFinite(v)?Math.round(v*100)/100:0;
+  let t=String(v).replace(/[^\d.,-]/g,'');
+  if(!t)return 0;
+  const son=Math.max(t.lastIndexOf(','),t.lastIndexOf('.'));
+  if(son>=0){
+    const tam=t.slice(0,son).replace(/[.,]/g,''),ond=t.slice(son+1).replace(/[.,]/g,'');
+    t=(ond.length&&ond.length<=2)?(tam+'.'+ond):(tam+ond);
+  }
+  const n=parseFloat(t);
+  return isFinite(n)?Math.round(n*100)/100:0;
+}
 function rawCell(inp){const d=inp.dataset.d,k=inp.dataset.k;const v=(DB.entries[d]||{})[k];inp.value=v?String(v):'';inp.select();}
 function setCell(inp){
   const d=inp.dataset.d,k=inp.dataset.k;
-  const val=parseFloat(String(inp.value).replace(/\./g,'').replace(',','.'))||0;
+  const val=trTutar(inp.value);
   DB.entries[d]=DB.entries[d]||{};
   if(val)DB.entries[d][k]=val; else delete DB.entries[d][k];
   if(!Object.keys(DB.entries[d]).length)delete DB.entries[d];
@@ -497,7 +515,7 @@ function delKat(tip,id){
 function setAcilis(){
   const v=prompt('Açılış bakiyesi (₺) — '+fmtDate(DB.meta.acilisTarih)+' tarihli başlangıç nakit:',DB.meta.acilisBakiye);
   if(v==null)return;
-  DB.meta.acilisBakiye=parseFloat(String(v).replace(/\./g,'').replace(',','.'))||0;
+  DB.meta.acilisBakiye=trTutar(v);
   saveDB();render();toast('Açılış bakiye güncellendi');
 }
 function addOdeme(){
@@ -505,7 +523,8 @@ function addOdeme(){
   const tarih=prompt('Tarih (GG.AA.YYYY):','');if(!tarih)return;
   const p=tarih.split('.');if(p.length!==3){toast('Tarih formatı hatalı');return;}
   const iso=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');
-  const tutar=parseFloat(prompt('Tutar (₺):','')||'0')||0;
+  const tutar=trTutar(prompt('Tutar (₺):',''));
+  if(!(tutar>0)){toast('Tutar okunamadı — örn. 12.500 ya da 12.500,50 yazın');return;}
   DB.odemeler=DB.odemeler||[];
   DB.odemeler.push({id:'o'+Math.random().toString(36).slice(2,7),ad:ad.trim(),tarih:iso,tutar,kat:'Ödeme',odendi:false});
   saveDB();render();toast('Ödeme eklendi');

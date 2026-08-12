@@ -65,6 +65,9 @@ async function loadData(){
   return CACHE;
 }
 const D=()=>CACHE;
+// custById: TMR müşteri kartı (taze denetim 12.08 — TANIMSIZDI: danışmansız müşteri
+// siparişi olan veri setinde prim araması ReferenceError ile çöküyordu).
+function custById(id){return id?((D().customers||[]).find(c=>c&&c.id===id)||null):null;}
 
 // ---------- TMR hesap portları (siparis-takip ile birebir) ----------
 const prodByCode=c=>D().products.find(p=>norm(p.code)===norm(c))||null;

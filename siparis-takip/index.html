@@ -808,7 +808,7 @@ function fmtTL(n){n=+n||0;return '₺'+n.toLocaleString('tr-TR',{maximumFraction
 function fmtN(n){n=+n||0;return n.toLocaleString('tr-TR',{maximumFractionDigits:2})}
 function fmtDate(d){if(!d)return '—';const dt=new Date(d);if(isNaN(dt))return d;return dt.toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric'})}
 function fmtDateShort(d){if(!d)return '';const dt=new Date(d);return `${String(dt.getDate()).padStart(2,'0')}.${String(dt.getMonth()+1).padStart(2,'0')}`}
-function todayISO(){return new Date().toISOString().split('T')[0]}
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}   // YEREL gün — UTC sürümü gece 00:00-03:00 arasında teslimi ÖNCEKİ güne/aya damgalıyordu
 function addDaysISO(iso,days){const d=new Date(iso||todayISO());if(isNaN(d))return iso;d.setDate(d.getDate()+(+days||0));return d.toISOString().split('T')[0]}
 function fmtDateTime(d){if(!d)return '—';const x=new Date(d);if(isNaN(x))return fmtDate(d);return x.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 function nextOrderNo(){return (DB.orders||[]).reduce((m,o)=>Math.max(m,+o.no||0),0)+1}
@@ -944,12 +944,11 @@ function round2(x){return Math.round((+x||0)*100)/100;}
 // Hesaplanan net (liste × iskonto sonrası birim × miktar). Manuel fatura tutarı bunu EZER.
 function orderNetHesap(o){
   if(o.lines&&o.lines.length){
-    let t=0,fiyatli=false,fiyatsizVar=false;
-    o.lines.forEach(l=>{if(l&&l.code&&l.price==null)fiyatsizVar=true;const u=lineUnit(l,o.fiyatKademe);if(u>0)fiyatli=true;t+=(+l.qty||0)*u;});
-    // FİYAT ALANI OLMAYAN eski satır (l.price hiç yazılmamış) lineUnit'te CANLI ürün fiyatına
-    // düşer — ürün kartındaki zam geçmiş cironun hesabını kaydırırdı (denetim 12.08). Böyle
-    // satır varsa kayıtlı o.total esastır; açık formda değil (orada satırlar tazelenir).
-    if(fiyatsizVar&&+o.total>0&&!(typeof editOrder!=='undefined'&&editOrder&&o===editOrder))return +o.total;
+    // FİYAT ALANI OLMAYAN eski satır: kayıtlı o.total esastır — EDİTÖRDE DE (modal açıp
+    // kaydetmek ciroyu sıfırlıyordu/kaydırıyordu). Tek kaynak: fiyatsizEskiTotal.
+    const _fes=fiyatsizEskiTotal(o);if(_fes!=null)return _fes;
+    let t=0,fiyatli=false;
+    o.lines.forEach(l=>{const u=lineUnit(l,o.fiyatKademe);if(u>0)fiyatli=true;t+=(+l.qty||0)*u;});
     if(fiyatli)return t;                                    // fiyat girilmiş → 0'lık satır GERÇEKTEN 0'dır
     // AÇIK FORMDA bayat damgalı tutarı gösterme: satırlar sıfırlanmışken eski toplamı göstermek
     // hatayı GİZLİYORDU (ekranda 90.000 ₺, kayıtta 0 ₺'lık satır). Yalnız fiyatsız ESKİ kayıtta düş.
@@ -1237,7 +1236,20 @@ function dbsOranKaydet(v){
   DB.meta=DB.meta||{};DB.meta.dbsOran=n;
   logAct('DBS indirim oranı: %'+fmtN(n));saveDB();toast('DBS oranı %'+fmtN(n)+' olarak kaydedildi');render();
 }
-function orderNetDbs(o){return round2(orderNetHesap(o)-dbsIskonto(o));}
+// FİYATSIZ ESKİ KAYIT (taze denetim 12.08): l.price alanı HİÇ olmayan satır taşıyan sipariş.
+// Böyle kayıtta tek güvenilir para o.total damgasıdır. İKİ tuzak birden kapanır:
+// 1) Modalda açıp kaydetmek ciroyu SIFIRLIYOR/canlı ürün fiyatına kaydırıyordu (editör
+//    istisnası fiyatsız kayda da uygulanıyordu) — artık editörde de damga görünür/korunur.
+// 2) o.total DBS DÜŞÜLMÜŞ nettir; orderNetHesap'tan dönerse orderNetDbs DBS'yi İKİNCİ KEZ
+//    düşerdi (latent çift indirim) — bu yüzden kapı orderNetDbs'te, indirim ATLANARAK kapanır.
+// Kullanıcı satırlara gerçek fiyat girince (l.price != null) sipariş normal akışa döner.
+function fiyatsizEskiTotal(o){
+  if(!(o&&o.lines&&o.lines.length))return null;
+  let var1=false;
+  for(let i=0;i<o.lines.length;i++){const l=o.lines[i];if(l&&l.code&&l.price==null){var1=true;break;}}
+  return (var1&&+o.total>0)?round2(+o.total):null;
+}
+function orderNetDbs(o){const f=fiyatsizEskiTotal(o);if(f!=null)return f;return round2(orderNetHesap(o)-dbsIskonto(o));}
 // İLAVE İSKONTO: (DBS sonrası net) − manuel (firmaya verilen ek indirim). İskonto & Komisyon'da raporlanır.
 function ilaveIskonto(o){const m=manuelFatura(o);if(m==null)return 0;return Math.max(0,round2(orderNetDbs(o)-m));}
 // TERS YÖN: manuel tutar hesaplanandan YÜKSEKse verilen bir iskonto değil, bir FATURA ARTIŞIdır.
@@ -1424,7 +1436,12 @@ let panelWeekStart=null,panelChart=null,panelGrafik=null;   // panelGrafik: 'cir
 // KG DAMGASI ÖNCELİKLİ (denetim 12.08): çuval kg'si sipariş anında satıra yazılır (l.kg).
 // Ürün kartında ambalaj sonradan değiştirilirse (25 kg → 30 kg) GEÇMİŞ tonaj kaymaz.
 // Damgasız eski satırlar ürün kartına düşer (bilinen sınır).
-function orderTon(o){return (o&&Array.isArray(o.lines)?o.lines:[]).reduce((s,l)=>s+(l&&l.code?((+l.kg>0)?(+l.qty||0)*(+l.kg)/1000:tonOf(l.code,l.qty)):0),0);}
+// SATIR TONU — TEK KAPI (taze denetim 12.08): kg damgası (l.kg) öncelikli, damgasız eski
+// satır ürün kartına düşer. tonOf(l.code,...) DOĞRUDAN çağrılırsa damga atlanır ve ambalaj
+// değişince o yüzey diğerlerinden ayrışır (Tonaj ekranı ↔ Telegram çelişkisi). Satır nesnesi
+// olan HER yer lineTon kullanır; ürün satırı OLMAYAN bağlam (ön sipariş tahmini) tonOf'ta kalır.
+function lineTon(l){return l&&l.code?((+l.kg>0)?(+l.qty||0)*(+l.kg)/1000:tonOf(l.code,l.qty)):0;}
+function orderTon(o){return (o&&Array.isArray(o.lines)?o.lines:[]).reduce((s,l)=>s+lineTon(l),0);}
 function panelGrafikSec(k){panelGrafik=k;render();}
 function mondayOf(dateStr){const dt=new Date(dateStr);const dow=dt.getDay();const off=dow===0?-6:1-dow;const m=new Date(dt);m.setDate(dt.getDate()+off);m.setHours(0,0,0,0);return m}
 function isoOf(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -3468,7 +3485,7 @@ function custRaporHTML(){
     const yil=satisTarihi(o).slice(0,4), ay=satisTarihi(o).slice(5,7);
     (o.lines||[]).forEach(l=>{if(!l.code)return;const qy=+l.qty||0;
       e.yil[yil]=(e.yil[yil]||0)+qy;
-      if(yil===Y){e.ay[ay]=(e.ay[ay]||0)+qy;e.urun[l.code]=(e.urun[l.code]||0)+qy;e.toplam+=qy;e.ton+=tonOf(l.code,qy);}
+      if(yil===Y){e.ay[ay]=(e.ay[ay]||0)+qy;e.urun[l.code]=(e.urun[l.code]||0)+qy;e.toplam+=qy;e.ton+=lineTon(l);}
     });
   });
   const rows=Object.values(M).filter(e=>e.toplam>0||Object.keys(e.yil).length).sort((a,b)=>b.toplam-a.toplam);
@@ -3542,7 +3559,7 @@ function openCust(id){
       ${o.id?(function(){
         const aktif=orders.filter(x=>x.status!=='iptal');
         let cuval=0,ton=0;const byUrun={};
-        aktif.forEach(x=>(x.lines||[]).forEach(l=>{if(!l.code)return;const q=+l.qty||0;cuval+=q;ton+=tonOf(l.code,q);byUrun[l.code]=(byUrun[l.code]||0)+q;}));
+        aktif.forEach(x=>(x.lines||[]).forEach(l=>{if(!l.code)return;const q=+l.qty||0;cuval+=q;ton+=lineTon(l);byUrun[l.code]=(byUrun[l.code]||0)+q;}));
         const topU=Object.entries(byUrun).sort((a,b)=>b[1]-a[1]).slice(0,5);
         const stat=(k,v)=>`<div style="flex:1;min-width:110px;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:8px 11px"><div style="font-size:9.5px;font-weight:700;color:var(--slate-400);text-transform:uppercase;letter-spacing:.04em">${k}</div><div style="font-size:14px;font-weight:800;color:var(--blue-900)">${v}</div></div>`;
         return `<div class="sub-hd">Müşteri İstatistikleri <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--slate-400);font-size:10.5px">— iptaller hariç</span></div>
@@ -3569,7 +3586,7 @@ function musteriSiparisGecmisiYazdir(custId){
   if(!orders.length){toast('Bu müşterinin siparişi yok');return}
   const aktif=orders.filter(x=>x.status!=='iptal');
   let cuval=0,ton=0,tutar=0;
-  aktif.forEach(x=>{(x.lines||[]).forEach(l=>{if(!l.code)return;const q=+l.qty||0;cuval+=q;ton+=tonOf(l.code,q);});tutar+=orderTotal(x);});
+  aktif.forEach(x=>{(x.lines||[]).forEach(l=>{if(!l.code)return;const q=+l.qty||0;cuval+=q;ton+=lineTon(l);});tutar+=orderTotal(x);});
   const fiyat=canSeePrice();
   const satirlar=orders.map(o=>{
     const urun=(o.lines||[]).map(l=>l.code+' ×'+fmtN(l.qty)).join(', ')||'—';
@@ -4042,7 +4059,11 @@ function renderKomisyon(c,tb){
   }}
   c.innerHTML=h;
 }
-function setKomRange(t){const n=new Date();if(t==='ay'){komRepFrom=new Date(n.getFullYear(),n.getMonth(),1).toISOString().split('T')[0];komRepTo=todayISO()}else{komRepFrom=new Date(n.getFullYear(),0,1).toISOString().split('T')[0];komRepTo=todayISO()}render()}
+// YEREL tarih penceresi (taze denetim 12.08): toISOString() UTC'ye çevirir — yerel 1 Temmuz
+// 00:00, UTC'de 30 Haziran 21:00'dır; "Bu Ay" penceresi 30 Haziran'ı da kapsıyor ve önceki
+// dönemin son günü hakedişe İKİNCİ KEZ giriyordu (iki dönem raporu üst üste toplanınca çift).
+function isoYerel(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function setKomRange(t){const n=new Date();if(t==='ay'){komRepFrom=isoYerel(new Date(n.getFullYear(),n.getMonth(),1));komRepTo=todayISO()}else{komRepFrom=isoYerel(new Date(n.getFullYear(),0,1));komRepTo=todayISO()}render()}
 function komDetayData(komId,from,to){
   const kom=komById(komId);
   // BAYİ İSKONTO DÖKÜMÜ — alımlar + fatura anında uygulanan iskonto (seçili yıl, çeyrek özetli)
@@ -5062,16 +5083,16 @@ function tonajData(){
   const yearOrders=orders.filter(o=>_t(o).slice(0,4)===Y);
   // aylık: ay → ürün → ton
   const byMonthProd={},byMonthTot={},prodTotY={};
-  yearOrders.forEach(o=>{const m=_t(o).slice(5,7);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byMonthProd[m]=byMonthProd[m]||{})[l.code]=(byMonthProd[m][l.code]||0)+t;byMonthTot[m]=(byMonthTot[m]||0)+t;prodTotY[l.code]=(prodTotY[l.code]||0)+t;});});
+  yearOrders.forEach(o=>{const m=_t(o).slice(5,7);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=lineTon(l);(byMonthProd[m]=byMonthProd[m]||{})[l.code]=(byMonthProd[m][l.code]||0)+t;byMonthTot[m]=(byMonthTot[m]||0)+t;prodTotY[l.code]=(prodTotY[l.code]||0)+t;});});
   const yearTot=Object.values(byMonthTot).reduce((a,b)=>a+b,0);
   // günlük (seçili ay): gün → ürün → ton
   const daysInM=new Date(+Y,+M,0).getDate();
   const byDayProd={},byDayTot={},prodTotM={};
-  yearOrders.filter(o=>_t(o).slice(5,7)===M).forEach(o=>{const d=_t(o).slice(8,10);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byDayProd[d]=byDayProd[d]||{})[l.code]=(byDayProd[d][l.code]||0)+t;byDayTot[d]=(byDayTot[d]||0)+t;prodTotM[l.code]=(prodTotM[l.code]||0)+t;});});
+  yearOrders.filter(o=>_t(o).slice(5,7)===M).forEach(o=>{const d=_t(o).slice(8,10);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=lineTon(l);(byDayProd[d]=byDayProd[d]||{})[l.code]=(byDayProd[d][l.code]||0)+t;byDayTot[d]=(byDayTot[d]||0)+t;prodTotM[l.code]=(prodTotM[l.code]||0)+t;});});
   const monthTot=Object.values(byDayTot).reduce((a,b)=>a+b,0);
   // yıllık: yıl → ürün → ton
   const byYearProd={},byYearTot={},prodAll={};
-  orders.forEach(o=>{const y=_t(o).slice(0,4);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=tonOf(l.code,l.qty);(byYearProd[y]=byYearProd[y]||{})[l.code]=(byYearProd[y][l.code]||0)+t;byYearTot[y]=(byYearTot[y]||0)+t;prodAll[l.code]=(prodAll[l.code]||0)+t;});});
+  orders.forEach(o=>{const y=_t(o).slice(0,4);(o.lines||[]).forEach(l=>{if(!l.code)return;const t=lineTon(l);(byYearProd[y]=byYearProd[y]||{})[l.code]=(byYearProd[y][l.code]||0)+t;byYearTot[y]=(byYearTot[y]||0)+t;prodAll[l.code]=(prodAll[l.code]||0)+t;});});
   // hedef & tempo
   const H=tonajHedefMap();
   const isCurMonth=(Y===String(now.getFullYear())&&M===String(now.getMonth()+1).padStart(2,'0'));
@@ -5085,7 +5106,7 @@ function tonajData(){
   let hedefYtoplam=0;for(let i=1;i<=12;i++){hedefYtoplam+=(+H[Y+'-'+String(i).padStart(2,'0')]||0);}
   // Seçili ayın iki tabanı yan yana — bekleyen sipariş KPI'da görünsün (taban seçiminden BAĞIMSIZ hesaplanır)
   const _ayda=(o)=>_t(o).slice(0,4)===Y&&_t(o).slice(5,7)===M;
-  const _ton=(a)=>a.reduce((s,o)=>s+(o.lines||[]).reduce((x,l)=>x+(l&&l.code?tonOf(l.code,l.qty):0),0),0);
+  const _ton=(a)=>a.reduce((s,o)=>s+(o.lines||[]).reduce((x,l)=>x+lineTon(l),0),0);
   const aySiparis=_ton(tumu.filter(_ayda)),ayCikan=_ton(tumu.filter(o=>_ayda(o)&&satisMi(o)));
   const ayBekleyen=aySiparis-ayCikan;
   return {now,years,Y,M,byMonthProd,byMonthTot,prodTotY,yearTot,daysInM,byDayProd,byDayTot,prodTotM,monthTot,byYearProd,byYearTot,prodAll,H,isCurMonth,dayOfM,aktifGun,takvimOrt,proj,hedefM,kalanGun,gerekliTempo,hedefYtoplam,tabanSevk,aySiparis,ayCikan,ayBekleyen};
@@ -5232,7 +5253,7 @@ function yonVeri(){
     const s=seri[k]=seri[k]||{urunKg:{},toplamKg:0,kaynak:'canli',tamam:k<buAy};
     (o.lines||[]).forEach(l=>{
       if(!l.code)return;
-      const kg=(+l.qty||0)*prodKg(l.code);      // tonaj sekmesiyle AYNI çevrim zinciri
+      const kg=lineTon(l)*1000;      // tonaj sekmesiyle AYNI çevrim zinciri (kg damgası öncelikli)
       s.urunKg[l.code]=(s.urunKg[l.code]||0)+kg;s.toplamKg+=kg;
     });
   });
