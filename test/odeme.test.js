@@ -3166,6 +3166,73 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /ds\.src==='yem'\s*\n\s*\?\(\+l\.qty\|\|0\)\*\(\(\+l\.kg>0\)\?\+l\.kg:yemKg\(l\.code\)\)\/1000\s*\n\s*:\(\(\+l\.kg>0\)\?\(\+l\.qty\|\|0\)\*\(\+l\.kg\)\/1000:tonOf\(l\.code,l\.qty\)\)/.test(ARA4));
     }
 
+    // ══ 49 · SİPARİŞ AKIŞ HUNİSİ (Raporlar → Sipariş Akışı) ════════════════════════════
+    {
+      const gvJ = (ad) => {
+        const i = H.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) {
+          const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+      const MUH = {o2: {by: 'Ayşe', ts: '2026-08-03T10:00:00Z'}, o5: {by: 'Ayşe', ts: '2026-08-02T09:00:00Z'}};
+      const FAB = {o5: {by: 'Veli', ts: '2026-08-04T09:00:00Z'}};
+      const ctxA = {
+        DB: {orders: [
+          // o1: beklemede, onay kaydı yok → MUHASEBEDE bekliyor
+          {id: 'o1', date: '2026-08-01', createdAt: '2026-08-01', status: 'beklemede', total: 10000},
+          // o2: muhasebe onaylı (kayıt), statü beklemede → ÜRETİMDE bekliyor · muh süresi 2 gün
+          {id: 'o2', date: '2026-08-01', createdAt: '2026-08-01', status: 'beklemede', total: 20000},
+          // o3: statü hazir (eski kayıt, onay kaydı yok — statü kanıtı) → SEVKTE bekliyor
+          {id: 'o3', date: '2026-08-02', createdAt: '2026-08-02', status: 'hazir', total: 30000},
+          // o4: sevk → TESLİMDE bekliyor
+          {id: 'o4', date: '2026-08-03', createdAt: '2026-08-03', status: 'sevk', sevkTarih: '2026-08-05', total: 40000},
+          // o5: teslim — tam damga zinciri (muh 1g, üretim 2g, sevk 2g, teslim 3g)
+          {id: 'o5', date: '2026-08-01', createdAt: '2026-08-01', status: 'teslim',
+            sevkTarih: '2026-08-06', teslimEdildiTarih: '2026-08-09', total: 50000},
+          // o6: iptal
+          {id: 'o6', date: '2026-08-04', createdAt: '2026-08-04', status: 'iptal', total: 60000},
+          // o7: geçmiş giriş, teslim — huniye girer, süre ortalamasına GİRMEZ
+          {id: 'o7', date: '2026-08-05', createdAt: '2026-08-05', status: 'teslim', gecmisKayit: true,
+            teslimEdildiTarih: '2026-08-05', total: 70000},
+          // o8: başka ay — kohort DIŞI
+          {id: 'o8', date: '2026-07-10', createdAt: '2026-07-10', status: 'teslim', total: 1},
+        ]},
+        muhasebeOnayRec: (o) => MUH[o.id] || null,
+        fabrikaOnayRec: (o) => FAB[o.id] || null,
+        orderTotal: (o) => +o.total || 0,
+      };
+      const AD = new Function(...Object.keys(ctxA), gvJ('akisData') + ';return akisData;')(...Object.values(ctxA));
+      const A = AD('2026', '08');
+      esit('kohort: yalnız Ağustos siparişleri (7)', A.toplam, 7);
+      esit('aktif = toplam − iptal', A.aktif, 6);
+      esit('iptal kuyruğu: 1 · 60.000', A.iptal.adet * 100000 + A.iptal.tutar, 160000);
+      // aşama geçenler: muh: o2,o3,o4,o5,o7=5 · üretim: o3,o4,o5,o7=4 · sevk: o4,o5,o7=3 · teslim: o5,o7=2
+      esit('muhasebeyi geçen 5', A.asama[0].gecen, 5);
+      esit('üretimi geçen 4', A.asama[1].gecen, 4);
+      esit('sevki geçen 3', A.asama[2].gecen, 3);
+      esit('teslim olan 2', A.asama[3].gecen, 2);
+      // bekleyenler: muh o1 · üretim o2 · sevk o3 · teslim o4
+      esit('muhasebede bekleyen 1 · 10.000', A.asama[0].bekAdet * 100000 + A.asama[0].bekTutar, 110000);
+      esit('üretimde bekleyen 1 · 20.000', A.asama[1].bekAdet * 100000 + A.asama[1].bekTutar, 120000);
+      esit('sevkte bekleyen 1 · 30.000', A.asama[2].bekAdet * 100000 + A.asama[2].bekTutar, 130000);
+      esit('teslimde bekleyen 1 · 40.000', A.asama[3].bekAdet * 100000 + A.asama[3].bekTutar, 140000);
+      // süreler: muh = o2(2g)+o5(1g) ort 1.5 · üretim = o5(2g) · sevk = o5(2g) · teslim = o5(3g)
+      esit('muhasebe ort. süresi 1,5 gün (o2:2 + o5:1)', A.asama[0].ortGun, 1.5);
+      esit('üretim ort. 2 gün', A.asama[1].ortGun, 2);
+      esit('sevk ort. 2 gün', A.asama[2].ortGun, 2);
+      esit('teslim ort. 3 gün', A.asama[3].ortGun, 3);
+      dogru('geçmiş giriş süre örneklemine GİRMEDİ (teslim örneklem=1)',
+        A.gecmisGiris === 1 && A.asama[3].orneklem === 1);
+      // sekme bağlantısı
+      dogru('Raporlar sekmelerine "akis" eklendi (çark anahtarıyla kapatılabilir)',
+        /const _repGor=\['tonaj','genel','akis'\]/.test(H) && /_rtb\('akis','Sipariş Akışı'\)/.test(H));
+      dogru('akis dalı render ediliyor', /if\(repTab==='akis'\)\{c\.innerHTML=_tabs\+akisHuniHTML\(\);/.test(H));
+      dogru('kohort ekseni ekranda açıklanıyor', /sipariş tarihine göre<\/span>/.test(gvJ('akisHuniHTML')) ||
+        /kohortu · sipariş tarihine göre/.test(H));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
