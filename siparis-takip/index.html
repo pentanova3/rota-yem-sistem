@@ -122,6 +122,10 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .kgrup.bayi .kgrup-hd{color:#92400E}
 .kgrup.bayi .kdot{background:#92400E}
 @media(max-width:1100px){.kgruplar{grid-template-columns:1fr}.kgrup.dan .kgrup-bd{grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}}
+.stok-in{width:76px;padding:5px 7px;border:1px solid transparent;border-radius:6px;background:transparent;
+  font:inherit;font-weight:700;text-align:right;cursor:pointer;transition:border-color .12s,background .12s}
+.stok-in:hover{border-color:var(--slate-300);background:#F8FAFC}
+.stok-in:focus{border-color:var(--blue-700);background:#fff;outline:none;cursor:text;box-shadow:0 0 0 3px rgba(29,78,216,.09)}
 /* ── Sipariş Akış Hunisi (Raporlar → Sipariş Akışı) — düz, lacivert, ikonsuz ── */
 .akis{max-width:880px;margin:0 auto}
 .akis-sat{display:grid;grid-template-columns:150px 1fr 190px;gap:12px;align-items:center;margin-bottom:9px}
@@ -4906,40 +4910,59 @@ function renderStock(c,tb){
     const kalan=stok+uretim-cikis-fire;
     const warn=kalan>0&&kalan<20,neg=kalan<0;
     const kalanColor=neg?'color:#B91C1C':warn?'color:var(--red-700)':kalan===0?'color:var(--slate-400)':'';
-    const act=canEdit()?`<td class="num" style="white-space:nowrap"><button onclick="stokUretim('${esc(p.code)}')" style="border:1px solid #BBF7D0;background:#F0FDF4;color:#15803D;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">+ Üretim</button> <button onclick="stokCikis('${esc(p.code)}')" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">− Çıkış</button> <button onclick="stokFire('${esc(p.code)}')" style="border:1px solid #FED7AA;background:#FFF7ED;color:#C2410C;font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;cursor:pointer">− Fire Çıkış</button></td>`:'';
-    return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(stok)}</td><td class="num" style="${uretim?'color:#15803D':''}">${uretim?'+'+fmtN(uretim):'0'}</td><td class="num" style="${cikis?'color:#B91C1C':''}">${cikis?'−'+fmtN(cikis):'0'}</td><td class="num" style="${fire?'color:#C2410C':''}">${fire?'−'+fmtN(fire):'0'}</td><td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td>${act}</tr>`;
+    // HÜCRE-İÇİ GİRİŞ (firma isteği 21.08): sağdaki üç buton yerine Üretim/Çıkış/Fire
+    // hücreleri doğrudan doldurulur — girilen değer o günün TOPLAMIDIR, kalan aynı
+    // mantıkla (Stok + Üretim − Çıkış − Fire) kendiliğinden ilerler.
+    const hucre=(alan,deger,renk)=>canEdit()
+      ?`<td class="num"><input class="stok-in" style="color:${deger?renk:'var(--slate-400)'}" inputmode="decimal" value="${deger?fmtN(deger):''}" placeholder="0" onfocus="this.value=${deger||0}||'';this.select()" onchange="stokHucre(this,'${esc(p.code)}','${alan}')" onkeydown="if(event.key==='Enter')this.blur()"></td>`
+      :`<td class="num" style="${deger?'color:'+renk:''}">${deger?(alan==='uretim'?'+':'−')+fmtN(deger):'0'}</td>`;
+    return `<tr><td><b>${esc(p.code)}</b></td><td class="num">${fmtN(stok)}</td>${hucre('uretim',uretim,'#15803D')}${hucre('cikis',cikis,'#B91C1C')}${hucre('fire',fire,'#C2410C')}<td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`;
   }).join('');
-  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Fire Çıkış</th><th class="num">Kalan</th><th>Tarih</th>${canEdit()?'<th class="num">İşlem</th>':''}</tr></thead><tbody>${rows}</tbody></table></div></div>
-  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> Üretimi elle girersiniz; müşteri çıkışı ve fire çıkışı stoğu düşürür. Fire çıkışta sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
+  let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Fire Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> Üretim/Çıkış/Fire hücrelerine tıklayıp günün TOPLAMINI yazın — kalan kendiliğinden ilerler, her değişiklik harekete işlenir. Fire artışında sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
   const moves=(DB.stockMoves||[]).slice(0,15);
   if(moves.length)h+=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Son Stok Hareketleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th class="num">Miktar</th><th>Sebep / Not</th><th>Kullanıcı</th></tr></thead><tbody>${moves.map(m=>`<tr><td style="font-size:11px;color:var(--slate-500)">${m.ts?fmtDate(m.ts.slice(0,10)):'—'}</td><td><b>${esc(m.code)}</b></td><td>${m.type==='uretim'?'<span style="color:#15803D;font-weight:600">Üretim</span>':m.type==='cikis'?'<span style="color:#B91C1C;font-weight:600">Çıkış</span>':m.type==='fire'?'<span style="color:#C2410C;font-weight:600">Fire</span>':'<span style="color:var(--slate-500)">Devret</span>'}</td><td class="num">${m.type==='cikis'||m.type==='fire'?'−':m.type==='uretim'?'+':''}${fmtN(m.miktar)}</td><td style="font-size:11px;color:var(--slate-600)">${esc(m.not||'')}</td><td style="font-size:11px;color:var(--slate-500)">${esc(m.user||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
   c.innerHTML=h;
 }
 function stokMove(code,type,miktar,not){DB.stockMoves=DB.stockMoves||[];DB.stockMoves.unshift({ts:new Date().toISOString(),user:USER?USER.username:'?',code,type,miktar,not:not||''});if(DB.stockMoves.length>500)DB.stockMoves=DB.stockMoves.slice(0,500)}
-function stokUretim(code){
-  const v=prompt('Üretim girişi — '+code+'\nEklenecek miktar (çuval):','');if(v==null)return;
-  const add=parseFloat(String(v).replace(',','.'))||0;if(!add){toast('Geçersiz miktar');return}
-  DB.stock=DB.stock||{};const s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0};
-  s.uretim=(+s.uretim||0)+add;s.date=todayISO();
-  stokMove(code,'uretim',add);logAct('Stok üretim: '+code+' +'+add);saveDB();toast(code+' üretim +'+fmtN(add));render();
-}
-function stokCikis(code){
-  const v=prompt('Çıkış (müşteri talebi) — '+code+'\nÇıkacak miktar (çuval):','');if(v==null)return;
-  const out=parseFloat(String(v).replace(',','.'))||0;if(!out){toast('Geçersiz miktar');return}
-  DB.stock=DB.stock||{};const s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0};
-  const kalan=(+s.stok||0)+(+s.uretim||0)-(+s.cikis||0);
-  if(out>kalan&&!confirm('Bu çıkış kalan stoğu ('+fmtN(kalan)+' çuval) aşıyor. Kalan negatife düşecek. Devam edilsin mi?'))return;
-  s.cikis=(+s.cikis||0)+out;s.date=todayISO();
-  stokMove(code,'cikis',out);logAct('Stok çıkış: '+code+' −'+out);saveDB();toast(code+' çıkış −'+fmtN(out));render();
-}
-function stokFire(code){
-  const v=prompt('Fire çıkış — '+code+'\nFire miktarı (çuval):','');if(v==null)return;
-  const out=parseFloat(String(v).replace(',','.'))||0;if(!out){toast('Geçersiz miktar');return}
-  const sebep=prompt('Fire çıkış sebebi — '+code+' (zorunlu):','');if(sebep==null)return;
-  if(!sebep.trim()){toast('Fire sebebi gerekli');return}
-  DB.stock=DB.stock||{};const s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};
-  s.fire=(+s.fire||0)+out;s.date=todayISO();
-  stokMove(code,'fire',out,sebep.trim());logAct('Stok fire: '+code+' -'+out+' ('+sebep.trim()+')');saveDB();toast(code+' fire -'+fmtN(out));render();
+// HÜCRE-İÇİ STOK GİRİŞİ — eski üç butonun (stokUretim/stokCikis/stokFire) yerine tek kapı.
+// Girilen değer o günün TOPLAMIDIR; fark (+/−) stok hareketine işlenir ki geçmiş okunabilir
+// kalsın. Eski kurallar korunur: çıkış kalanı negatife düşürüyorsa onay, fire ARTIŞINDA
+// sebep zorunlu (azaltma "düzeltme" notuyla geçer), negatif toplam reddedilir.
+function stokHucre(inp,code,alan){
+  if(!canEdit()){toast('Yetkiniz yok');render();return}
+  // TR sayı kuralı (muhasebe trTutar dersi): SON ayraç 1-2 haneli kuyruk bırakıyorsa
+  // ondalıktır; "1.098"→1098, "10,5"→10.5, "10.5"→10.5 (105 DEĞİL).
+  var ham=String(inp.value||'');
+  if(ham.indexOf('-')>=0){toast('Geçersiz miktar — pozitif sayı girin');render();return}   // temizleme '-'yi silip 4 yazıyordu (test yakaladı)
+  var t=ham.replace(/[^\d.,]/g,'');
+  if(t){var sn=Math.max(t.lastIndexOf(','),t.lastIndexOf('.'));
+    if(sn>=0){var tam=t.slice(0,sn).replace(/[.,]/g,''),ond=t.slice(sn+1).replace(/[.,]/g,'');
+      t=(ond.length&&ond.length<=2)?(tam+'.'+ond):(tam+ond);}}
+  var yeni=t===''?0:parseFloat(t);
+  if(!isFinite(yeni)||yeni<0){toast('Geçersiz miktar — pozitif sayı girin');render();return}
+  yeni=Math.round(yeni*100)/100;
+  DB.stock=DB.stock||{};var s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};
+  var eski=+s[alan]||0, fark=Math.round((yeni-eski)*100)/100;
+  if(!fark){render();return}
+  if(alan==='cikis'||alan==='fire'){
+    var kalanYeni=(+s.stok||0)+(+s.uretim||0)
+      -(alan==='cikis'?yeni:(+s.cikis||0))
+      -(alan==='fire'?yeni:(+s.fire||0));
+    if(kalanYeni<0&&!confirm('Bu girişle '+code+' kalanı '+fmtN(kalanYeni)+' çuvala düşecek (negatif). Devam edilsin mi?')){render();return}
+  }
+  var not='';
+  if(alan==='fire'&&fark>0){
+    var sebep=prompt('Fire çıkış sebebi — '+code+' (zorunlu):','');
+    if(sebep==null||!sebep.trim()){toast('Fire sebebi gerekli — kaydedilmedi');render();return}
+    not=sebep.trim();
+  }
+  if(fark<0&&!not)not='düzeltme (azaltma)';
+  s[alan]=yeni;s.date=todayISO();
+  stokMove(code,alan,fark,not);
+  var AD={uretim:'üretim',cikis:'çıkış',fire:'fire'};
+  logAct('Stok '+AD[alan]+': '+code+' '+(fark>0?'+':'')+fmtN(fark)+(not?' · '+not:''));
+  saveDB();toast(code+' '+AD[alan]+' '+(fark>0?'+':'')+fmtN(fark)+' → toplam '+fmtN(yeni));render();
 }
 function stokDevret(){
   if(!confirm('Tüm ürünlerde kalan stok, açılış stoğuna devredilsin ve Üretim/Çıkış/Fire sıfırlansın mı?\n(Gün kapatma işlemi)'))return;

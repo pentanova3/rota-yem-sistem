@@ -3233,6 +3233,86 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         /kohortu · sipariş tarihine göre/.test(H));
     }
 
+    // ══ 50 · STOK HÜCRE-İÇİ GİRİŞ (butonlar kalktı, toplam yazılır, fark harekete) ══════
+    {
+      const gvK = (ad) => {
+        const i = H.indexOf('function ' + ad + '(');
+        let d = 0, b = false;
+        for (let k = i; k < H.length; k++) {
+          const c = H[k];
+          if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
+        return '';
+      };
+      dogru('eski üç stok butonu SÖKÜLDÜ', !/function stokUretim\(|function stokCikis\(|function stokFire\(/.test(H) &&
+        !/stokUretim\('/.test(H));
+      dogru('İşlem sütunu kalktı', !/<th class="num">İşlem<\/th>/.test(H));
+      dogru('hücreler giriş alanı (canEdit) / salt-okur metin', /class="stok-in"/.test(H) &&
+        /onchange="stokHucre\(this,'\$\{esc\(p\.code\)\}','\$\{alan\}'\)"/.test(H));
+      // stokHucre KOŞTURMALI — senaryolar
+      const kur = (onayla, sebep) => {
+        const iz = {moves: [], log: '', toast: '', render: 0, sebepSoruldu: 0};
+        const ctx = {
+          canEdit: () => true, DB: {stock: {'BK-300': {stok: 1000, uretim: 5, cikis: 10, fire: 0}}},
+          toast: (m) => { iz.toast = m; }, render: () => { iz.render++; },
+          confirm: () => onayla, prompt: () => { iz.sebepSoruldu++; return sebep; },
+          todayISO: () => '2026-08-21', saveDB: () => {},
+          stokMove: (c, tip, mik, not) => iz.moves.push({c, tip, mik, not}),
+          logAct: (m) => { iz.log = m; },
+          fmtN: (n) => String(n),
+        };
+        const SH = new Function(...Object.keys(ctx), gvK('stokHucre') + ';return stokHucre;')(...Object.values(ctx));
+        return {SH, iz, DB: ctx.DB};
+      };
+      { // üretim toplamı 5→12: fark +7 harekete
+        const {SH, iz, DB} = kur(true);
+        SH({value: '12'}, 'BK-300', 'uretim');
+        esit('üretim toplamı 12 yazıldı', DB.stock['BK-300'].uretim, 12);
+        esit('harekete FARK işlendi (+7)', iz.moves[0].mik, 7);
+        dogru('tarih damgalandı', DB.stock['BK-300'].date === '2026-08-21');
+      }
+      { // çıkış azaltma 10→4: fark −6, "düzeltme" notu
+        const {SH, iz, DB} = kur(true);
+        SH({value: '4'}, 'BK-300', 'cikis');
+        esit('çıkış toplamı 4', DB.stock['BK-300'].cikis, 4);
+        esit('fark −6', iz.moves[0].mik, -6);
+        dogru('azaltma notu düştü', iz.moves[0].not === 'düzeltme (azaltma)');
+      }
+      { // fire ARTIŞI sebep ister; sebep verilmezse KAYDETMEZ
+        const {SH, iz, DB} = kur(true, '');
+        SH({value: '3'}, 'BK-300', 'fire');
+        esit('sebepsiz fire yazılmadı', DB.stock['BK-300'].fire, 0);
+        dogru('sebep soruldu + uyarı verildi', iz.sebepSoruldu === 1 && /sebebi gerekli/.test(iz.toast));
+        const {SH: S2, iz: iz2, DB: D2} = kur(true, 'yırtık çuval');
+        S2({value: '3'}, 'BK-300', 'fire');
+        esit('sebepli fire yazıldı', D2.stock['BK-300'].fire, 3);
+        dogru('sebep harekete geçti', iz2.moves[0].not === 'yırtık çuval');
+      }
+      { // negatif kalan onayı: çıkış 10→1200, kullanıcı VAZGEÇERSE eski değer korunur
+        const {SH, iz, DB} = kur(false);
+        SH({value: '1200'}, 'BK-300', 'cikis');
+        esit('onay yoksa çıkış DEĞİŞMEDİ', DB.stock['BK-300'].cikis, 10);
+        esit('hareket işlenmedi', iz.moves.length, 0);
+      }
+      { // TR sayı: "1.098" bin doksan sekiz, "10,5" ve "10.5" onbuçuk
+        const {SH, DB} = kur(true);
+        SH({value: '1.098'}, 'BK-300', 'uretim');
+        esit('"1.098" → 1098', DB.stock['BK-300'].uretim, 1098);
+        SH({value: '10,5'}, 'BK-300', 'uretim');
+        esit('"10,5" → 10,5', DB.stock['BK-300'].uretim, 10.5);
+        SH({value: '10.5'}, 'BK-300', 'uretim');
+        esit('"10.5" → 10,5 (105 DEĞİL)', DB.stock['BK-300'].uretim, 10.5);
+        SH({value: '-4'}, 'BK-300', 'uretim');
+        esit('negatif toplam reddedildi', DB.stock['BK-300'].uretim, 10.5);
+      }
+      { // boş bırakmak 0'a çeker (fark −'lı hareket)
+        const {SH, iz, DB} = kur(true);
+        SH({value: ''}, 'BK-300', 'uretim');
+        esit('boş giriş toplamı 0 yapar', DB.stock['BK-300'].uretim, 0);
+        esit('fark −5 işlendi', iz.moves[0].mik, -5);
+      }
+      dogru('Günü Kapat (Devret) DURUYOR — kalan yine devredilir', /function stokDevret\(\)\{/.test(H));
+    }
+
     // ── DENETİM DÜZELTMELERİ (25 iddia · 22 doğrulandı) ──────────────────────────────────
     const AR = require('fs').readFileSync(require('path').join(__dirname, '..', 'arama.js'), 'utf8');
     dogru('KAÇAK KAPANDI: arama.js satış kuralını taşıyor',
