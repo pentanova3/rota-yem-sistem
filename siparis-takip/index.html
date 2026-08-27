@@ -4916,15 +4916,17 @@ function renderStock(c,tb){
     const hucre=(alan,deger,renk)=>canEdit()
       ?`<td class="num"><input class="stok-in" style="color:${deger?renk:'var(--slate-400)'}" inputmode="decimal" value="${deger?fmtN(deger):''}" placeholder="0" onfocus="this.value=${deger||0}||'';this.select()" onchange="stokHucre(this,'${esc(p.code)}','${alan}')" onkeydown="if(event.key==='Enter')this.blur()"></td>`
       :`<td class="num" style="${deger?'color:'+renk:''}">${deger?(alan==='uretim'?'+':'−')+fmtN(deger):'0'}</td>`;
-    // BAŞLANGIÇ STOĞU (firma isteği 27.08): Stok hücresi de doğrudan doldurulur —
-    // eldeki mevcut ürün girilir, kalan oradan devam eder. Devret aynı alanı kullanır.
-    const stokTd=canEdit()
+    // BAŞLANGIÇ STOĞU (firma isteği 27.08): Stok hücresi YALNIZ kurulum aşamasında
+    // doldurulur — ilk "Günü Kapat (Devret)" o ürünü kilitler (s.kilit), sonrası
+    // otomatik devirle akar; hücre bir daha elle değiştirilemez. Sonradan eklenen
+    // ürün de kendi ilk devrine kadar açıktır.
+    const stokTd=canEdit()&&!s.kilit
       ?`<td class="num"><input class="stok-in" style="font-weight:600;color:${stok?'inherit':'var(--slate-400)'}" inputmode="decimal" value="${stok?fmtN(stok):''}" placeholder="0" title="Başlangıç (açılış) stoğu — elinizdeki mevcut ürünü yazın" onfocus="this.value=${stok||0}||'';this.select()" onchange="stokHucre(this,'${esc(p.code)}','stok')" onkeydown="if(event.key==='Enter')this.blur()"></td>`
-      :`<td class="num">${fmtN(stok)}</td>`;
+      :`<td class="num"${s.kilit?' title="Açılış stoğu kilitli — Günü Kapat (Devret) ile kendiliğinden ilerler"':''}>${fmtN(stok)}</td>`;
     return `<tr><td><b>${esc(p.code)}</b></td>${stokTd}${hucre('uretim',uretim,'#15803D')}${hucre('cikis',cikis,'#B91C1C')}${hucre('fire',fire,'#C2410C')}<td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`;
   }).join('');
   let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Fire Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> <b>Stok</b> hücresine başlangıç (açılış) stoğunu — elinizdeki mevcut ürünü — doğrudan yazın; kalan oradan devam eder. Üretim/Çıkış/Fire hücrelerine günün TOPLAMINI yazın — kalan kendiliğinden ilerler, her değişiklik harekete işlenir. Fire artışında sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
+  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> <b>Stok</b> hücresine başlangıç (açılış) stoğunu — elinizdeki mevcut ürünü — bir defalık yazın; ürünün ilk <b>Günü Kapat</b>'ından sonra bu hücre kilitlenir ve yalnız devirle ilerler. Üretim/Çıkış/Fire hücrelerine günün TOPLAMINI yazın — kalan kendiliğinden ilerler, her değişiklik harekete işlenir. Fire artışında sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
   const moves=(DB.stockMoves||[]).slice(0,15);
   if(moves.length)h+=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Son Stok Hareketleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th class="num">Miktar</th><th>Sebep / Not</th><th>Kullanıcı</th></tr></thead><tbody>${moves.map(m=>`<tr><td style="font-size:11px;color:var(--slate-500)">${m.ts?fmtDate(m.ts.slice(0,10)):'—'}</td><td><b>${esc(m.code)}</b></td><td>${m.type==='uretim'?'<span style="color:#15803D;font-weight:600">Üretim</span>':m.type==='cikis'?'<span style="color:#B91C1C;font-weight:600">Çıkış</span>':m.type==='fire'?'<span style="color:#C2410C;font-weight:600">Fire</span>':m.type==='stok'?'<span style="color:#1D4ED8;font-weight:600">Açılış</span>':'<span style="color:var(--slate-500)">Devret</span>'}</td><td class="num">${m.type==='cikis'||m.type==='fire'?'−':m.type==='uretim'?'+':''}${fmtN(m.miktar)}</td><td style="font-size:11px;color:var(--slate-600)">${esc(m.not||'')}</td><td style="font-size:11px;color:var(--slate-500)">${esc(m.user||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
   c.innerHTML=h;
@@ -4948,6 +4950,8 @@ function stokHucre(inp,code,alan){
   if(!isFinite(yeni)||yeni<0){toast('Geçersiz miktar — pozitif sayı girin');render();return}
   yeni=Math.round(yeni*100)/100;
   DB.stock=DB.stock||{};var s=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};
+  // Kilitli üründe açılış stoğu elle değiştirilemez (yalnız devir ilerletir).
+  if(alan==='stok'&&s.kilit){toast('Açılış stoğu kilitli — yalnız Günü Kapat ile ilerler');render();return}
   var eski=+s[alan]||0, fark=Math.round((yeni-eski)*100)/100;
   if(!fark){render();return}
   if(alan==='stok'||alan==='cikis'||alan==='fire'){
@@ -4973,7 +4977,7 @@ function stokHucre(inp,code,alan){
 function stokDevret(){
   if(!confirm('Tüm ürünlerde kalan stok, açılış stoğuna devredilsin ve Üretim/Çıkış/Fire sıfırlansın mı?\n(Gün kapatma işlemi)'))return;
   DB.stock=DB.stock||{};
-  DB.products.forEach(p=>{const s=DB.stock[p.code]=DB.stock[p.code]||{stok:0,uretim:0,cikis:0,fire:0};s.stok=(+s.stok||0)+(+s.uretim||0)-(+s.cikis||0)-(+s.fire||0);s.uretim=0;s.cikis=0;s.fire=0;s.date=todayISO();});
+  DB.products.forEach(p=>{const s=DB.stock[p.code]=DB.stock[p.code]||{stok:0,uretim:0,cikis:0,fire:0};s.stok=(+s.stok||0)+(+s.uretim||0)-(+s.cikis||0)-(+s.fire||0);s.uretim=0;s.cikis=0;s.fire=0;s.date=todayISO();s.kilit=true;});
   stokMove('— TÜMÜ —','devret',0,'Gün kapatıldı');logAct('Stok devret (gün kapatıldı)');saveDB();toast('Devredildi · kalanlar açılış stoğuna taşındı');render();
 }
 // ============ REPORTS ============
