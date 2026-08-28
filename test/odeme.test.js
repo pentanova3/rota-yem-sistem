@@ -968,13 +968,13 @@ baslik('16) SİPARİŞ DEĞİŞİKLİĞİ / İPTAL — imza motoru ve tetikleme 
   dener('ürün eklendi', (o) => { o.lines.push({code: 'RK-20', qty: 5, price: 600}); }, true);
   dener('ürün çıkarıldı', (o) => { o.lines = []; }, true);
   dener('birim fiyat değişti', (o) => { o.lines[0].price = 900; }, true);
-  dener('teslim tarihi değişti', (o) => { o.teslimTarihi = '2026-07-30'; }, true);
   dener('alıcı değişti', (o) => { o.customerId = 'c2'; o.customer = 'NUR'; }, true);
   dener('manuel fatura girildi', (o) => { o.faturaManuel = 120000; }, true);
   dener('İMECE seçildi', (o) => { o.imeceSecili = true; o.imeceAy = 3; }, true);
   dener('fiyat kademesi değişti', (o) => { o.fiyatKademe = 'fabrika'; }, true);
   dener('nakliye değişti', (o) => { o.nakliye = 5000; }, true);
   // SEVKİYAT / DURUM / TÜREV — onayı DÜŞÜRMEMELİ
+  dener('teslim tarihi değişti (firma kararı 28.08: onay düşmez)', (o) => { o.teslimTarihi = '2026-07-30'; }, false);
   dener('plaka girildi', (o) => { o.plaka = '10 ABC 10'; }, false);
   dener('şoför girildi', (o) => { o.sofor = 'Ali'; o.soforTel = '555'; }, false);
   dener('durum ilerledi', (o) => { o.status = 'sevk'; }, false);

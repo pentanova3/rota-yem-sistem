@@ -865,8 +865,10 @@ function diziUzunluk(blob) {
 // İÇERİK = faturayı/üretimi etkileyen alanlar. Sevkiyat (plaka/şoför/hareket), durum, not,
 // onay bayrakları ve TÜREVLER (total, imeceOran/imeceFark, dbsOran, brutListe, cuval, brut...)
 // KASITEN DIŞARIDA: bunlar değişince müşteriden yeniden onay istemek gereksiz gürültü olur.
+// teslimTarihi KASITEN DIŞARIDA (firma kararı 28.08): tarih değişikliği onay düşürmez,
+// Telegram'a yeniden onay mesajı gitmez. Tonaj/ürün/fiyat değişikliği onayı düşürmeye devam eder.
 const ICERIK_ALAN = ["customerId", "bayiId", "aliciBayi", "aliciMusteri", "portalMusteri",
-  "teslimTarihi", "fiyatKademe", "priceListId", "nakliye", "faturaManuel",
+  "fiyatKademe", "priceListId", "nakliye", "faturaManuel",
   "imeceSecili", "imeceAy", "imeceKartTutar", "odeme", "vade", "nakliyeBirim", "nakliyeTipi", "hammaliyeBirim",
   "iskontoOran", "iskontoTL", "ozelListeId", "araciId", "araciKomisyon"];
 function siparisImza(o) {
