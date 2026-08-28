@@ -1651,10 +1651,23 @@ function openPreOrder(id){
 }
 function preAddLine(){editPre.lines.push({code:'',qty:''});renderPreModal();}
 function preDelLine(i){editPre.lines.splice(i,1);if(!editPre.lines.length)editPre.lines.push({code:'',qty:''});renderPreModal();}
-function preSetCust(id){const c=custById(id);editPre.customerId=id||'';editPre.customer=c?c.name:'';renderPreModal();}
+// Ön sipariş HERKESTEN alınabilir (firma isteği 28.08): normal müşteri, bayi müşterisi,
+// bayi ve danışman aynı listede. id önce müşterilerde, yoksa komisyoncularda aranır.
+function preSetCust(id){const c=custById(id)||komById(id);editPre.customerId=id||'';editPre.customer=c?c.name:'';renderPreModal();}
 function renderPreModal(){
   const o=editPre;
-  const musteriler=(DB.customers||[]).filter(c=>c&&c.active!==false&&!c.arsiv).sort((a,b)=>String(a.name).localeCompare(String(b.name),'tr'));
+  const _sirala=arr=>arr.sort((a,b)=>String(a.name).localeCompare(String(b.name),'tr'));
+  const _akt=c=>c&&c.active!==false&&!c.arsiv;
+  const musteriler=_sirala((DB.customers||[]).filter(c=>_akt(c)&&!c.bayiId));
+  const bayiMus=_sirala((DB.customers||[]).filter(c=>_akt(c)&&c.bayiId));
+  const bayilerG=isPlasiyer()?[]:komByType('bayi').filter(k=>k.active!==false);
+  const danismanG=isPlasiyer()?[]:komByType('danisman').filter(k=>k.active!==false);
+  const _opt=(id,ad,ek)=>`<option value="${esc(id)}" ${o.customerId===id?'selected':''}>${esc(ad||'(isimsiz)')}${ek?' — '+esc(ek):''}</option>`;
+  const custOptions=`<option value="">— seçiniz —</option>
+    ${musteriler.length?`<optgroup label="Müşteriler">${musteriler.map(c=>_opt(c.id,c.name)).join('')}</optgroup>`:''}
+    ${bayiMus.length?`<optgroup label="Bayi Müşterileri">${bayiMus.map(c=>_opt(c.id,c.name,(komById(c.bayiId)||{}).name)).join('')}</optgroup>`:''}
+    ${bayilerG.length?`<optgroup label="Bayiler">${bayilerG.map(k=>_opt(k.id,k.name)).join('')}</optgroup>`:''}
+    ${danismanG.length?`<optgroup label="Danışmanlar">${danismanG.map(k=>_opt(k.id,k.name)).join('')}</optgroup>`:''}`;
   const urunler=(DB.products||[]).filter(p=>p&&p.active!==false);
   const satir=(l,i)=>`<div class="fgrid" style="grid-template-columns:1fr 120px 40px;gap:8px;margin-bottom:6px">
     <select onchange="editPre.lines[${i}].code=this.value"><option value="">— ürün belirsiz —</option>${urunler.map(p=>`<option value="${esc(p.code)}" ${l.code===p.code?'selected':''}>${esc(p.code)}</option>`).join('')}</select>
@@ -1667,7 +1680,7 @@ function renderPreModal(){
       <p style="font-size:12.5px;color:var(--slate-600);margin-top:0;line-height:1.5">Netleşmemiş talep. <b>Yalnız müşteri zorunlu</b> — ürün, miktar ve tarih sonradan doldurulabilir.
       Ön siparişler onaya sunulmaz, Telegram'a düşmez ve <b>tonaj/ciro raporlarına girmez</b>.</p>
       <div class="fgrid c2">
-        <div class="fld"><label>Müşteri *</label><select onchange="preSetCust(this.value)"><option value="">— seçiniz —</option>${musteriler.map(c=>`<option value="${esc(c.id)}" ${o.customerId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="fld"><label>Müşteri *</label><select onchange="preSetCust(this.value)">${custOptions}</select><div class="fld-hint">müşteri, bayi müşterisi, bayi veya danışman seçilebilir</div></div>
         <div class="fld"><label>Tahmini Tarih</label>
           <div style="display:flex;align-items:center;gap:7px">
             <input type="date" value="${esc(o.tarih||'')}" onchange="editPre.tarih=this.value;renderPreModal()" style="flex:1">
@@ -1727,16 +1740,35 @@ function preDonustur(id){
   if(!canEdit()){toast('Yetkiniz yok');return}
   closeModal();openOrder();
   if(!editOrder)return;
-  editOrder.customerId=p.customerId;editOrder.customer=p.customer;
-  const c=custById(p.customerId);if(c&&c.firma)editOrder.firma=c.firma;
+  // Seçilen kişinin TÜRÜNE göre doğru sipariş akışına oturt (28.08): bayi müşterisi ve
+  // bayi → "Alıcı: Bayi" satışı (fatura bayiye); danışman → müşteri boş, danışman bağlanır.
+  const c=custById(p.customerId), k=c?null:komById(p.customerId);
+  let notEk='';
+  if(c&&c.bayiId){
+    editOrder.aliciBayi=true;editOrder.bayiId=c.bayiId;editOrder.fiyatKademe='bayi';
+    editOrder.portalMusteriId=c.id;editOrder.portalMusteri=c.name;
+    editOrder.customerId='';editOrder.customer='';
+    editOrder.danismanId=((komById(c.bayiId)||{}).danismanId)||'';
+  }else if(k&&k.type==='bayi'){
+    editOrder.aliciBayi=true;editOrder.bayiId=k.id;editOrder.fiyatKademe='bayi';
+    editOrder.customerId='';editOrder.customer='';
+    editOrder.danismanId=k.danismanId||'';
+  }else if(k&&k.type==='danisman'){
+    editOrder.customerId='';editOrder.customer='';editOrder.danismanId=k.id;
+    notEk='Ön sipariş '+k.name+' (danışman) adına alınmıştı';
+  }else{
+    editOrder.customerId=p.customerId;editOrder.customer=p.customer;
+    if(c&&c.firma)editOrder.firma=c.firma;
+  }
   const ln=(p.lines||[]).filter(l=>l&&l.code).map(l=>({code:l.code,qty:+l.qty||'',price:''}));
   if(ln.length)editOrder.lines=ln;
   if(p.tarih)editOrder.teslimTarihi=p.tarih;
-  if(p.not)editOrder.not=p.not;
+  const _not=[p.not,notEk].filter(Boolean).join(' · ');
+  if(_not)editOrder.not=_not;
   editOrder._onSipId=p.id;                      // saveOrder yeni sipariş yazınca ön siparişi kapatır
-  try{onChangeCustomer&&onChangeCustomer(p.customerId);}catch(e){}
+  if(editOrder.customerId){try{onChangeCustomer&&onChangeCustomer(p.customerId);}catch(e){}}
   applyTariffToLines();renderOrderModal();
-  toast('Ön sipariş taşındı — bilgileri tamamlayıp kaydedin');
+  toast(k&&k.type==='danisman'?'Ön sipariş taşındı — danışman bağlandı, müşteriyi seçin':'Ön sipariş taşındı — bilgileri tamamlayıp kaydedin');
 }
 function renderPreOrders(c,tb){
   if(canEdit())tb.innerHTML=`<button class="btn btn-pri" onclick="openPreOrder()">+ Yeni Ön Sipariş</button>`;
