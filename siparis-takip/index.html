@@ -2682,6 +2682,11 @@ function delOrder(id){
   const o=DB.orders.find(x=>x.id===id); if(!o){toast('Sipariş bulunamadı');return}
   const et='#'+(o.no||'?')+' · '+((custById(o.customerId)||{}).name||'—')+' · '+fmtTL(orderTotal(o));
   if(!confirm('Bu sipariş KALICI olarak silinsin mi?\n\n'+et+'\n\nBu işlem geri alınamaz.'))return;
+  // İşlenmiş irsaliye stok çıkışı varsa geri al — silinen siparişin çıkışı stokta kalmasın (04.09)
+  if(o.stokCikis&&o.stokCikis.lines&&o.stokCikis.lines.length){
+    DB.stock=DB.stock||{};
+    o.stokCikis.lines.forEach(function(l){if(!l||!l.code)return;var st=DB.stock[l.code]=DB.stock[l.code]||{stok:0,uretim:0,cikis:0,fire:0};st.cikis=Math.round(((+st.cikis||0)-(+l.qty||0))*100)/100;st.date=todayISO();stokMove(l.code,'cikis',-(+l.qty||0),'irsaliye geri alındı — sipariş #'+(o.no||'?')+' silindi');});
+  }
   DB.orders=DB.orders.filter(x=>x.id!==id);
   silKaydet('orders',id);           // sunucuya AÇIK silme bildirimi (yoksa sunucu kaydı geri ekler)
   logAct('Sipariş SİLİNDİ: '+et);   // silme geri alınamaz → kim/ne sildi denetim kaydına yazılır
@@ -2887,6 +2892,33 @@ function saveOrder(){
     pushHist(o,'teslim','Teslim geri alındı — teslim tarihi damgası silindi ('+fmtDate(o.teslimEdildiTarih)+')');
     delete o.teslimEdildiTarih;
   }
+  // ═ İRSALİYE → STOK ÇIKIŞI (firma isteği 04.09): "İrsaliyesi Kesildi" ve sonrasındaki
+  // (sevk/teslim — irsaliye atlansa bile) siparişin kalemleri stok Çıkış'ına OTOMATİK işlenir.
+  // İdempotent: işlenen kalemler o.stokCikis damgasında tutulur; yeniden kayıtta yalnız FARK
+  // uygulanır. Durum irsaliye altına iner ya da iptal olursa çıkış GERİ ALINIR. Geçmiş
+  // (Excel/sessiz) kayıtlar stoğa DOKUNMAZ — o mal fiilen çoktan çıkmıştır.
+  (function(){
+    if(o.gecmisKayit)return;
+    var R={beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};
+    var gecti=o.status!=='iptal'&&(R[o.status]||0)>=3;
+    DB.stock=DB.stock||{};
+    var uygula=function(code,q){if(!code||!q)return;var st=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};st.cikis=Math.round(((+st.cikis||0)+q)*100)/100;st.date=todayISO();};
+    if(gecti){
+      var yeni={};(o.lines||[]).forEach(function(l){if(l&&l.code&&+l.qty>0)yeni[l.code]=(yeni[l.code]||0)+(+l.qty);});
+      var eskiM={};((o.stokCikis&&o.stokCikis.lines)||[]).forEach(function(l){if(l&&l.code)eskiM[l.code]=(eskiM[l.code]||0)+(+l.qty||0);});
+      var degisti=false;
+      Object.keys(Object.assign({},yeni,eskiM)).forEach(function(k){
+        var fark=Math.round(((yeni[k]||0)-(eskiM[k]||0))*100)/100;if(!fark)return;
+        uygula(k,fark);stokMove(k,'cikis',fark,(eskiM[k]!=null?'irsaliye düzeltme':'irsaliye')+' — sipariş #'+(o.no||'?')+(o.customer?' · '+o.customer:''));degisti=true;
+      });
+      if(degisti||!o.stokCikis)o.stokCikis={ts:(o.stokCikis&&o.stokCikis.ts)||new Date().toISOString(),lines:Object.keys(yeni).map(function(k){return {code:k,qty:yeni[k]};})};
+      if(degisti)toast('Stok çıkışına işlendi (irsaliye) — #'+(o.no||'?'));
+    } else if(o.stokCikis&&o.stokCikis.lines&&o.stokCikis.lines.length){
+      o.stokCikis.lines.forEach(function(l){if(l&&l.code)uygula(l.code,-(+l.qty||0));if(l&&l.code)stokMove(l.code,'cikis',-(+l.qty||0),'irsaliye geri alındı — sipariş #'+(o.no||'?'));});
+      delete o.stokCikis;
+      toast('Stok çıkışı geri alındı — #'+(o.no||'?'));
+    }
+  })();
   // ÖN SİPARİŞ KAPANIŞI: yalnız sipariş GERÇEKTEN kaydedildiyse. Modal kapatılıp vazgeçilirse
   // ön sipariş AÇIK kalır — aksi halde talep hem listeden düşer hem sipariş olmaz, izi kaybolurdu.
   if(_onSip){
@@ -4968,7 +5000,7 @@ function renderStock(c,tb){
     return `<tr><td><b>${esc(p.code)}</b></td>${stokTd}${hucre('uretim',uretim,'#15803D')}${hucre('cikis',cikis,'#B91C1C')}${hucre('fire',fire,'#C2410C')}<td class="num" style="font-weight:700;${kalanColor}">${fmtN(kalan)}${warn||neg?' '+STOK_WARN_SVG:''}</td><td style="font-size:11px;color:var(--slate-400)">${s.date?fmtDate(s.date):'—'}</td></tr>`;
   }).join('');
   let h=`<div class="card"><div class="card-hd"><h3>Stok Durumu</h3><span style="font-size:11px;color:var(--slate-400)">${lastDate?'Son güncelleme: '+fmtDate(lastDate):'Henüz hareket yok'}</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Ürün</th><th class="num">Stok</th><th class="num">Üretim</th><th class="num">Çıkış</th><th class="num">Fire Çıkış</th><th class="num">Kalan</th><th>Tarih</th></tr></thead><tbody>${rows}</tbody></table></div></div>
-  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> <b>Stok</b> hücresine başlangıç (açılış) stoğunu — elinizdeki mevcut ürünü — bir defalık yazın; ürünün ilk <b>Günü Kapat</b>'ından sonra bu hücre kilitlenir ve yalnız devirle ilerler. Üretim/Çıkış/Fire hücrelerine günün TOPLAMINI yazın — kalan kendiliğinden ilerler, her değişiklik harekete işlenir. Fire artışında sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder.</p>`;
+  <p style="font-size:11.5px;color:var(--slate-500);margin-top:4px">${STOK_WARN_SVG} <b>Kalan = Stok + Üretim − Çıkış − Fire.</b> <b>Stok</b> hücresine başlangıç (açılış) stoğunu — elinizdeki mevcut ürünü — bir defalık yazın; ürünün ilk <b>Günü Kapat</b>'ından sonra bu hücre kilitlenir ve yalnız devirle ilerler. Üretim/Çıkış/Fire hücrelerine günün TOPLAMINI yazın — kalan kendiliğinden ilerler, her değişiklik harekete işlenir. Fire artışında sebep sorulur. Kalan 20'nin altındaysa kırmızı uyarı verir. <b>Günü Kapat</b> ile kalan, ertesi günün açılış stoğuna devreder. <b>İrsaliyesi Kesildi</b> durumuna geçen siparişin kalemleri Çıkış'a kendiliğinden işlenir (hareket kaydında sipariş numarasıyla görünür); sipariş geri çekilir, iptal edilir ya da silinirse çıkış geri alınır.</p>`;
   const moves=(DB.stockMoves||[]).slice(0,15);
   if(moves.length)h+=`<div class="card" style="margin-top:14px"><div class="card-hd"><h3>Son Stok Hareketleri</h3></div><div class="card-bd"><table class="tbl"><thead><tr><th>Tarih</th><th>Ürün</th><th>Tip</th><th class="num">Miktar</th><th>Sebep / Not</th><th>Kullanıcı</th></tr></thead><tbody>${moves.map(m=>`<tr><td style="font-size:11px;color:var(--slate-500)">${m.ts?fmtDate(m.ts.slice(0,10)):'—'}</td><td><b>${esc(m.code)}</b></td><td>${m.type==='uretim'?'<span style="color:#15803D;font-weight:600">Üretim</span>':m.type==='cikis'?'<span style="color:#B91C1C;font-weight:600">Çıkış</span>':m.type==='fire'?'<span style="color:#C2410C;font-weight:600">Fire</span>':m.type==='stok'?'<span style="color:#1D4ED8;font-weight:600">Açılış</span>':'<span style="color:var(--slate-500)">Devret</span>'}</td><td class="num">${m.type==='cikis'||m.type==='fire'?'−':m.type==='uretim'?'+':''}${fmtN(m.miktar)}</td><td style="font-size:11px;color:var(--slate-600)">${esc(m.not||'')}</td><td style="font-size:11px;color:var(--slate-500)">${esc(m.user||'')}</td></tr>`).join('')}</tbody></table></div></div>`;
   c.innerHTML=h;
