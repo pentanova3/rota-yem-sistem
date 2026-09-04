@@ -169,6 +169,7 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .st-beklemede{background:var(--slate-100);color:var(--slate-600)}
 .st-onay{background:var(--blue-100);color:var(--blue-600)}
 .st-hazir{background:var(--amber-100);color:var(--amber-700)}
+.st-irsaliye{background:#EDE9FE;color:#6D28D9}
 .st-sevk{background:#E0F2FE;color:#075985}
 .st-teslim{background:var(--green-100);color:var(--green-700)}
 .st-iptal{background:var(--red-100);color:var(--red-700)}
@@ -310,6 +311,7 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .day-ord.st-dot-beklemede{background:#F3F5F7}.day-ord.st-dot-beklemede::before{background:#9CA2AA}
 .day-ord.st-dot-onay{background:#E6EDFB}.day-ord.st-dot-onay::before{background:#3D5CB8}
 .day-ord.st-dot-hazir{background:#FEF6E7}.day-ord.st-dot-hazir::before{background:#D97706}
+.day-ord.st-dot-irsaliye{background:#F3F0FE}.day-ord.st-dot-irsaliye::before{background:#7C3AED}
 .day-ord.st-dot-sevk{background:#E8F6FE}.day-ord.st-dot-sevk::before{background:#0284C7}
 .day-ord.st-dot-teslim{background:#E9F8EF}.day-ord.st-dot-teslim::before{background:#16A34A}
 .day-ord.st-dot-iptal{background:#FCEBEB}.day-ord.st-dot-iptal::before{background:#DC2626}
@@ -510,13 +512,14 @@ const LSKEY='rota_so_v1';
 const ROLES={admin:'Yönetici',siparis:'Sipariş Personeli',sevkiyat:'Sevkiyat',goruntule:'Görüntüleyici',plasiyer:'Plasiyer (Saha)'};
 const STATUSES=[
   {v:'beklemede',l:'Beklemede'},{v:'onay',l:'Onaylandı'},{v:'hazir',l:'Hazır'},
+  {v:'irsaliye',l:'İrsaliyesi Kesildi'},
   {v:'sevk',l:'Sevk Edildi'},{v:'teslim',l:'Teslim Edildi'},{v:'iptal',l:'İptal'}
 ];
 const KARGO=['Kendi Aracı','Nakliye','Nakliyeci','Müşteri Alımı'];
 const KADEME=[{v:'fabrika',l:'Fabrika Teslim'},{v:'yakin',l:'Yakın Bayi Satış'},{v:'uzak',l:'Uzak Bayi Satış'}];
 // Düzenlenebilir seçenek listeleri (Ayarlar'dan yönetilir)
 const OPTS_VERSION='2026-05-22';
-const CORE_ST=['beklemede','onay','hazir','sevk','teslim','iptal'];
+const CORE_ST=['beklemede','onay','hazir','irsaliye','sevk','teslim','iptal'];
 function seedOpts(){
   DB.opts=DB.opts||{};
   if(DB.meta.optsVersion!==OPTS_VERSION){
@@ -524,6 +527,12 @@ function seedOpts(){
     if(!DB.opts.kargo)DB.opts.kargo=KARGO.slice();
     if(!DB.opts.durum)DB.opts.durum=STATUSES.map(s=>({v:s.v,l:s.l}));
     DB.meta.optsVersion=OPTS_VERSION;
+  }
+  // İRSALİYE GÖÇÜ (04.09.2026): kayıtlı seçenek listesi eski sürümden geliyorsa
+  // "İrsaliyesi Kesildi" durumunu Hazır'ın arkasına ekle (OPTS_VERSION kapısından bağımsız).
+  if(DB.opts.durum&&!DB.opts.durum.some(s=>s&&s.v==='irsaliye')){
+    const _hi=DB.opts.durum.findIndex(s=>s&&s.v==='hazir');
+    DB.opts.durum.splice(_hi>=0?_hi+1:DB.opts.durum.length,0,{v:'irsaliye',l:'İrsaliyesi Kesildi'});
   }
 }
 function optFirma(){return (DB.opts&&DB.opts.firma)||['SMI','ROTA']}
@@ -1520,7 +1529,7 @@ function renderPanel(c,tb){
     <div class="gr-tabs">${_grSek.map(([k,l])=>`<button class="gr-tab${panelGrafik===k?' active':''}" onclick="panelGrafikSec('${k}')">${l}</button>`).join('')}</div></div>
     <div class="card-bd" style="padding:14px 16px"><div style="position:relative;height:150px"><canvas id="panelDayChart"></canvas></div></div></div>`;
   // durum renk açıklaması (legend)
-  const ST_HEX={beklemede:'#9CA2AA',onay:'#3D5CB8',hazir:'#D97706',sevk:'#0284C7',teslim:'#16A34A',iptal:'#DC2626'};   // gün kutusu noktalarıyla (st-dot) birebir aynı — legend yanlış renk öğretmesin
+  const ST_HEX={beklemede:'#9CA2AA',onay:'#3D5CB8',hazir:'#D97706',irsaliye:'#7C3AED',sevk:'#0284C7',teslim:'#16A34A',iptal:'#DC2626'};   // gün kutusu noktalarıyla (st-dot) birebir aynı — legend yanlış renk öğretmesin
   h+=`<div class="st-legend"><span class="lg-ttl">Durum Renkleri</span>${STATUSES.map(s=>`<span class="st-lg"><i style="background:${ST_HEX[s.v]}"></i>${esc(s.l)}</span>`).join('')}</div>`;
   // gün kutuları
   h+=`<div class="day-grid">`;
@@ -1839,7 +1848,7 @@ function renderOrders(c,tb){
   const cnt=v=>_vis.filter(o=>!v||o.status===v).length;
   // SİLİNMİŞ sekmesi bir DURUM değil, denetim izinden gelen ayrı bir görünüm — sayısı
   // siparişlerden hesaplanamaz (kayıt blob'dan silinmiştir), o yüzden cnt() dışında tutulur.
-  const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'onay',l:'Onaylı'},{v:'hazir',l:'Hazır'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
+  const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'onay',l:'Onaylı'},{v:'hazir',l:'Hazır'},{v:'irsaliye',l:'İrsaliye'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
   let h=subTabs+`<div class="order-tabs">${tabDefs.map(t=>`<button class="otab ${filt.status===t.v?'active':''}" onclick="setStatusTab('${t.v}')">${t.l} <span class="otab-n">${cnt(t.v)}</span></button>`).join('')}<button class="otab ${filt.status==='__silinmis'?'active':''}" onclick="setStatusTab('__silinmis')" title="Silinen siparişler — kim, ne zaman, neyi sildi">Silinmiş</button></div>
   <div class="filters">
     <input class="fsearch" placeholder="Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
@@ -2724,7 +2733,7 @@ function saveOrder(){
   // Muaf: geçmiş/Excel kaydı (muhasebeOnayGerek=false) ve onay kapısı öncesi ESKİ kayıtlar (alan yok).
   // Kilitli kalırsa çıkış yolu: modaldaki "Muhasebe Onayı İste" düğmesi mesajı yeniden gönderir.
   if(o.id&&o.muhasebeOnayGerek&&!o.gecmisKayit){
-    var _RANK={beklemede:0,onay:1,hazir:2,sevk:3,teslim:4,iptal:0};
+    var _RANK={beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};
     var _rY=(_RANK[o.status]!=null?_RANK[o.status]:0), _rE=(_RANK[_origSt]!=null?_RANK[_origSt]:0);
     if(_rY>_rE){
       // AYNI KAYITTA HEM İÇERİK DEĞİŞTİRİP HEM İLERLETME: bu kayıt onayı ZATEN düşürecek →
@@ -5129,7 +5138,7 @@ function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 window.AY_KISA=AY_KISA;
 const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi',bayi:'Bayi Satış'};
-const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
+const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',irsaliye:'#8B5CF6',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 // ============ TONAJ & HEDEF RAPORU ============
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
 function tonOf(code,qty){return (+qty||0)*prodKg(code)/1000;}
@@ -5813,7 +5822,7 @@ function raporYazdir(){
 // ortalamalarına katılmaz — onay zinciri hiç çalışmadı, süreleri süreci temsil etmez.
 var akisSel={year:'',month:''};
 function akisData(yil,ay){
-  const SIRA={beklemede:0,onay:1,hazir:2,sevk:3,teslim:4,iptal:-1};
+  const SIRA={beklemede:0,onay:1,hazir:2,irsaliye:2,sevk:3,teslim:4,iptal:-1};   // irsaliye: üretim geçilmiş, sevk bekleniyor
   const kohort=DB.orders.filter(o=>{
     if(o.tarihsel)return false;
     const d=String(o.date||'');

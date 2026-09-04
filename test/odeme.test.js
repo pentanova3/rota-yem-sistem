@@ -1115,7 +1115,7 @@ baslik('20) SERT ONAY KAPISI — TMR + Yem eş davranış');
   const yem = fs.readFileSync(path.join(kok, 'yem', 'index.html'), 'utf8');
   // TMR'de artık sert kapı var (önceden yalnız Yem'de vardı → onay düşürme TMR'de kozmetikti).
   dogru('TMR: sert kapı eklendi', /SERT ONAY KAPISI \(Yem ile EŞ\)/.test(tmr));
-  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,onay:1,hazir:2,sevk:3,teslim:4,iptal:0\};/.test(tmr));
+  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0\};/.test(tmr));
   dogru('TMR: muhasebe VE üretim onayı aranıyor', /onayVarMi\(o,'muhasebe'\)/.test(tmr) && /onayVarMi\(o,'uretim'\)/.test(tmr));
   dogru('TMR: geçmiş/Excel kaydı muaf', /o\.id&&o\.muhasebeOnayGerek&&!o\.gecmisKayit/.test(tmr));
   dogru('TMR: üretim onayı GÜVENİLİR kaynaktan (apps/fabrikaonay)', /function fabrikaOnayRec\(o\)\{const r=\(o&&o\.id&&window\.__FABRIKA\)/.test(tmr));
