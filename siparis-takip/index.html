@@ -1938,6 +1938,10 @@ function musteriHucre(o){
 // Muhasebe segmenti SUNUCU kaydından (muhasebeOnayRec / apps/muhasebeonay) okunur — blob'daki alana güvenilmez.
 function onaySureciCell(o){
   if(o.gecmisKayit)return '<span class="ap-txt mut">Geçmiş kayıt</span>';
+  // ŞALTER: akış tümüyle askıdayken ve bu siparişte hiç onay kaydı yokken sütun boş kalır —
+  // yoksa kimsenin bakmadığı "bekliyor" zinciri her satırda sahte iş yükü gösterirdi.
+  if(onayAkisKapaliMi()&&!muhasebeOnayRec(o)&&!(o.fabrikaOnay&&o.fabrikaOnay.by)&&!o.musteriOnay)
+    return '<span class="ap-txt mut" title="Onay akışı askıya alındı — Erişim Yönetimi&#39;nden açılabilir">askıda</span>';
   var _rec0=muhasebeOnayRec(o);
   if(!o.muhasebeOnayGerek&&!_rec0&&!(o.fabrikaOnay&&o.fabrikaOnay.by)&&!o.musteriOnay)return '<span class="ap-txt mut">—</span>';   // onay kapısı öncesi eski kayıt — sahte "bekliyor" alarmı verme
   var mus=o.musteriOnay==='onaylandi'?'ok':(o.musteriOnay==='itiraz'?'err':'wait');
@@ -2155,15 +2159,15 @@ function renderOrderModal(){
       </div>
       <div class="fld"><label>Not</label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.not=this.value" placeholder="Sipariş notu...">${esc(o.not||'')}</textarea></div>
       <div class="fld"><label>Müşteriye Onay Notu <span style="font-weight:600;font-size:10.5px;color:var(--amber-700);text-transform:none;letter-spacing:0">— eksik/değişiklik varsa yaz, müşteri WhatsApp linkinde ayrıca onaylar</span></label><textarea rows="2" ${ro?'disabled':''} onchange="editOrder.onayNot=this.value" placeholder="Örn: 30 çuval yerine 20 çuval gönderilecektir.">${esc(o.onayNot||'')}</textarea></div>
-      ${o.id?(function(){var r=muhasebeOnayRec(o);return `<div style="margin-top:10px;border-radius:8px;padding:10px 13px;font-size:12.5px;font-weight:600;${r&&r.by?'background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46':'background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6'}">${r&&r.by?`Muhasebe Onayı: <b>${esc(r.by)}</b>${r.ts?' · '+fmtDateTime(r.ts):''}`:`Muhasebe onayı bekleniyor — Telegram'dan muhasebe onaylanınca üretim onayına gönderilir`}</div>`;})():''}
-      ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">Üretim Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">Üretim onayı bekleniyor — muhasebe onayı sonrası Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
+      ${o.id&&(onayAkisAcik('muhasebe')||muhasebeOnayRec(o))?(function(){var r=muhasebeOnayRec(o);return `<div style="margin-top:10px;border-radius:8px;padding:10px 13px;font-size:12.5px;font-weight:600;${r&&r.by?'background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46':'background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6'}">${r&&r.by?`Muhasebe Onayı: <b>${esc(r.by)}</b>${r.ts?' · '+fmtDateTime(r.ts):''}`:`Muhasebe onayı bekleniyor — Telegram'dan muhasebe onaylanınca üretim onayına gönderilir`}</div>`;})():''}
+      ${o.id&&o.fabrikaOnay&&o.fabrikaOnay.by?`<div style="margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#065f46;font-weight:600">Üretim Onayı: <b>${esc(o.fabrikaOnay.by)}</b> · ${fmtDateTime(o.fabrikaOnay.ts)}</div>`:(o.id&&o.status==='beklemede'&&onayAkisAcik('uretim')?`<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 13px;font-size:12.5px;color:#92400e;font-weight:600">Üretim onayı bekleniyor — muhasebe onayı sonrası Telegram'dan onaylanınca durum "Onaylandı"ya geçer</div>`:'')}
       ${o.id?historyHTML(o):''}
     </div>
     ${onayVerBlokHTML(o)}
     <div class="modal-ft">
       <div>${o.id&&canDelete()?`<button class="btn btn-gray btn-sm" onclick="delOrder('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${o.id&&canEdit()?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna muhasebe onay mesajı (butonlu) gönder">Muhasebe Onayı İste</button>`:''}
+        ${o.id&&canEdit()&&onayAkisAcik('muhasebe')?`<button class="btn" style="background:#0E7490;color:#fff" onclick="tgSiparisModal()" title="Telegram grubuna muhasebe onay mesajı (butonlu) gönder">Muhasebe Onayı İste</button>`:''}
         ${o.id&&canEdit()?`<button class="btn" style="background:#25D366;color:#fff" onclick="waOnayModal()" title="Müşteriye WhatsApp onay linki gönder">Onay Linki Gönder</button>`:''}
         ${o.id?`<button id="stBtn" class="btn" ${(o.status==='sevk'||o.status==='teslim')?'':'disabled'} style="background:${(o.status==='sevk'||o.status==='teslim')?'#1D4ED8':'#94A3B8'};color:#fff${(o.status==='sevk'||o.status==='teslim')?'':';cursor:not-allowed'}" onclick="waOrderModal()" title="${(o.status==='sevk'||o.status==='teslim')?'Sevk/teslimat bilgilendirme mesajı':'Önce durumu Sevk Edildi veya Teslim Edildi yapın'}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Sevk / Teslimat Mesajı</button>`:''}
         ${o.id&&sevkKilitli(o)&&isAdmin()?`<button class="btn" style="background:#B45309;color:#fff" onclick="sevkKilidiAc()" title="Sevk edilmiş siparişin ürün/miktar/fiyat alanlarını düzenlemeye açar. Değişiklik Telegram'a bildirilir, muhasebe onayı düşer.">Düzenle</button>`:''}
@@ -2743,18 +2747,18 @@ function saveOrder(){
     if(_rY>_rE){
       // AYNI KAYITTA HEM İÇERİK DEĞİŞTİRİP HEM İLERLETME: bu kayıt onayı ZATEN düşürecek →
       // mevcut (birazdan iptal olacak) onaya bakıp geçirmek kapıyı anlamsız kılardı.
-      var _tb=ordTaban(o);
+      var _tb=onayAkisKapaliMi()?null:ordTaban(o);   // şalter kapalıyken "önce yeniden onayla" kapısı da açılır
       if(_tb&&typeof siparisImza==='function'&&siparisImza(_tb)!==siparisImza(o)){
         o.status=_origSt||'beklemede';
         toast('İçerik değişti — önce kaydedin, yeniden onay alın; sonra durumu ilerletin');
         renderOrderModal();return;
       }
-      if(!onayVarMi(o,'muhasebe')){
+      if(onayAkisAcik('muhasebe')&&!onayVarMi(o,'muhasebe')){
         o.status=_origSt||'beklemede';
         toast('Muhasebe onayı bekleniyor — durum geri alındı. Kaydetmek için tekrar Kaydet\'e basın.');
         renderOrderModal();return;
       }
-      if(!onayVarMi(o,'uretim')){
+      if(onayAkisAcik('uretim')&&!onayVarMi(o,'uretim')){
         o.status=_origSt||'beklemede';
         toast('Üretim onayı bekleniyor — durum geri alındı. Kaydetmek için tekrar Kaydet\'e basın.');
         renderOrderModal();return;
@@ -2864,8 +2868,8 @@ function saveOrder(){
       o.gecmisKayit=true;o.muhasebeOnayGerek=false;
       pushHist(o,'gonderildi','Geçmiş sipariş girişi — bildirim gönderilmedi, onay zinciri çalıştırılmadı');
     }else{
-      delete o.gecmisKayit;o.muhasebeOnayGerek=true;
-      pushHist(o,'gonderildi','Sipariş alındı — muhasebe onayı için Telegram gönderildi');
+      delete o.gecmisKayit;o.muhasebeOnayGerek=onayAkisAcik('muhasebe');   // şalter kapalıysa onay damgası VURULMAZ
+      pushHist(o,'gonderildi',onayAkisAcik('muhasebe')?'Sipariş alındı — muhasebe onayı için Telegram gönderildi':'Sipariş alındı — Telegram\'a bildirildi (onay akışı askıda)');
       if(sendTelegramSiparis(o))o.tgSiparisGonderildi=true;
     }}
   var _yeniSt=o.status, _bildirim=(_yeniSt!==_origSt)&&(_yeniSt==='sevk'||_yeniSt==='teslim')&&!o.gecmisKayit;   // geçmiş kayıtta müşteriye WA sorulmaz (olmuş bitmiş sipariş)
@@ -2962,7 +2966,7 @@ async function processCrossQueue(){
         lines:vlines.map(function(l){return {code:l.code,qty:l.qty,price:''};}),
         plaka:'',sofor:'',soforTel:'',hareketTarihi:'',hareketSaati:'',
         not:(r.not||''),   // köken bilgisi NOT'a yazılmaz (YEM'DEN etiketi + hist'te var); yalnız gerçek not tutulur — önemli notlar gözden kaçmasın
-        muhasebeOnayGerek:true,   // çapraz sipariş de önce muhasebe onayından geçer (katı sıra sunucu-kilidi için)
+        muhasebeOnayGerek:onayAkisAcik('muhasebe'),   // çapraz sipariş de önce muhasebe onayından geçer (katı sıra sunucu-kilidi için) · şalter kapalıysa damga yok
         crossFrom:'yem',crossId:qid};
       // Çapraz siparişte de DBS/İMECE oranı damgalanmalı — yoksa aynı müşteri kanala göre farklı fatura alır
       // ve sipariş TMR'de ilk düzenlendiğinde tutar sessizce %3 kayar (denetimde bulunan asimetri).
@@ -3273,9 +3277,22 @@ async function onayYetkimYukle(){
     var r=await fetch(ONAY_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idt},body:JSON.stringify({sorgu:true})});
     if(!r.ok)return;
     var j=await r.json();
+    if(j&&j.akis)window.__ONAY_AKIS=j.akis;   // şalter sunucudan da tazelenir (portalda değişmiş olabilir)
     if(j&&j.yetkiler){window.__ONAY_YETKIM=j.yetkiler;try{if(editOrder)renderOrderModal();}catch(e){}}
   }catch(e){/* bilinmiyor kalır */}
 }
+/* ═══ ONAY AKIŞI ŞALTERİ (firma kararı 23.09.2026) ══════════════════════════════════════
+   Muhasebe/üretim onayını yürütecek personel yokken akış ASKIYA ALINIR — kod silinmez.
+   Kaynak: apps/portal → onayAkis (SSO açılışında okunur, yarış yok) + onayVer?sorgu yanıtı.
+   BİLİNMİYORSA AÇIK sayılır: fail-safe yön, kapı ayakta kalsın — şalter yalnız açıkça
+   kapatıldığı BİLİNİYORSA devreye girer. */
+window.__ONAY_AKIS=null;
+function onayAkisAcik(tur){
+  var a=window.__ONAY_AKIS;
+  if(!a)return true;
+  return a[tur]!==false;
+}
+function onayAkisKapaliMi(){return !onayAkisAcik('muhasebe')&&!onayAkisAcik('uretim');}
 function onayYetkiVar(tur){
   var y=window.__ONAY_YETKIM;
   if(!y)return true;              // bilinmiyor → göster, sunucu karar versin
@@ -3289,6 +3306,7 @@ function onayVerBlokHTML(o){
     // ONAYLANMIŞSA herkes görür — kimin onayladığı bilgisi yetkiden bağımsızdır.
     if(rec&&rec.by)return '<span style="display:inline-flex;align-items:center;gap:5px;background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600">'
       +et+' onayı ✓ '+esc(rec.by)+(rec.ts?' · '+fmtDate(String(rec.ts).slice(0,10)):'')+'</span>';
+    if(!onayAkisAcik(tur))return '';   // akış askıda → düğme çizilmez (geçmiş onay kaydı yukarıda görünür)
     if(!onayYetkiVar(tur))return '';   // yetkisi yok → düğme HİÇ çizilmez
     return '<button id="onayBtn_'+tur+'" class="btn btn-sm" '+(pasif?'disabled title="'+esc(neden)+'"':'')
       +' style="background:'+(pasif?'#CBD5E1':'#0E7490')+';color:#fff" onclick="onayVerTikla(\''+tur+'\')">'+et+' Onayı Ver</button>';
@@ -3338,7 +3356,10 @@ function imzaHash(s) {
   return h.toString(36).slice(0, 7);
 }
 function onayDamga(o){try{return imzaHash(siparisImza(o));}catch(e){return '';}}
-function sendTelegramSiparis(o){var ph=(custById(o.customerId)||{}).phone||'\u2014';var lines=(o.lines||[]).map(function(l){return '\u2022 '+l.code+': '+fmtN(l.qty)+' \u00e7uval'}).join('\n');var msg='\ud83e\uddfe YEN\u0130 S\u0130PAR\u0130\u015e \u2014 MUHASEBE ONAYI BEKL\u0130YOR\n\n\ud83e\uddfe Sipari\u015f: #'+(o.no||'')+'\n\ud83d\udc64 M\u00fc\u015fteri: '+(o.customer||'\u2014')+'\n\ud83d\udcde Telefon: '+ph+'\n\ud83e\uddd1\u200d\ud83d\udcbc Sipari\u015f alan: '+(o.alan||'\u2014')+'\n\ud83d\udcc5 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'\u2014')+'\n\n\u00dcr\u00fcnler:\n'+lines+'\n\n\u00d6nce muhasebe, ard\u0131ndan \u00fcretim onay\u0131 al\u0131n\u0131r \ud83d\udc47';return tgProxy(msg,[[{text:'✅ Muhasebe Onayı Ver',cb:'moapprove:t:'+o.id+':'+onayDamga(o)}]]);}
+function sendTelegramSiparis(o){var ph=(custById(o.customerId)||{}).phone||'\u2014';var lines=(o.lines||[]).map(function(l){return '\u2022 '+l.code+': '+fmtN(l.qty)+' \u00e7uval'}).join('\n');var msg='\ud83e\uddfe YEN\u0130 S\u0130PAR\u0130\u015e \u2014 MUHASEBE ONAYI BEKL\u0130YOR\n\n\ud83e\uddfe Sipari\u015f: #'+(o.no||'')+'\n\ud83d\udc64 M\u00fc\u015fteri: '+(o.customer||'\u2014')+'\n\ud83d\udcde Telefon: '+ph+'\n\ud83e\uddd1\u200d\ud83d\udcbc Sipari\u015f alan: '+(o.alan||'\u2014')+'\n\ud83d\udcc5 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'\u2014')+'\n\n\u00dcr\u00fcnler:\n'+lines+'\n\n\u00d6nce muhasebe, ard\u0131ndan \u00fcretim onay\u0131 al\u0131n\u0131r \ud83d\udc47';if(!onayAkisAcik('muhasebe')){   // ŞALTER: bildirim GİDER (kullanıcı isteği), onay butonu konmaz
+    return tgProxy(msg.replace(' \u2014 MUHASEBE ONAYI BEKL\u0130YOR','').replace('\n\n\u00d6nce muhasebe, ard\u0131ndan \u00fcretim onay\u0131 al\u0131n\u0131r \ud83d\udc47',''));
+  }
+  return tgProxy(msg,[[{text:'✅ Muhasebe Onayı Ver',cb:'moapprove:t:'+o.id+':'+onayDamga(o)}]]);}
 function sendTelegramItiraz(o){var ph=(custById(o.customerId)||{}).phone||'—';var msg='⚠️ MÜŞTERİ HATA BİLDİRDİ!\n\n🧾 Sipariş: #'+(o.no||'')+'\n👤 Müşteri: '+(o.customer||'—')+'\n📞 Telefon: '+ph+'\n🧑‍💼 Sipariş alan: '+(o.alan||'—')+'\n📅 Teslim: '+(o.teslimTarihi?fmtDate(o.teslimTarihi):'—')+'\n\n📝 Müşteri Notu:\n'+(o.itirazSebep||'(belirtilmedi)')+'\n\n❗ Lütfen müşteri ile iletişime geçip bilgileri düzeltin.';return sendTelegram(msg);}
 /* saveTelegram kaldırıldı — anahtar artık sunucu secret'inde */
 function testTelegram(){tgProxy('✅ Rota Sipariş — Telegram bildirim testi. Sunucu üzerinden gönderildi.');toast('Test mesajı gönderildi — Telegram\'ı kontrol edin');}
@@ -6427,6 +6448,7 @@ async function tryPortalLogin(){
     const d=await PortalAuth.getData();
     if(!d||!Array.isArray(d.users)||!d.users.length){portalaDon();return;}   // veri okunamadı → portala dön
     window.__PORTAL_USERS=d.users;                                // "Sipariş Alan" listesi buradan türetilir
+    window.__ONAY_AKIS=d.onayAkis||null;                          // onay akışı şalteri — ilk çizimden ÖNCE hazır olsun
     const pu=d.users.find(x=>x.username.toLowerCase()===String(au.email||'').split('@')[0]);
     if(!pu){PortalAuth.clearSession();portalaDon();return;}
     const lvl=(pu.perms&&pu.perms.siparis)||'yok';

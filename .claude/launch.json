@@ -36,6 +36,18 @@
       "port": 8791
     },
     {
+      "name": "egitim",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8796",
+        "--directory",
+        "/Users/ismailizbudak/Pentanova/pentanova-egitim"
+      ],
+      "port": 8796
+    },
+    {
       "name": "antet-onizleme",
       "runtimeExecutable": "python3",
       "runtimeArgs": [

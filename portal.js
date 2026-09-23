@@ -258,6 +258,19 @@ function openPanel(){
   const MSO=PDATA.muhasebeSiparisOnay||(PDATA.muhasebeSiparisOnay={alicilar:[]});
   // TMR ÜRETİM onaycıları — PANELDEN onay için (Telegram'daki confirm: akışında liste yoktu).
   // Telegram adayı ZORUNLU DEĞİL: bu onay panelden veriliyor, Telegram'ı olmayan da onaycı olabilir.
+  // ONAY AKIŞI ŞALTERİ (23.09.2026): akış silinmedi, askıya alınabilir hale getirildi.
+  // Alan yoksa AÇIK sayılır — eski kurulumların davranışı değişmez.
+  const OA=PDATA.onayAkis||(PDATA.onayAkis={muhasebe:true,uretim:true});
+  if(OA.muhasebe===undefined)OA.muhasebe=true; if(OA.uretim===undefined)OA.uretim=true;
+  const salter=(tur,ad,acikNot,kapaliNot)=>{const acik=OA[tur]!==false;return `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;${tur==='uretim'?'border-top:1px solid #e6ecf3':''}">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:700;font-size:12.5px;color:${acik?'#2f7d52':'#8a5a00'}">${ad} — ${acik?'FAAL':'ASKIDA'}</div>
+        <div style="font-size:11.5px;color:#5b6b80;margin-top:2px">${acik?acikNot:kapaliNot}</div>
+      </div>
+      <button class="pa-btn pa-sm" style="white-space:nowrap;${acik?'background:#b3261e;color:#fff;border-color:#b3261e':'background:#2f7d52;color:#fff;border-color:#2f7d52'}"
+        onclick="PA.onayAkisSet('${tur}',${acik?'false':'true'})">${acik?'Askıya Al':'Yeniden Faal Et'}</button>
+    </div>`;};
   const FBO=PDATA.fabrikaOnay||(PDATA.fabrikaOnay={alicilar:[]});   // [{username,ad,chatId?}]   // muhasebe SİPARİŞ onaycıları [{username,chatId,ad}] — sipariş akışının 1. kapısı
   const userRows=PDATA.users.map((u,i)=>`<tr>
     <td><input value="${esc(u.name||'')}" onchange="PA.set(${i},'name',this.value)" style="width:130px"></td>
@@ -308,6 +321,12 @@ function openPanel(){
           <button class="pa-btn pa-sm pa-out" onclick="PA.clearAlici()">Alıcıları Temizle</button>
           <label style="font-size:12px;color:#5b6b80">Gerekli onay: <select id="pa-gerekli" onchange="PA.gerekli(this.value)"><option value="1" ${(+M.gerekli||1)===1?'selected':''}>1 kişi yeterli</option><option value="2" ${(+M.gerekli||1)===2?'selected':''}>2 kişi de onaylamalı</option></select></label>
         </div>
+      </div>
+      <div class="pa-t" style="margin-top:22px;font-size:14px">Sipariş Onay Akışı — Şalter</div>
+      <div class="pa-s">Onayı yürütecek personel yoksa akış <b>askıya alınabilir</b>: sipariş onay beklemeden ilerler, onay düğmeleri ve Telegram onay butonları çıkmaz. <b>Kayıtlar ve onaycı listeleri silinmez</b> — yeniden faal edildiğinde akış kaldığı yerden işler. <b>Telegram bildirimleri (alınan · değiştirilen · silinen sipariş) her durumda gitmeye devam eder.</b></div>
+      <div class="pa-onay" style="border-color:${(OA.muhasebe!==false||OA.uretim!==false)?'#cfe6d8':'#f0dcc0'};background:${(OA.muhasebe!==false||OA.uretim!==false)?'#f2f8f4':'#fdf8ef'}">
+        ${salter('muhasebe','Muhasebe Sipariş Onayı','Her yeni sipariş muhasebe onayına düşer.','Sipariş muhasebe onayı beklemeden ilerler; onay düğmeleri gizli.')}
+        ${salter('uretim','Üretim Onayı (TMR + Yem)','Muhasebe onayından sonra üretim onayı istenir.','Üretim onayı istenmez; statü ilerletme kapısı açık.')}
       </div>
       <div class="pa-t" style="margin-top:22px;font-size:14px">Yem Üretim Onayı</div>
       <div class="pa-s">Her yem siparişi (çapraz siparişler dahil) önce muhasebe onayından geçer; muhasebe onaylayınca <b>üretim onayı</b> için Telegram'a mesaj gider ve <b>yalnız aşağıdaki üretim onaycıları</b> onaylayabilir. Yedek onaycı (yönetici) mücbir sebep içindir. Onaycı önce bota <b>/start</b> yazıp aday olmalı; sonra kullanıcı + aday eşleştirilir.</div>
@@ -417,6 +436,7 @@ window.PA={
   addAlici(){const v=document.getElementById('pa-aday').value;if(!v)return;const a=(PDATA.adaylar||[]).find(x=>String(x.chatId)===String(v));const M=PDATA.muhasebeOnay;M.alicilar=M.alicilar||[];if(M.alicilar.length>=2){alert('En fazla 2 alıcı.');return;}if(!M.alicilar.some(x=>String(x.chatId)===String(v)))M.alicilar.push({chatId:v,ad:a?a.ad:v});openPanel();},
   clearAlici(){PDATA.muhasebeOnay.alicilar=[];openPanel();},
   gerekli(v){PDATA.muhasebeOnay.gerekli=+v||1;},
+  onayAkisSet(tur,acik){PDATA.onayAkis=PDATA.onayAkis||{muhasebe:true,uretim:true};PDATA.onayAkis[tur]=(acik===true||acik==='true');openPanel();},
   addYemOnayci(){var u=document.getElementById('pa-yem-user').value;var c=document.getElementById('pa-yem-aday').value;if(!u||!c){alert('Kullanıcı ve Telegram adayını (bota /start yazan) seçin.');return;}var a=(PDATA.adaylar||[]).find(x=>String(x.chatId)===String(c));var YM=PDATA.yemOnay=PDATA.yemOnay||{alicilar:[]};YM.alicilar=YM.alicilar||[];if(YM.alicilar.length>=2){alert('En fazla 2 üretim onaycısı (asıl + yedek yönetici).');return;}if(!YM.alicilar.some(x=>x.username===u||String(x.chatId)===String(c)))YM.alicilar.push({username:u,chatId:c,ad:a?a.ad:c});openPanel();},
   clearYemOnay(){PDATA.yemOnay={alicilar:[]};openPanel();},
   // TELEGRAM ADAYI İSTEĞE BAĞLI (31.07): muhasebe onayı artık sipariş kartından da verilebiliyor.
@@ -554,7 +574,7 @@ window.PA={
       const users=PDATA.users.map(u=>({id:u.id,username:u.username,name:u.name||'',perms:u.perms||{},fiyatGor:!!u.fiyatGor,siparisSil:!!u.siparisSil,portalYonetici:!!u.portalYonetici,arama:!!u.arama,bolum:u.bolum||{}}));
       const sifreler={};PDATA.users.forEach(u=>{const p=String(u._yeniSifre||'').trim();if(u.username&&p)sifreler[u.username]=p;});
       const r=await fetch(YONETIM_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
-        body:JSON.stringify({islem:'sync',users,sifreler,muhasebeOnay:PDATA.muhasebeOnay,yemOnay:PDATA.yemOnay,muhasebeSiparisOnay:PDATA.muhasebeSiparisOnay,fabrikaOnay:PDATA.fabrikaOnay})});
+        body:JSON.stringify({islem:'sync',users,sifreler,muhasebeOnay:PDATA.muhasebeOnay,yemOnay:PDATA.yemOnay,muhasebeSiparisOnay:PDATA.muhasebeSiparisOnay,fabrikaOnay:PDATA.fabrikaOnay,onayAkis:PDATA.onayAkis})});
       const j=await r.json();
       if(!r.ok||!j.ok){alert('Kaydedilemedi: '+(j.hata||r.status));return;}
       PDATA.users.forEach(u=>{delete u._yeniSifre;});

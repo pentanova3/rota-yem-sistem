@@ -870,11 +870,11 @@ baslik('13) ONAY AKIŞI — YEM hattı TEK KAPILI, TMR hattı İKİ KAPILI');
 
   // ── YEM İSTEMCİ: üretim onayı istenmiyor, statüyü muhasebe onayı ilerletiyor
   // BİLGİ HATTI (29.07): iç yem siparişi onay bayrağı ALMAZ; portal siparişi eski akışta kalır.
-  dogru('YEM: yeni siparişte onay bayrağı kaynağa bağlı', /o\.muhasebeOnayGerek=!_bilgi;o\.yemOnayGerek=false;/.test(y));
+  dogru('YEM: yeni siparişte onay bayrağı kaynağa bağlı', /o\.muhasebeOnayGerek=!_bilgi&&onayAkisAcik\('muhasebe'\);o\.yemOnayGerek=false;/.test(y));
   dogru('YEM: TMR den gelen çapraz onay İSTEMİYOR', /o\.muhasebeOnayGerek=false;o\.yemOnayGerek=false;\s*\/\/ yem ürünü → BİLGİ HATTI/.test(y));
   dogru('YEM: statüyü muhasebe onayı ilerletiyor (portal siparişi için duruyor)', /if\(!o\.yemOnayGerek&&o\.status==='beklemede'\)o\.status='onay';/.test(y));
   // Kapı artık KAYNAĞA bağlı: yalnız portal siparişinde çalışır (_kapiVar).
-  dogru('YEM: kayıt kapısı yalnız portal siparişinde', /if\(_kapiVar&&_cikisaGeciyor&&o\.muhasebeOnayGerek&&!_muhOk\)/.test(y));
+  dogru('YEM: kayıt kapısı yalnız portal siparişinde', /if\(_kapiVar&&_cikisaGeciyor&&onayAkisAcik\('muhasebe'\)&&o\.muhasebeOnayGerek&&!_muhOk\)/.test(y));
   dogru('YEM: _kapiVar bayrağa DEĞİL kaynağa bakıyor', /var _kapiVar=!bilgiHattiMi\(o\);/.test(y));
   dogru('YEM: eski akış üretim kapısı korunuyor', /Üretim onayı bekleniyor \(eski akış kaydı\)/.test(y));
   dogru('YEM: onay sütunu tek aşamalı', /var eskiAkis=!!\(o\.yemOnayGerek\|\|yemOnayli\(o\)\);/.test(y));
@@ -1016,7 +1016,7 @@ baslik('17) SUNUCU KANCALARI — değişiklik/iptal tespiti yaz() içinde ve ona
   dogru('blob tarafında onay bayrakları düşüyor', /delete kopya\.muhasebeOnay; delete kopya\.fabrikaOnay; delete kopya\.yemOnay;/.test(fn));
   // BİLGİ HATTI: bayrak yalnız onay İSTEYEN hatta diriltilir. Koşulsuz true olsaydı, onay
   // beklemeyen yem siparişi ekranda sonsuza dek "Muhasebe Onayı — Bekliyor" gösterirdi.
-  dogru('muhasebeOnayGerek yalnız onaylı hatta diriliyor', /kopya\.muhasebeOnayGerek = !yemBilgiHatti\(app, yo\);/.test(fn));
+  dogru('muhasebeOnayGerek yalnız onaylı hatta diriliyor', /kopya\.muhasebeOnayGerek = _muhAcik && !yemBilgiHatti\(app, yo\);/.test(fn));
   // Silme artık iki hedefe BAĞIMSIZ + yeniden denemeli yapılıyor (fail-open kapandı).
   dogru('sunucu onay kayıtları siliniyor (muhasebeonay)', /const hedefler = \["apps\/muhasebeonay", app === "siparis" \? "apps\/fabrikaonay" : "apps\/yemonay"\];/.test(fn));
   dogru('üretim onay kaydı da siliniyor', /await db\.doc\(yol\)\.set\(sil, \{merge: true\}\)/.test(fn));
@@ -1078,9 +1078,9 @@ baslik('18) ONAY DAMGASI AYNASI + İPTAL BYPASS + YEM KİLİDİ (denetim düzelt
   // Kapı iskeleti (sevk/teslim geçişi) duruyor ama YALNIZ portal siparişinde çalışır.
   dogru('YEM: kapı iskeleti sevk/teslim geçişinde', /var _CIKIS=\['sevk','teslim'\];/.test(yem));
   dogru('YEM: çıkış geçişi doğru hesaplanıyor', /_cikisaGeciyor=_CIKIS\.indexOf\(o\.status\)>=0 && _CIKIS\.indexOf\(\(_e&&_e\.status\)\|\|''\)<0/.test(yem));
-  dogru('YEM: kapı _kapiVar + _cikisaGeciyor ile bağlı', /if\(_kapiVar&&_cikisaGeciyor&&o\.muhasebeOnayGerek&&!_muhOk\)/.test(yem));
-  dogru('YEM: içerik-değişti kapısı da portal ile sınırlı', /if\(_kapiVar&&_cikisaGeciyor&&_icerikDegisti\)/.test(yem));
-  dogru('YEM: eski akış üretim kapısı da portal ile sınırlı', /if\(_kapiVar&&_cikisaGeciyor&&o\.yemOnayGerek&&!_ureOk\)/.test(yem));
+  dogru('YEM: kapı _kapiVar + _cikisaGeciyor ile bağlı', /if\(_kapiVar&&_cikisaGeciyor&&onayAkisAcik\('muhasebe'\)&&o\.muhasebeOnayGerek&&!_muhOk\)/.test(yem));
+  dogru('YEM: içerik-değişti kapısı da portal ile sınırlı', /if\(_kapiVar&&_cikisaGeciyor&&!onayAkisKapaliMi\(\)&&_icerikDegisti\)/.test(yem));
+  dogru('YEM: eski akış üretim kapısı da portal ile sınırlı', /if\(_kapiVar&&_cikisaGeciyor&&onayAkisAcik\('uretim'\)&&o\.yemOnayGerek&&!_ureOk\)/.test(yem));
   dogru('YEM: eski RANK kapısı KALDIRILDI', !/_ilerliyor/.test(yem));
   dogru('YEM: onay/hazır aşaması artık serbest', !/onaylanmadan durum ilerletilemez \(diğer düzenlemeler/.test(yem));
 }
@@ -1481,11 +1481,12 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   const govde = src.slice(a, b) + '    res.json({ok:true});';
   const D = (id, bilgi) => ({id, no: id, ad: 'Müşteri ' + id, tutar: 1, tarih: '', teslim: '',
     urun: ['YEM: 10 çuval'], farklar: ['• miktar: 10 → 20'], imzaH: 'h' + id, onayliydi: true, bilgi});
-  const kosturVeYakala = async (app, degisen, iptalEdilen) => {
+  const kosturVeYakala = async (app, degisen, iptalEdilen, muhAcik) => {
     const gonderilen = [];
     const sahte = {
       app, dec: {uid: 'u1', email: 'a@b.c', portalYonetici: false, yem: 'yem', siparis: 'siparis'},
       EPOSTA_SON: /@x$/, silinen: null, degisen, iptalEdilen,
+      _muhAcik: muhAcik !== false,   // onay akışı şalteri — yaz() kapsamında tanımlı, dilimin dışında kalıyor (23.09.2026)
       admin: {firestore: {FieldValue: {delete: () => 'DEL'}}},
       db: {doc: () => ({set: async () => {}})},
       denetimVer: async () => {}, portalAd: async () => 'Ali', rateLimit: async () => true,
@@ -1542,9 +1543,25 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     const g = await kosturVeYakala('yem', null, [{id: 'Y9', no: 'Y9', ad: 'Müşteri', teslim: '', urun: 'YEM: 5 çuval'}]);
     dogru('İPTAL: mesaj gidiyor, buton yok', g.length === 1 && !butonluMu(g[0]) && /İPTAL EDİLDİ/.test(g[0].text));
   }
+  {
+    /* ŞALTER KAPALI (23.09.2026 firma kararı) — kullanıcının açık isteği: "telegrama alınan
+       siparişler, değiştirilen siparişler, silinen siparişler gelmeye devam etsin".
+       Yani bildirim SUSMAZ; yalnız onay butonu ve "yeniden onaylayın" çağrısı düşer. */
+    const g = await kosturVeYakala('siparis', [D('T1', false)], null, false);
+    dogru('ŞALTER KAPALI: değişiklik mesajı YİNE GİDİYOR', g.length === 1);
+    dogru('ŞALTER KAPALI: onay butonu YOK', g.length === 1 && !butonluMu(g[0]));
+    dogru('ŞALTER KAPALI: "yeniden onaylayın" YAZMIYOR', g.length === 1 && !/yeniden onayla/i.test(g[0].text));
+    dogru('ŞALTER KAPALI: değişiklik dökümü DURUYOR', g.length === 1 && /miktar: 10 → 20/.test(g[0].text));
+    dogru('ŞALTER KAPALI: askıda olduğu mesajda yazıyor', g.length === 1 && /askıda/i.test(g[0].text));
+    const gi = await kosturVeYakala('siparis', null, [{id: 'T9', no: 'T9', ad: 'Müşteri', teslim: '', urun: 'BK-300: 5 çuval'}], false);
+    dogru('ŞALTER KAPALI: İPTAL bildirimi YİNE GİDİYOR', gi.length === 1 && /İPTAL EDİLDİ/.test(gi[0].text));
+    // Karşılaştırma: şalter AÇIKKEN aynı değişiklik butonlu gider (kural bozulmadı)
+    const ga = await kosturVeYakala('siparis', [D('T1', false)], null, true);
+    dogru('ŞALTER AÇIK: aynı değişiklik butonlu gidiyor', ga.length === 1 && butonluMu(ga[0]));
+  }
 
   // ---- 5) İç yem siparişinde onay bayrağı DİRİLTİLMEMELİ ----
-  dogru('SUNUCU: onayDusur bayrağı hatta göre veriyor', /kopya\.muhasebeOnayGerek = !yemBilgiHatti\(app, yo\);/.test(src));
+  dogru('SUNUCU: onayDusur bayrağı hatta göre veriyor', /kopya\.muhasebeOnayGerek = _muhAcik && !yemBilgiHatti\(app, yo\);/.test(src));
   dogru('İSTEMCİ: onay iptalinde de aynı kural', /delete o\.muhasebeOnay;o\.muhasebeOnayGerek=!_b;/.test(yem));
   dogru('İSTEMCİ: bilgi hattında onay mesajı gönderilmiyor', /function sendYemSiparisBildirim\(o\)\{if\(bilgiHattiMi\(o\)\)sendYemSiparisBilgi\(o\);else sendMuhasebeSiparisOnay\(o\);\}/.test(yem));
   dogru('İSTEMCİ: bilgi mesajında onay butonu YOK', /function sendYemSiparisBilgi\(o\)\{[\s\S]*?tgSend\(text\);/.test(yem));
@@ -1553,6 +1570,9 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   // ---- 6) ESKİ İÇ SİPARİŞ: blob'da muhasebeOnayGerek=true taşıyor ama artık BEKLEYEN onay YOK ----
   // (Kural değişmeden önce açılmış siparişler. Ekranda sonsuz "onay bekliyor" kutusu kalmamalı.)
   global.bilgiHattiMi = bhm;   // bekleyenMuhOnay bunu çağırır — global'e koymadan ReferenceError verir
+  // ONAY AKIŞI ŞALTERİ (23.09.2026): bekleyenMuhOnay artık şalteri de soruyor. Bu bölüm
+  // akış AÇIKKEN'ki davranışı sınar; şalterin kendi sınaması 27b'de.
+  global.onayAkisAcik = () => true;
   const bmo = eval('(' + /^function bekleyenMuhOnay\(o\)\{.*\}$/m.exec(yem)[0] + ')');
   dogru('ESKİ iç sipariş: bayrak dolu ama bekleyen onay YOK', bmo({muhasebeOnayGerek: true, kaynak: ''}) === false);
   dogru('ESKİ çapraz sipariş: bekleyen onay YOK', bmo({muhasebeOnayGerek: true, kaynak: 'tmr'}) === false);
@@ -1561,6 +1581,55 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   dogru('bekleyenMuhOnay: boş girdi güvenli', bmo(null) === false && bmo(undefined) === false);
   dogru('İSTEMCİ: liste sütunu bekleyenMuhOnay kullanıyor', /if\(!bekleyenMuhOnay\(o\)&&!o\.yemOnayGerek&&!muhasebeOnayli\(o\)&&!yemOnayli\(o\)\)/.test(yem));
   dogru('İSTEMCİ: modal kutusu bekleyenMuhOnay kullanıyor', /var inMu=\(bekleyenMuhOnay\(o\)\|\|muhasebeOnayli\(o\)\);/.test(yem));
+
+  // ==========================================================================
+  baslik('26b) ONAY AKIŞI ŞALTERİ — askıya alma (23.09.2026 firma kararı)');
+  {
+    // Şalter kapalıyken bekleyen onay DOĞMAZ (portal siparişinde bile)
+    global.onayAkisAcik = () => false;
+    const bmoK = eval('(' + /^function bekleyenMuhOnay\(o\)\{.*\}$/m.exec(yem)[0] + ')');
+    dogru('ŞALTER kapalı: portal siparişinde bile bekleyen onay YOK',
+      bmoK({muhasebeOnayGerek: true, kaynak: 'bayi-portal'}) === false);
+    global.onayAkisAcik = () => true;
+
+    const _kok = path.join(__dirname, '..');
+    const fn = fs.readFileSync(path.join(_kok, 'functions', 'index.js'), 'utf8');
+    const tmr = fs.readFileSync(path.join(_kok, 'siparis-takip', 'index.html'), 'utf8');
+    const portal = fs.readFileSync(path.join(_kok, 'portal.js'), 'utf8');
+
+    // ÜÇ KOPYA AYNI SÖZLEŞME: alan yoksa AÇIK sayılır (mevcut kurulumlar bozulmasın)
+    dogru('SUNUCU: onayAkis alanı yoksa AÇIK sayılır', /muhasebe: a\.muhasebe !== false, uretim: a\.uretim !== false/.test(fn));
+    dogru('SUNUCU: okunamazsa fail-safe AÇIK', /catch \(e\) \{ return \{muhasebe: true, uretim: true\}; \}/.test(fn));
+    for (const [ad, src] of [['TMR', tmr], ['YEM', yem]])
+      dogru(ad + ': bilinmiyorsa şalter AÇIK sayılır', /function onayAkisAcik\(tur\)\{[\s\S]{0,120}if\(!a\)return true;/.test(src));
+
+    // STATÜ KAPILARI şaltere bağlı
+    dogru('TMR: muhasebe kapısı şaltere bağlı', /if\(onayAkisAcik\('muhasebe'\)&&!onayVarMi\(o,'muhasebe'\)\)/.test(tmr));
+    dogru('TMR: üretim kapısı şaltere bağlı', /if\(onayAkisAcik\('uretim'\)&&!onayVarMi\(o,'uretim'\)\)/.test(tmr));
+    dogru('YEM: muhasebe kapısı şaltere bağlı', /_cikisaGeciyor&&onayAkisAcik\('muhasebe'\)&&o\.muhasebeOnayGerek/.test(yem));
+    dogru('YEM: üretim kapısı şaltere bağlı', /_cikisaGeciyor&&onayAkisAcik\('uretim'\)&&o\.yemOnayGerek/.test(yem));
+
+    // YENİ SİPARİŞ DAMGASI şalter kapalıyken vurulmaz
+    dogru('TMR: muhasebeOnayGerek damgası şaltere bağlı', /o\.muhasebeOnayGerek=onayAkisAcik\('muhasebe'\)/.test(tmr));
+    dogru('YEM: muhasebeOnayGerek damgası şaltere bağlı', /o\.muhasebeOnayGerek=!_bilgi&&onayAkisAcik\('muhasebe'\)/.test(yem));
+    dogru('SUNUCU: portal siparişi damgası şaltere bağlı',
+      (fn.match(/muhasebeOnayGerek = await onayAkisAcikFN\("muhasebe"\)/g) || []).length >= 2);
+
+    // TELEGRAM: bildirim GİDER, yalnız onay butonu düşer (kullanıcı isteği)
+    dogru('TMR: yeni sipariş bildirimi şalter kapalıyken de gönderilir', /if\(!onayAkisAcik\('muhasebe'\)\)\{[\s\S]{0,240}return tgProxy\(msg\.replace/.test(tmr));
+    dogru('SUNUCU: değişiklik mesajı gider, buton şaltere bağlı', /if \(!d\.bilgi && _muhAcik\) gonder\.reply_markup/.test(fn));
+    dogru('SUNUCU: silme bildirimi şalterden ETKİLENMEZ', /SİPARİŞ SİLİNDİ/.test(fn) && !/onayAkis[\s\S]{0,80}SİPARİŞ SİLİNDİ/.test(fn));
+
+    // SUNUCU KAPILARI: webhook butonu ve onayVer yazımı
+    dogru('SUNUCU: webhook askıdaki onayı reddeder', /_ureCb && !\(await onayAkisAcikFN\("uretim"\)\)/.test(fn));
+    dogru('SUNUCU: onayVer askıdayken 409 döner', /hata: "onay_askida"/.test(fn));
+    dogru('SUNUCU: sorgu yanıtı şalteri taşır', /yetkiler: y, akis: await onayAkisOku\(\)/.test(fn));
+
+    // PORTAL: ayar kaydedilir ve arayüzde şalter var
+    dogru('PORTAL: şalter kaydetme yüküne ekli', /onayAkis:PDATA\.onayAkis/.test(portal));
+    dogru('PORTAL: şalter düğmesi var', /PA\.onayAkisSet\(/.test(portal));
+    dogru('SUNUCU: sync şalteri yazıyor', /P\.onayAkis = \{muhasebe: b\.onayAkis\.muhasebe !== false/.test(fn));
+  }
 
   // ==========================================================================
   baslik('27) NAKLİYE KDV — birim KDV HARİÇ girilir, faturaya KDV DAHİL gider');
@@ -2552,7 +2621,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       // buton sipariş oluştuğu anda ölüyordu. mod:oid biçimi beklenenH=null → kontrol atlanır.
       const FN2 = fsx.readFileSync(pth.join(KOK, 'functions', 'index.js'), 'utf8');
       dogru('çapraz buton kuyruk imzası TAŞIMIYOR',
-        /callback_data: "moapprove:t:" \+ r\.targetId\}\]\];/.test(FN2) &&
+        /callback_data: "moapprove:t:" \+ r\.targetId\}\]\] : null;/.test(FN2) &&
         !/moapprove:t:" \+ r\.targetId \+ ":" \+ imzaHash/.test(FN2));
       dogru('değişiklik mesajı butonu imzasını KORUYOR (bayat koruması orada kalmalı)',
         /callback_data: "moapprove:" \+ mod \+ ":" \+ d\.id \+ ":" \+ d\.imzaH/.test(FN2));

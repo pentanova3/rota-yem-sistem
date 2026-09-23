@@ -129,6 +129,23 @@ async function denetimVer(islem, aktor, detay) {
   }
 }
 function getToken() { return tgToken(); }   // eski isim korunur; kaynak artık secret
+/* ═══ ONAY AKIŞI ŞALTERİ (firma kararı 23.09.2026) ════════════════════════════════════
+   Muhasebe ve üretim onayını yürütecek personel şu an yok; akış SİLİNMEDİ, ASKIYA ALINDI.
+   apps/portal → P.onayAkis = {muhasebe:bool, uretim:bool}. Alan YOKSA true sayılır, yani
+   mevcut kurulumların davranışı birebir korunur — şalter yalnız açıkça kapatılınca devreye girer.
+   Kapalıyken: onay düğmeleri/mesajları çıkmaz, statü ilerletme kapısı açılır, yeni siparişe
+   muhasebeOnayGerek damgası VURULMAZ. Telegram'a alınan/değişen/silinen sipariş bildirimleri
+   ise AYNEN gider — onay butonu konmaz, o kadar (kullanıcı isteği). */
+async function onayAkisOku() {
+  try {
+    const snap = await db.doc("apps/portal").get();
+    const data = snap.exists ? snap.data().data : null;
+    const P = data && data.rota_portal_v1 ? JSON.parse(data.rota_portal_v1) : null;
+    const a = (P && P.onayAkis && typeof P.onayAkis === "object") ? P.onayAkis : {};
+    return {muhasebe: a.muhasebe !== false, uretim: a.uretim !== false};
+  } catch (e) { return {muhasebe: true, uretim: true}; }   // okunamadı → eski davranış (fail-safe: kapı ayakta)
+}
+async function onayAkisAcikFN(tur) { const a = await onayAkisOku(); return tur === "uretim" ? a.uretim : a.muhasebe; }
 // Yem üretim onaycıları (apps/portal → P.yemOnay.alicilar[{username,chatId,ad}]). Webhook, onaylayan cq.from.id'yi bununla doğrular.
 async function getYemOnaycilar() {
   try {
@@ -293,6 +310,20 @@ exports.telegramWebhook = onRequest({region: "us-central1", secrets: [TG_TOKEN]}
     const msgId = cq.message.message_id;
     const name = await cozAd(cq.from);   // ham Telegram adı yerine portal'daki gerçek ad
     const text = cq.message.text || "";
+
+    /* ŞALTER KAPISI (23.09.2026): onay akışı askıya alındığında ESKİ mesajlardaki butonlar
+       Telegram'da durmaya devam eder. Tıklanırsa hiçbir şey yazılmamalı — yoksa askıdayken
+       onay kaydı doğar ve statü kapısı yeniden kilitlenir. İPTAL (cancel) dışarıda: mesajı
+       temizlemek her zaman serbest. */
+    {
+      const _ureCb = ["approve:", "confirm:", "yoapprove:", "yoconfirm:"].some((x) => data.startsWith(x));
+      const _muhCb = ["moapprove:", "moconfirm:"].some((x) => data.startsWith(x));
+      if ((_ureCb && !(await onayAkisAcikFN("uretim"))) || (_muhCb && !(await onayAkisAcikFN("muhasebe")))) {
+        await tg(token, "answerCallbackQuery", {callback_query_id: cq.id, show_alert: true,
+          text: "Bu onay akışı şu an ASKIYA ALINMIŞ. Sipariş onay beklemeden ilerliyor — onay vermenize gerek yok."});
+        res.status(200).send("ok"); return;
+      }
+    }
 
     if (data.startsWith("approve:")) {
       const oid = data.slice(8);
@@ -467,7 +498,8 @@ exports.telegramWebhook = onRequest({region: "us-central1", secrets: [TG_TOKEN]}
       await tg(token, "editMessageText", {
         chat_id: chatId, message_id: msgId,
         text: stripConfirm(text),
-        reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:" + rest}]]},
+        // şalter kapalıysa buton geri konmaz — askıdayken tekrar tıklanacak bir kapı bırakmayalım
+        ...((await onayAkisAcikFN("muhasebe")) ? {reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:" + rest}]]}} : {reply_markup: {inline_keyboard: []}}),
       });
       await tg(token, "answerCallbackQuery", {callback_query_id: cq.id, text: "İptal edildi"});
     } else {
@@ -642,11 +674,13 @@ exports.onayVer = onRequest({region: "us-central1", cors: true, secrets: [TG_TOK
           y[m + ":" + t] = modErisim(m) ? (await onayYetkisi(dec, m, t)).izin : false;
         }
       }
-      res.json({ok: true, yetkiler: y}); return;
+      res.json({ok: true, yetkiler: y, akis: await onayAkisOku()}); return;
     }
 
     if (!mod || !tur || !oid) { res.status(400).json({hata: "eksik parametre"}); return; }
     if (!modErisim(mod)) { res.status(403).json({hata: "bu modülde onay yetkiniz yok"}); return; }
+    // ŞALTER: askıya alınmış onay türü yazılamaz (arayüz düğmeyi zaten gizler; bu sunucu kapısı).
+    if (!(await onayAkisAcikFN(tur))) { res.status(409).json({hata: "onay_askida", mesaj: "Bu onay akışı şu an askıya alınmış — Erişim Yönetimi'nden yeniden açılabilir."}); return; }
     // KAPI 2 — ONAYCI LİSTESİ (firma kararı): Telegram için tanımlı liste panelde de geçerli.
     const yet = await onayYetkisi(dec, mod, tur);
     if (!yet.izin) { res.status(403).json({hata: yet.kod, mesaj: yet.mesaj}); return; }
@@ -794,7 +828,7 @@ exports.caprazBildir = onDocumentWritten({document: "apps/cross", region: "us-ce
       // oluştuğu anda "içerik değişti" diye ölüyordu (tam tersi: sipariş henüz YOKKEN geçiyordu).
       // İmza boş → moconfirm bayat-kontrolünü atlar; içerik denetimini yaz() değişiklik mesajları
       // ve iptal kontrolü zaten yapar.
-      buttons = [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + r.targetId}]];
+      buttons = (await onayAkisAcikFN("muhasebe")) ? [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + r.targetId}]] : null;
     } else { continue; }
     try {
       // buttons null olabilir (yem bilgi hattı) → reply_markup HİÇ konmaz.
@@ -935,6 +969,9 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
     let dec;
     try { dec = await admin.auth().verifyIdToken(idToken); } catch (e) { res.status(401).json({hata: "kimlik doğrulanamadı"}); return; }
     const IZINLI = ["siparis", "yem", "saha", "bakim", "ik", "toplanti"];
+    // ONAY AKIŞI ŞALTERİ — bu istek boyunca TEK KEZ okunur (transaction yeniden denense de
+    // aynı değer kullanılsın; ayrıca her kayıtta ayrı Firestore okuması yapılmasın).
+    const _muhAcik = await onayAkisAcikFN("muhasebe");
     const app = String((req.body && req.body.app) || "");
     if (!IZINLI.includes(app)) { res.status(400).json({hata: "geçersiz modül"}); return; }   // exact-match allowlist — db.doc'tan ÖNCE (path injection + Admin-SDK bypass kapalı)
     if (!(dec.portalYonetici === true || (dec[app] && dec[app] !== "yok"))) { res.status(403).json({hata: "bu modülü yazma yetkiniz yok"}); return; }   // dec[app] && şart: provision edilmemiş hesapta claim undefined → sızıntı olmasın
@@ -1068,7 +1105,7 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
                 delete kopya.muhasebeOnay; delete kopya.fabrikaOnay; delete kopya.yemOnay;
                 // BİLGİ HATTI: onay hiç istenmiyor → bayrağı DİRİLTME. Diriltilseydi ekranda sonsuza
                 // kadar "Muhasebe Onayı — Bekliyor" kutusu kalırdı (kimse onaylamayacağı için).
-                kopya.muhasebeOnayGerek = !yemBilgiHatti(app, yo);
+                kopya.muhasebeOnayGerek = _muhAcik && !yemBilgiHatti(app, yo);   // şalter kapalıysa bayrak diriltilmez
                 inDB.orders[idx] = kopya; korundu = true;
               };
               inDB.orders.forEach((yo, idx) => {
@@ -1351,11 +1388,12 @@ exports.yaz = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN, 
               "\n\nYAPILAN DEĞİŞİKLİKLER:\n" + d.farklar.slice(0, 12).join("\n") +
               (d.farklar.length > 12 ? "\n… ve " + (d.farklar.length - 12) + " değişiklik daha" : "") +
               "\n\nSİPARİŞİN SON HÂLİ:\n" + (d.urun.length ? d.urun.map((u) => "• " + u).join("\n") : "• (ürün yok)") +
-              (d.bilgi ? "\n\n(Bilgi amaçlıdır — onay gerekmez, sipariş akışı durmaz.)" :
-                (d.onayliydi ? "\n\n❗ Bu sipariş DAHA ÖNCE ONAYLANMIŞTI — onay düşürüldü, yeniden onaylayın." :
-                  "\n\n(Sipariş henüz onaylanmamıştı; güncel içerik yukarıdadır.)"));
+              (!_muhAcik ? "\n\n(Onay akışı askıda — bilgi amaçlıdır, sipariş akışı durmaz.)" :
+                d.bilgi ? "\n\n(Bilgi amaçlıdır — onay gerekmez, sipariş akışı durmaz.)" :
+                  (d.onayliydi ? "\n\n❗ Bu sipariş DAHA ÖNCE ONAYLANMIŞTI — onay düşürüldü, yeniden onaylayın." :
+                    "\n\n(Sipariş henüz onaylanmamıştı; güncel içerik yukarıdadır.)"));
             const gonder = {chat_id: chat, text: govde.slice(0, 3900)};
-            if (!d.bilgi) gonder.reply_markup = {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:" + mod + ":" + d.id + ":" + d.imzaH}]]};
+            if (!d.bilgi && _muhAcik) gonder.reply_markup = {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:" + mod + ":" + d.id + ":" + d.imzaH}]]};
             await tg(token, "sendMessage", gonder);
           }
         }
@@ -2147,6 +2185,9 @@ exports.yonetim = onRequest({region: "us-central1", cors: true, secrets: [TG_TOK
     if (b.yemOnay) P.yemOnay = b.yemOnay;
     if (b.muhasebeSiparisOnay) P.muhasebeSiparisOnay = b.muhasebeSiparisOnay;   // sipariş muhasebe onaycıları
     if (b.fabrikaOnay) P.fabrikaOnay = b.fabrikaOnay;   // TMR ÜRETİM onaycıları (panelden onay)
+    if (b.onayAkis && typeof b.onayAkis === "object") {   // onay akışı şalteri (açık/askıda)
+      P.onayAkis = {muhasebe: b.onayAkis.muhasebe !== false, uretim: b.onayAkis.uretim !== false};
+    }
     await db.doc("apps/portal").set({data: {rota_portal_v1: JSON.stringify(P)}, updatedAt: new Date().toISOString()}, {merge: true});
 
     // 2) Auth hesapları + yetki rozetleri
@@ -2725,7 +2766,7 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
         aliciMusteri, aliciMusteriId,   // siparişin gittiği bayi müşterisi (teslim/izleme hedefi); boşsa bayi kendisi için
         customerId: "", customer: "", firma: "", odeme: "", kargo: "", nakliye: 0,
         not: "", alan: "Bayi Portalı", kaynak: "bayi-portal",   // not BOŞ: iç listede "Not Var" clutter'ı yerine BAYİDEN etiketi çıkar (#9)
-        muhasebeOnayGerek: true,   // katı sıra: önce muhasebe onayı (sunucu-kilidi için)
+        muhasebeOnayGerek: await onayAkisAcikFN("muhasebe"),   // katı sıra: önce muhasebe onayı (sunucu-kilidi için) · şalter kapalıysa damga vurulmaz
         priceListId: (DB.meta && DB.meta.activePriceListId) || "",
         hist: [{ts: nowISO, durum: "beklemede", not: "Bayi portalından oluşturuldu" +
           (dbsOranSip > 0 ? " · DBS %" + dbsOranSip + " uygulandı" : "")}],
@@ -2751,11 +2792,14 @@ exports.bayi = onRequest({region: "us-central1", cors: true, secrets: [TG_TOKEN,
           const ut = lines.map((l) => "• " + l.code + " × " + l.qty).join("\n");
           const aliciTxt = aliciMusteri ? ("\nAlıcı (müşteri): " + aliciMusteri) : "";
           const teslimTxt = teslimTarihi ? ("\nTeslim istenen: " + teslimTarihi) : "";
-          const text = "YENİ BAYİ SİPARİŞİ (portal) — MUHASEBE ONAYI BEKLİYOR\n\nBayi: " + ((bayiKaydi && bayiKaydi.name) || "—") + aliciTxt +
-            "\nSipariş: #" + sonNo + "\nTarih: " + yeni.date + teslimTxt + "\n\n" + ut + "\n\nTahmini tutar: " + Math.round(toplam) + " ₺\n\nSipariş Takip'te 'beklemede' olarak listelendi. Önce muhasebe onayı, ardından üretim onayı alınır.";
+          const _muhAcik = await onayAkisAcikFN("muhasebe");
+          const text = "YENİ BAYİ SİPARİŞİ (portal)" + (_muhAcik ? " — MUHASEBE ONAYI BEKLİYOR" : "") + "\n\nBayi: " + ((bayiKaydi && bayiKaydi.name) || "—") + aliciTxt +
+            "\nSipariş: #" + sonNo + "\nTarih: " + yeni.date + teslimTxt + "\n\n" + ut + "\n\nTahmini tutar: " + Math.round(toplam) + " ₺\n\nSipariş Takip'te 'beklemede' olarak listelendi." +
+            (_muhAcik ? " Önce muhasebe onayı, ardından üretim onayı alınır." : " Onay akışı şu an askıda — sipariş onay beklemeden ilerler.");
           // 1. KAPI: muhasebe onayı (moapprove:t) → webhook onaylanınca üretim onayını (approve:→confirm:) tetikler.
           // GÜVENLİK: mesaj yalnız İÇ Telegram grubuna gider; bayi bu grupta değil → kendi siparişini onaylayamaz.
-          await tg(token, "sendMessage", {chat_id: chat, text, reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}});
+          await tg(token, "sendMessage", {chat_id: chat, text,
+            ...(_muhAcik ? {reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}} : {})});
         }
       } catch (e) { console.error("bayi/tg", e); }
       res.json({ok: true, no: sonNo});
@@ -2855,7 +2899,7 @@ function portalSipTavanKontrol(orders, yeni) {
   if (acik >= PORTAL_SIP_TAVAN) throw new Error("SIP_TAVAN");
 }
 async function portalSiparisEkleVeBildir(yeni, tgText) {
-  yeni.muhasebeOnayGerek = true;   // katı sıra: önce muhasebe onayı (sunucu-kilidi confirm: forge'unu kapatır)
+  yeni.muhasebeOnayGerek = await onayAkisAcikFN("muhasebe");   // katı sıra: önce muhasebe onayı (sunucu-kilidi confirm: forge'unu kapatır) · şalter kapalıysa false
   let sonNo = 0;
   await db.runTransaction(async (tx) => {
     const ref = db.doc("apps/siparis");
@@ -2875,7 +2919,7 @@ async function portalSiparisEkleVeBildir(yeni, tgText) {
     if (token && chat) {
       // 1. KAPI: muhasebe onayı. Muhasebe onaylayınca webhook üretim onay mesajını (approve:) tetikler.
       await tg(token, "sendMessage", {chat_id: chat, text: tgText.split("{NO}").join("#" + sonNo),
-        reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}});
+        ...((await onayAkisAcikFN("muhasebe")) ? {reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:t:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}} : {})});
     }
   } catch (e) { console.error("portalSiparis/tg", e); }
   return sonNo;
@@ -2916,7 +2960,7 @@ function yemPortalSiparis({customerId, customer, teslimTarihi, lines, alan, kayn
   }, extra || {});
 }
 async function yemPortalEkleVeBildir(yeni, tgText) {
-  yeni.muhasebeOnayGerek = true;   // katı sıra: önce muhasebe onayı
+  yeni.muhasebeOnayGerek = await onayAkisAcikFN("muhasebe");   // katı sıra: önce muhasebe onayı · şalter kapalıysa false
   let sonNo = 0;
   await db.runTransaction(async (tx) => {
     const ref = db.doc("apps/yem");
@@ -2936,7 +2980,7 @@ async function yemPortalEkleVeBildir(yeni, tgText) {
     if (token && chat) {
       // YEM HATTI TEK KAPILI: yalnız muhasebe onayı istenir; webhook mod="y" gördüğünde ayrıca üretim onay mesajı GÖNDERMEZ.
       await tg(token, "sendMessage", {chat_id: chat, text: tgText.split("{NO}").join("#Y" + sonNo),
-        reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:y:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}});
+        ...((await onayAkisAcikFN("muhasebe")) ? {reply_markup: {inline_keyboard: [[{text: "✅ Muhasebe Onayı Ver", callback_data: "moapprove:y:" + yeni.id + ":" + imzaHash(siparisImza(yeni))}]]}} : {})});
     }
   } catch (e) { console.error("yemPortal/tg", e); }
   return sonNo;
