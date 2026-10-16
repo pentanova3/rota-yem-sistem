@@ -1115,7 +1115,7 @@ baslik('20) SERT ONAY KAPISI — TMR + Yem eş davranış');
   const yem = fs.readFileSync(path.join(kok, 'yem', 'index.html'), 'utf8');
   // TMR'de artık sert kapı var (önceden yalnız Yem'de vardı → onay düşürme TMR'de kozmetikti).
   dogru('TMR: sert kapı eklendi', /SERT ONAY KAPISI \(Yem ile EŞ\)/.test(tmr));
-  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0\};/.test(tmr));
+  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0\};/.test(tmr));
   dogru('TMR: muhasebe VE üretim onayı aranıyor', /onayVarMi\(o,'muhasebe'\)/.test(tmr) && /onayVarMi\(o,'uretim'\)/.test(tmr));
   dogru('TMR: geçmiş/Excel kaydı muaf', /o\.id&&o\.muhasebeOnayGerek&&!o\.gecmisKayit/.test(tmr));
   dogru('TMR: üretim onayı GÜVENİLİR kaynaktan (apps/fabrikaonay)', /function fabrikaOnayRec\(o\)\{const r=\(o&&o\.id&&window\.__FABRIKA\)/.test(tmr));
@@ -2302,7 +2302,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       (function tara(d) {
         fsx.readdirSync(d, {withFileTypes: true}).forEach((e) => {
           const p = pth.join(d, e.name);
-          if (HARIC.test(p + '/')) return;
+          if (HARIC.test(pth.relative(KOK, p) + '/')) return;   // DEPO İÇİ yol: kök '.gunluk/...' altındayken tarama boşa düşmesin
           if (e.isDirectory()) tara(p); else if (/\.html$/.test(e.name)) html.push(p);
         });
       })(KOK);

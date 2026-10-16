@@ -510,8 +510,13 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 // ============ DATA LAYER ============
 const LSKEY='rota_so_v1';
 const ROLES={admin:'Yönetici',siparis:'Sipariş Personeli',sevkiyat:'Sevkiyat',goruntule:'Görüntüleyici',plasiyer:'Plasiyer (Saha)'};
+/* "Onaylandı" KALDIRILDI (firma kararı 16.10.2026): muhasebe/üretim onay akışı 23.09'da
+   askıya alındığından bu durum boşta kalmıştı — canlıda TEK sipariş kullanmıyordu (367 kayıt
+   tarandı: 358 teslim · 5 hazır · 4 beklemede). Zincir: Beklemede → Hazır → İrsaliyesi Kesildi
+   → Sevk Edildi → Teslim Edildi.
+   NOT: YEM modülünde 55 siparişin TAMAMI 'onay' durumunda — orası BİLEREK dokunulmadı. */
 const STATUSES=[
-  {v:'beklemede',l:'Beklemede'},{v:'onay',l:'Onaylandı'},{v:'hazir',l:'Hazır'},
+  {v:'beklemede',l:'Beklemede'},{v:'hazir',l:'Hazır'},
   {v:'irsaliye',l:'İrsaliyesi Kesildi'},
   {v:'sevk',l:'Sevk Edildi'},{v:'teslim',l:'Teslim Edildi'},{v:'iptal',l:'İptal'}
 ];
@@ -519,7 +524,7 @@ const KARGO=['Kendi Aracı','Nakliye','Nakliyeci','Müşteri Alımı'];
 const KADEME=[{v:'fabrika',l:'Fabrika Teslim'},{v:'yakin',l:'Yakın Bayi Satış'},{v:'uzak',l:'Uzak Bayi Satış'}];
 // Düzenlenebilir seçenek listeleri (Ayarlar'dan yönetilir)
 const OPTS_VERSION='2026-05-22';
-const CORE_ST=['beklemede','onay','hazir','irsaliye','sevk','teslim','iptal'];
+const CORE_ST=['beklemede','hazir','irsaliye','sevk','teslim','iptal'];
 function seedOpts(){
   DB.opts=DB.opts||{};
   if(DB.meta.optsVersion!==OPTS_VERSION){
@@ -530,6 +535,13 @@ function seedOpts(){
   }
   // İRSALİYE GÖÇÜ (04.09.2026): kayıtlı seçenek listesi eski sürümden geliyorsa
   // "İrsaliyesi Kesildi" durumunu Hazır'ın arkasına ekle (OPTS_VERSION kapısından bağımsız).
+  /* "Onaylandı" GÖÇÜ (16.10.2026): kayıtlı seçenek listesinden düşürülür. GÜVENLİK KAPISI —
+     elinde 'onay' durumunda sipariş VARSA liste korunur; yoksa o kayıtlar ekranda ham
+     "onay" diye görünür ve süzgeçten düşerdi. */
+  if(DB.opts.durum&&DB.opts.durum.some(s=>s&&s.v==='onay')
+     &&!(DB.orders||[]).some(o=>o&&o.status==='onay')){
+    DB.opts.durum=DB.opts.durum.filter(s=>!(s&&s.v==='onay'));
+  }
   if(DB.opts.durum&&!DB.opts.durum.some(s=>s&&s.v==='irsaliye')){
     const _hi=DB.opts.durum.findIndex(s=>s&&s.v==='hazir');
     DB.opts.durum.splice(_hi>=0?_hi+1:DB.opts.durum.length,0,{v:'irsaliye',l:'İrsaliyesi Kesildi'});
@@ -1529,7 +1541,7 @@ function renderPanel(c,tb){
     <div class="gr-tabs">${_grSek.map(([k,l])=>`<button class="gr-tab${panelGrafik===k?' active':''}" onclick="panelGrafikSec('${k}')">${l}</button>`).join('')}</div></div>
     <div class="card-bd" style="padding:14px 16px"><div style="position:relative;height:150px"><canvas id="panelDayChart"></canvas></div></div></div>`;
   // durum renk açıklaması (legend)
-  const ST_HEX={beklemede:'#9CA2AA',onay:'#3D5CB8',hazir:'#D97706',irsaliye:'#7C3AED',sevk:'#0284C7',teslim:'#16A34A',iptal:'#DC2626'};   // gün kutusu noktalarıyla (st-dot) birebir aynı — legend yanlış renk öğretmesin
+  const ST_HEX={beklemede:'#9CA2AA',hazir:'#D97706',irsaliye:'#7C3AED',sevk:'#0284C7',teslim:'#16A34A',iptal:'#DC2626'};   // gün kutusu noktalarıyla (st-dot) birebir aynı — legend yanlış renk öğretmesin
   h+=`<div class="st-legend"><span class="lg-ttl">Durum Renkleri</span>${STATUSES.map(s=>`<span class="st-lg"><i style="background:${ST_HEX[s.v]}"></i>${esc(s.l)}</span>`).join('')}</div>`;
   // gün kutuları
   h+=`<div class="day-grid">`;
@@ -1848,7 +1860,7 @@ function renderOrders(c,tb){
   const cnt=v=>_vis.filter(o=>!v||o.status===v).length;
   // SİLİNMİŞ sekmesi bir DURUM değil, denetim izinden gelen ayrı bir görünüm — sayısı
   // siparişlerden hesaplanamaz (kayıt blob'dan silinmiştir), o yüzden cnt() dışında tutulur.
-  const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'onay',l:'Onaylı'},{v:'hazir',l:'Hazır'},{v:'irsaliye',l:'İrsaliye'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
+  const tabDefs=[{v:'',l:'Tümü'},{v:'beklemede',l:'Bekleyen'},{v:'hazir',l:'Hazır'},{v:'irsaliye',l:'İrsaliye'},{v:'sevk',l:'Sevk'},{v:'teslim',l:'Teslim'}];
   let h=subTabs+`<div class="order-tabs">${tabDefs.map(t=>`<button class="otab ${filt.status===t.v?'active':''}" onclick="setStatusTab('${t.v}')">${t.l} <span class="otab-n">${cnt(t.v)}</span></button>`).join('')}<button class="otab ${filt.status==='__silinmis'?'active':''}" onclick="setStatusTab('__silinmis')" title="Silinen siparişler — kim, ne zaman, neyi sildi">Silinmiş</button></div>
   <div class="filters">
     <input class="fsearch" placeholder="Müşteri, ürün, plaka ara..." value="${esc(filt.q)}" oninput="filt.q=this.value;refreshOrders()">
@@ -2742,7 +2754,7 @@ function saveOrder(){
   // Muaf: geçmiş/Excel kaydı (muhasebeOnayGerek=false) ve onay kapısı öncesi ESKİ kayıtlar (alan yok).
   // Kilitli kalırsa çıkış yolu: modaldaki "Muhasebe Onayı İste" düğmesi mesajı yeniden gönderir.
   if(o.id&&o.muhasebeOnayGerek&&!o.gecmisKayit){
-    var _RANK={beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};
+    var _RANK={beklemede:0,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};   // 1 boş: 'onay' kalktı, eşikler korunsun
     var _rY=(_RANK[o.status]!=null?_RANK[o.status]:0), _rE=(_RANK[_origSt]!=null?_RANK[_origSt]:0);
     if(_rY>_rE){
       // AYNI KAYITTA HEM İÇERİK DEĞİŞTİRİP HEM İLERLETME: bu kayıt onayı ZATEN düşürecek →
@@ -2903,7 +2915,7 @@ function saveOrder(){
   // (Excel/sessiz) kayıtlar stoğa DOKUNMAZ — o mal fiilen çoktan çıkmıştır.
   (function(){
     if(o.gecmisKayit)return;
-    var R={beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};
+    var R={beklemede:0,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0};   // 1 boş: 'onay' kalktı, >=3 eşiği korunsun
     var gecti=o.status!=='iptal'&&(R[o.status]||0)>=3;
     DB.stock=DB.stock||{};
     var uygula=function(code,q){if(!code||!q)return;var st=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};st.cikis=Math.round(((+st.cikis||0)+q)*100)/100;st.date=todayISO();};
@@ -5191,7 +5203,7 @@ function hammaddeAlertCheck(kalemler){const low=[...new Set((kalemler||[]).map(k
 const AY_KISA=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 window.AY_KISA=AY_KISA;
 const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi',bayi:'Bayi Satış'};
-const ST_COLOR={beklemede:'#94A3B8',onay:'#2878C8',hazir:'#F59E0B',irsaliye:'#8B5CF6',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
+const ST_COLOR={beklemede:'#94A3B8',hazir:'#F59E0B',irsaliye:'#8B5CF6',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 // ============ TONAJ & HEDEF RAPORU ============
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
 function tonOf(code,qty){return (+qty||0)*prodKg(code)/1000;}
@@ -5875,7 +5887,7 @@ function raporYazdir(){
 // ortalamalarına katılmaz — onay zinciri hiç çalışmadı, süreleri süreci temsil etmez.
 var akisSel={year:'',month:''};
 function akisData(yil,ay){
-  const SIRA={beklemede:0,onay:1,hazir:2,irsaliye:2,sevk:3,teslim:4,iptal:-1};   // irsaliye: üretim geçilmiş, sevk bekleniyor
+  const SIRA={beklemede:0,hazir:2,irsaliye:2,sevk:3,teslim:4,iptal:-1};   // irsaliye: üretim geçilmiş, sevk bekleniyor · 'onay' kalktı
   const kohort=DB.orders.filter(o=>{
     if(o.tarihsel)return false;
     const d=String(o.date||'');
@@ -6499,7 +6511,7 @@ window.__applyFabrika=function(map){
     var o=DB.orders.find(function(x){return x.id===oid});if(!o)return;
     if(!o.fabrikaOnay||o.fabrikaOnay.ts!==rec.ts){
       o.fabrikaOnay={by:rec.by,ts:rec.ts||new Date().toISOString()};
-      if(o.status==='beklemede')o.status='onay';
+      if(o.status==='beklemede')o.status='hazir';   // 'onay' durumu kalktı (16.10.2026)
       pushHist(o,'fabrika','Üretim onayı: '+rec.by,'Telegram');
       chg++;
     }
