@@ -1935,7 +1935,7 @@ exports.gunlukTeslimat = onSchedule({schedule: "45 7 * * *", timeZone: "Europe/I
   const fmtQ = (n) => (+n || 0).toLocaleString("tr-TR");
 
   const KADEME = {fabrika: "Fabrika Teslim", yakin: "Yakın Bayi Satış", uzak: "Uzak Bayi Satış", bayi: "Bayi Satış"};
-  const ST = {beklemede: "Beklemede", hazir: "Hazır", irsaliye: "İrsaliyesi Kesildi", sevk: "Sevk Edildi"};   // TMR'de "Onaylandı" kalktı (16.10.2026)
+  const ST = {beklemede: "Beklemede", hazir: "Hazır", sevk: "Sevk Edildi"};   // TMR'de "Onaylandı" ve "İrsaliyesi Kesildi" kalktı (16.10.2026)
   const list = (DB.orders || []).filter((o) => o.teslimTarihi === iso && o.status !== "iptal" && o.status !== "teslim");
 
   let msg;
