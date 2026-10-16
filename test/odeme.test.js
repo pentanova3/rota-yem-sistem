@@ -2297,7 +2297,9 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       dogru('CSP script-src okunabildi', izinli.length > 0);
 
       // portal hedefinin YAYIMLADIĞI html'ler (ignore listesindekiler hariç)
-      const HARIC = /node_modules|\/functions\/|musteri-site|bayi-site|\/onay\/|\/bilgi\/|\/test\/|sizma-provasi|\/\./;
+      // (^|\/)\. → nokta ile başlayan HER yol parçası elenir. Yalnız '\/\.' yazılsaydı kökteki
+      // '.gunluk' (günlük worktree) elenmez, oradaki kopya sayfalar ikinci kez taranırdı.
+      const HARIC = /node_modules|\/functions\/|musteri-site|bayi-site|\/onay\/|\/bilgi\/|\/test\/|sizma-provasi|(^|\/)\./;
       const html = [];
       (function tara(d) {
         fsx.readdirSync(d, {withFileTypes: true}).forEach((e) => {
