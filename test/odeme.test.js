@@ -3346,6 +3346,40 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
         dogru('göç güvenlik kapısı: onay', /some\(o=>o&&o\.status==='onay'\)/.test(H));
         dogru('göç güvenlik kapısı: irsaliye', /some\(o=>o&&o\.status==='irsaliye'\)/.test(H));
       }
+      /* ── MÜKERRER KALKANI (16.10.2026) — KOŞTURMALI ───────────────────────────────
+         Gerçek olay: #377'nin 120 çuvalı iki kez düşmüş, 10-40 kalanı -78'e inmişti.
+         Sebep: editOrder modal açılışında alınan derin kopya; araya uzaktan senkron/ikinci
+         sekme girince kopyadaki damga bayatlıyor. Kalkan "ne düşülmüştü"yü DEPODAKİ kayda
+         soruyor. Aşağıdaki senaryo bayat kopyayı birebir kurar. */
+      {
+        const blok = /var _kyt=o\.id\?[\s\S]*?\n      \}\);/.exec(H);
+        dogru('mükerrer kalkanı kodda', !!blok);
+        if (blok) {
+          const calistir = (o, kayit) => {
+            const DB = {orders: kayit ? [kayit] : []};
+            let eskiM;
+            eval(blok[0].replace(/^\s*var eskiM=\{\};/m, 'eskiM={};'));
+            return eskiM;
+          };
+          const damga = {lines: [{code: '10-40', qty: 120}]};
+          // A) iki tarafta da damga var → 120 zaten düşülmüş sayılır
+          dogru('A: damga her iki yanda → çift düşmez',
+            calistir({id: 'o1', stokCikis: damga}, {id: 'o1', stokCikis: damga})['10-40'] === 120);
+          // B) BAYAT KOPYA: elimizdeki nesnede damga YOK, depoda VAR → asıl olay buydu
+          dogru('B: bayat kopyada damga yok, depoda var → yine 120 (çift düşme ENGELLENDİ)',
+            calistir({id: 'o1'}, {id: 'o1', stokCikis: damga})['10-40'] === 120);
+          // C) depoda yok, kopyada var (kayıt yeniden eklenmiş) → kopyadaki geçerli
+          dogru('C: depoda damga yok, kopyada var → 120',
+            calistir({id: 'o1', stokCikis: damga}, {id: 'o1'})['10-40'] === 120);
+          // D) hiç damga yok → ilk kez işlenecek, önceki 0
+          dogru('D: hiç damga yok → önceki boş (ilk kez düşer)',
+            Object.keys(calistir({id: 'o1'}, {id: 'o1'})).length === 0);
+          // E) iki damga FARKLI miktar → BÜYÜĞÜ alınır (eksik düşmek, çift düşmekten iyi)
+          dogru('E: farklı miktarda iki damga → büyüğü esas alınır',
+            calistir({id: 'o1', stokCikis: {lines: [{code: '10-40', qty: 50}]}},
+                     {id: 'o1', stokCikis: damga})['10-40'] === 120);
+        }
+      }
       dogru('eski üç stok butonu SÖKÜLDÜ', !/function stokUretim\(|function stokCikis\(|function stokFire\(/.test(H) &&
         !/stokUretim\('/.test(H));
       dogru('İşlem sütunu kalktı', !/<th class="num">İşlem<\/th>/.test(H));

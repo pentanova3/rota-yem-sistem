@@ -2922,7 +2922,17 @@ function saveOrder(){
     var uygula=function(code,q){if(!code||!q)return;var st=DB.stock[code]=DB.stock[code]||{stok:0,uretim:0,cikis:0,fire:0};st.cikis=Math.round(((+st.cikis||0)+q)*100)/100;st.date=todayISO();};
     if(gecti){
       var yeni={};(o.lines||[]).forEach(function(l){if(l&&l.code&&+l.qty>0)yeni[l.code]=(yeni[l.code]||0)+(+l.qty);});
-      var eskiM={};((o.stokCikis&&o.stokCikis.lines)||[]).forEach(function(l){if(l&&l.code)eskiM[l.code]=(eskiM[l.code]||0)+(+l.qty||0);});
+      /* MÜKERRER KALKANI (16.10.2026): "daha önce ne düşülmüştü" sorusu, elimizdeki KOPYAYA
+         değil DEPODAKİ KAYDA sorulur. editOrder modal açılırken alınan derin kopyadır; uzaktan
+         senkron ya da ikinci bir sekme araya girerse kopyadaki damga bayat kalır ve çıkış ikinci
+         kez işlenirdi (ölçüldü: #377 · 120 çuval iki kez, 10-40 kalanı -78). Kayıt bu satırın
+         altında güncelleniyor, yani DB.orders hâlâ ÖNCEKİ sürümü tutuyor — doğru kaynak odur.
+         İki damga da varsa ürün bazında BÜYÜĞÜ alınır: eksik düşmek, çift düşmekten iyidir. */
+      var _kyt=o.id?(DB.orders||[]).find(function(x){return x&&x.id===o.id;}):null;
+      var eskiM={};
+      [(o.stokCikis&&o.stokCikis.lines)||[],(_kyt&&_kyt.stokCikis&&_kyt.stokCikis.lines)||[]].forEach(function(dizi){
+        dizi.forEach(function(l){if(!l||!l.code)return;var q=+l.qty||0;if(!(l.code in eskiM)||q>eskiM[l.code])eskiM[l.code]=q;});
+      });
       var degisti=false;
       Object.keys(Object.assign({},yeni,eskiM)).forEach(function(k){
         var fark=Math.round(((yeni[k]||0)-(eskiM[k]||0))*100)/100;if(!fark)return;
