@@ -1115,7 +1115,7 @@ baslik('20) SERT ONAY KAPISI — TMR + Yem eş davranış');
   const yem = fs.readFileSync(path.join(kok, 'yem', 'index.html'), 'utf8');
   // TMR'de artık sert kapı var (önceden yalnız Yem'de vardı → onay düşürme TMR'de kozmetikti).
   dogru('TMR: sert kapı eklendi', /SERT ONAY KAPISI \(Yem ile EŞ\)/.test(tmr));
-  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,onay:1,hazir:2,irsaliye:3,sevk:4,teslim:5,iptal:0\};/.test(tmr));
+  dogru('TMR: kapı statü RANK ile ilerlemeye bağlı', /var _RANK=\{beklemede:0,hazir:2,sevk:4,teslim:5,iptal:0\};/.test(tmr));
   dogru('TMR: muhasebe VE üretim onayı aranıyor', /onayVarMi\(o,'muhasebe'\)/.test(tmr) && /onayVarMi\(o,'uretim'\)/.test(tmr));
   dogru('TMR: geçmiş/Excel kaydı muaf', /o\.id&&o\.muhasebeOnayGerek&&!o\.gecmisKayit/.test(tmr));
   dogru('TMR: üretim onayı GÜVENİLİR kaynaktan (apps/fabrikaonay)', /function fabrikaOnayRec\(o\)\{const r=\(o&&o\.id&&window\.__FABRIKA\)/.test(tmr));
@@ -2302,7 +2302,7 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
       (function tara(d) {
         fsx.readdirSync(d, {withFileTypes: true}).forEach((e) => {
           const p = pth.join(d, e.name);
-          if (HARIC.test(p + '/')) return;
+          if (HARIC.test(pth.relative(KOK, p) + '/')) return;   // DEPO İÇİ yol: kök '.gunluk/...' altındayken tarama boşa düşmesin
           if (e.isDirectory()) tara(p); else if (/\.html$/.test(e.name)) html.push(p);
         });
       })(KOK);
@@ -3312,6 +3312,74 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
           if (c === '{') { d++; b = true; } else if (c === '}') { d--; if (b && !d) return H.slice(i, k + 1); } }
         return '';
       };
+      /* ── SİPARİŞ → STOK ÇIKIŞI TETİĞİ (16.10.2026) ──────────────────────────────────
+         'onay' ve 'irsaliye' durumları kaldırılırken sıra haritasından anahtar silindi ama
+         SAYILAR korundu (1 ve 3 boş). Eşik >=3 olduğundan yalnız sevk(4) ve teslim(5)
+         düşürmeli; hazır(2) ve beklemede(0) ASLA düşürmemeli. Renumaralandırma yapılırsa
+         bu sınama eşiğin kaymasını yakalar — hazır sipariş stoktan düşerse depo şişer. */
+      {
+        const blok = H.slice(H.indexOf('var R={beklemede:0'));
+        const mR = /var R=\{([^}]*)\};/.exec(blok);
+        dogru('stok tetiği: sıra haritası okundu', !!mR);
+        const R = {}; (mR ? mR[1] : '').split(',').forEach((p) => {
+          const [k, v] = p.split(':'); if (k) R[k.trim()] = +v;
+        });
+        const mE = /\(R\[o\.status\]\|\|0\)>=(\d+)/.exec(blok);
+        dogru('stok tetiği: eşik okundu', !!mE, mE ? '>=' + mE[1] : 'bulunamadı');
+        const esik = mE ? +mE[1] : -1;
+        const duser = (st) => st !== 'iptal' && (R[st] || 0) >= esik;
+        dogru('BEKLEMEDE stoktan DÜŞMEZ', duser('beklemede') === false);
+        dogru('HAZIR stoktan DÜŞMEZ', duser('hazir') === false);
+        dogru('SEVK stoktan DÜŞER', duser('sevk') === true);
+        dogru('TESLİM stoktan DÜŞER', duser('teslim') === true);
+        dogru('İPTAL stoktan DÜŞMEZ', duser('iptal') === false);
+        // Kaldırılan durumlar artık haritada olmamalı
+        dogru("kaldırılan 'onay' sıra haritasında YOK", !('onay' in R));
+        dogru("kaldırılan 'irsaliye' sıra haritasında YOK", !('irsaliye' in R));
+        // Durum listesinde de bulunmamalı
+        const mS = /const STATUSES=\[([\s\S]*?)\];/.exec(H);
+        dogru("STATUSES'ta 'onay' YOK", !!mS && !/v:'onay'/.test(mS[1]));
+        dogru("STATUSES'ta 'irsaliye' YOK", !!mS && !/v:'irsaliye'/.test(mS[1]));
+        dogru('STATUSES sırası: beklemede → hazir → sevk → teslim → iptal',
+          !!mS && (mS[1].match(/v:'([a-z]+)'/g) || []).join(',') === "v:'beklemede',v:'hazir',v:'sevk',v:'teslim',v:'iptal'");
+        // Göç kapıları: elde o durumda sipariş varsa liste KORUNUR
+        dogru('göç güvenlik kapısı: onay', /some\(o=>o&&o\.status==='onay'\)/.test(H));
+        dogru('göç güvenlik kapısı: irsaliye', /some\(o=>o&&o\.status==='irsaliye'\)/.test(H));
+      }
+      /* ── MÜKERRER KALKANI (16.10.2026) — KOŞTURMALI ───────────────────────────────
+         Gerçek olay: #377'nin 120 çuvalı iki kez düşmüş, 10-40 kalanı -78'e inmişti.
+         Sebep: editOrder modal açılışında alınan derin kopya; araya uzaktan senkron/ikinci
+         sekme girince kopyadaki damga bayatlıyor. Kalkan "ne düşülmüştü"yü DEPODAKİ kayda
+         soruyor. Aşağıdaki senaryo bayat kopyayı birebir kurar. */
+      {
+        const blok = /var _kyt=o\.id\?[\s\S]*?\n      \}\);/.exec(H);
+        dogru('mükerrer kalkanı kodda', !!blok);
+        if (blok) {
+          const calistir = (o, kayit) => {
+            const DB = {orders: kayit ? [kayit] : []};
+            let eskiM;
+            eval(blok[0].replace(/^\s*var eskiM=\{\};/m, 'eskiM={};'));
+            return eskiM;
+          };
+          const damga = {lines: [{code: '10-40', qty: 120}]};
+          // A) iki tarafta da damga var → 120 zaten düşülmüş sayılır
+          dogru('A: damga her iki yanda → çift düşmez',
+            calistir({id: 'o1', stokCikis: damga}, {id: 'o1', stokCikis: damga})['10-40'] === 120);
+          // B) BAYAT KOPYA: elimizdeki nesnede damga YOK, depoda VAR → asıl olay buydu
+          dogru('B: bayat kopyada damga yok, depoda var → yine 120 (çift düşme ENGELLENDİ)',
+            calistir({id: 'o1'}, {id: 'o1', stokCikis: damga})['10-40'] === 120);
+          // C) depoda yok, kopyada var (kayıt yeniden eklenmiş) → kopyadaki geçerli
+          dogru('C: depoda damga yok, kopyada var → 120',
+            calistir({id: 'o1', stokCikis: damga}, {id: 'o1'})['10-40'] === 120);
+          // D) hiç damga yok → ilk kez işlenecek, önceki 0
+          dogru('D: hiç damga yok → önceki boş (ilk kez düşer)',
+            Object.keys(calistir({id: 'o1'}, {id: 'o1'})).length === 0);
+          // E) iki damga FARKLI miktar → BÜYÜĞÜ alınır (eksik düşmek, çift düşmekten iyi)
+          dogru('E: farklı miktarda iki damga → büyüğü esas alınır',
+            calistir({id: 'o1', stokCikis: {lines: [{code: '10-40', qty: 50}]}},
+                     {id: 'o1', stokCikis: damga})['10-40'] === 120);
+        }
+      }
       dogru('eski üç stok butonu SÖKÜLDÜ', !/function stokUretim\(|function stokCikis\(|function stokFire\(/.test(H) &&
         !/stokUretim\('/.test(H));
       dogru('İşlem sütunu kalktı', !/<th class="num">İşlem<\/th>/.test(H));
