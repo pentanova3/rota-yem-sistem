@@ -183,9 +183,16 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .kg-t tbody tr:hover{background:var(--blue-50)}
 /* Parti ipuçları (28.10.2026) */
 .parti-ip{font-size:10px;color:var(--blue-700);font-weight:600;margin-top:3px;white-space:nowrap}
-.parti-top{margin-top:8px;font-size:12px;color:var(--slate-600)}
-.parti-top b{color:var(--blue-800)}
-.parti-top span{font-size:11px;color:var(--slate-400)}
+.parti-b{background:#F8FAFC;border:1px solid var(--slate-200);border-radius:10px;margin-top:10px;overflow:hidden}
+.pb-ust{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--blue-50);border-bottom:1px solid #DBEAFE;padding:8px 13px}
+.pb-ust span{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#1E40AF}
+.pb-ust b{font-size:16px;font-weight:700;color:#1D4ED8;font-variant-numeric:tabular-nums}
+.pb-sat{display:flex;align-items:center;gap:10px;padding:6px 13px;font-size:12px;border-top:1px solid #F1F5F9}
+.pb-sat:first-of-type{border-top:0}
+.pb-sat span{font-weight:600;color:var(--slate-700);min-width:78px}
+.pb-sat i{font-style:normal;color:var(--slate-400);font-size:11px}
+.pb-sat b{margin-left:auto;color:#1D4ED8;font-weight:700;white-space:nowrap}
+.pb-yok b{color:var(--amber-700);font-weight:600}
 .st-beklemede{background:var(--slate-100);color:var(--slate-600)}
 .st-onay{background:var(--blue-100);color:var(--blue-600)}
 .st-hazir{background:var(--amber-100);color:var(--amber-700)}
@@ -2155,7 +2162,14 @@ function renderOrderModal(){
       <fieldset ${icRO?'disabled':''} style="border:0;padding:0;margin:0;min-width:0">
       <table class="line-tbl"><thead><tr><th style="width:42%">Ürün</th><th style="width:18%">Miktar (çuval)</th>${showPrice?'<th style="width:18%">Birim ₺</th><th style="width:18%">Tutar</th>':''}<th></th></tr></thead><tbody id="lineRows">${lines}</tbody></table>
       ${ro?'':`<button class="btn btn-gray btn-sm" style="margin-top:8px" onclick="addLine()">+ Ürün Ekle</button>`}
-      ${(function(){var tp=orderParti(o);return tp?`<div class="parti-top">Üretim: <b>${esc(fmtParti(tp))}</b><span> · partisi tanımlı kalemlerden</span></div>`:'';})()}
+      ${(function(){
+        var D=orderPartiDokum(o);if(!D)return '';
+        var sat=D.satir.map(function(x){
+          return '<div class="pb-sat'+(x.tanimli?'':' pb-yok')+'"><span>'+esc(x.code)+'</span><i>'+fmtN(x.cuval)+' çuval</i><b'
+            +(x.tanimli?' title="Bir partide '+fmtN(x.birim)+' çuval çıkıyor"':' title="Bu ürüne parti tanımı girilmemiş — Ürünler &amp; Fiyat ekranından girilir"')
+            +'>'+(x.tanimli?esc(x.metin):'—')+'</b></div>';}).join('');
+        return '<div class="parti-b"><div class="pb-ust"><span>ÜRETİM PARTİSİ</span><b>'+esc(fmtParti(D.toplam))+'</b></div>'+sat+'</div>';
+      })()}
       ${showPrice?`<div class="line-total" style="display:block">
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--slate-500);font-weight:600;margin-bottom:${dbsIskonto(o)>0?'3px':'8px'}"><span>Hesaplanan Toplam</span><span>${fmtTL(orderNetHesap(o))}</span></div>
         ${dbsIskonto(o)>0?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#0E7490;font-weight:600;margin-bottom:8px"><span>− DBS İndirimi (%${fmtN(dbsOran(o))}) → kesilecek</span><span>${fmtTL(orderNetDbs(o))}</span></div>`:''}
@@ -5346,6 +5360,32 @@ function orderParti(o){
   let top=0,varMi=false;
   ls.forEach(function(l){const r=lineParti(l);if(r){top+=r.parti;varMi=true;}});
   return varMi?round2(top):null;
+}
+/* ÜRÜN BAZINDA DÖKÜM (28.10.2026 · B tasarımı).
+   AYNI ÜRÜN BİRDEN FAZLA SATIRDA olabilir (ör. iki ayrı fiyattan) — döküm ÜRÜN KODUNDA
+   BİRLEŞTİRİLİR, yoksa aynı ürün iki kez listelenip toplamı okumayı zorlaştırırdı.
+   Birleştirmek toplamı değiştirmez: 80/16 + 80/16 = 160/16.
+   Partisi TANIMSIZ ürün de satır olarak çıkar (tanimli:false) — eksik tanım bu ekranda
+   fark edilsin diye; toplama katılmaz. */
+function orderPartiDokum(o){
+  const ls=(o&&Array.isArray(o.lines))?o.lines:[];
+  const sira=[],harita={};
+  ls.forEach(function(l){
+    if(!l||!l.code)return;
+    const q=+l.qty||0;if(q<=0)return;
+    if(!harita[l.code]){harita[l.code]={code:l.code,cuval:0,birim:partiCuvalOf(l.code)};sira.push(harita[l.code]);}
+    harita[l.code].cuval=round2(harita[l.code].cuval+q);
+  });
+  let toplam=0,tanimliVar=false;
+  sira.forEach(function(x){
+    x.tanimli=x.birim>0;
+    if(x.tanimli){
+      const sahte={code:x.code,qty:x.cuval};
+      x.parti=x.cuval/x.birim;x.metin=partiIpucu(sahte);
+      toplam+=x.parti;tanimliVar=true;
+    } else {x.parti=null;x.metin='';}
+  });
+  return tanimliVar?{satir:sira,toplam:round2(toplam)}:null;
 }
 // 5 → "5 parti" · 5,3125 → "5,31 parti" (tam sayıda ondalık gösterilmez)
 function fmtParti(x){

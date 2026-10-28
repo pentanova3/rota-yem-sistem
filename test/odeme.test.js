@@ -1816,7 +1816,28 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
     // Biçim
     esit('tam sayıda ondalık yok', fmtParti(10), '10 parti');
     dogru('ondalıklı değerde 2 hane', /^5,31 parti$/.test(fmtParti(85 / 16)));
+    // ── ÜRÜN BAZINDA DÖKÜM (B tasarımı) ──
+    eval(al3('orderPartiDokum'));
+    const D1 = orderPartiDokum({lines: [{code: '10-40', qty: 80}, {code: 'BK-300', qty: 140}, {code: 'RK-20', qty: 40}]});
+    esit('döküm toplamı yalnız tanımlılardan', D1.toplam, 12);
+    esit('döküm satır sayısı = ürün sayısı', D1.satir.length, 3);
+    dogru('tanımsız ürün satırda VAR ama toplama girmez',
+      D1.satir[2].code === 'RK-20' && D1.satir[2].tanimli === false && D1.satir[2].parti === null);
+    // AYNI ürün iki satırda → tek satırda birleşir, toplam değişmez
+    const D2 = orderPartiDokum({lines: [{code: '10-40', qty: 80}, {code: '10-40', qty: 80}]});
+    dogru('aynı ürün birleştirilir', D2.satir.length === 1 && D2.satir[0].cuval === 160);
+    esit('birleştirme toplamı bozmaz', D2.toplam, 10);
+    esit('birleştirilmiş toplam = orderParti', D2.toplam, orderParti({lines: [{code: '10-40', qty: 80}, {code: '10-40', qty: 80}]}));
+    // Artan çuval döküm satırında da görünür
+    dogru('tam bölünmeyen satırda artan yazıyor', /5 parti \+ 5 çuval/.test(orderPartiDokum({lines: [{code: '10-40', qty: 85}]}).satir[0].metin));
+    // Kutu hiç çizilmemesi gereken haller
+    dogru('hiç tanımlı ürün yoksa kutu YOK', orderPartiDokum({lines: [{code: 'RK-20', qty: 40}]}) === null);
+    dogru('boş/0 miktarda kutu YOK', orderPartiDokum({lines: []}) === null && orderPartiDokum({lines: [{code: '10-40', qty: 0}]}) === null);
+    dogru('kodsuz satır atlanır', orderPartiDokum({lines: [{code: '', qty: 50}, {code: '10-40', qty: 16}]}).satir.length === 1);
     // Arayüz kapıları
+    dogru('modal kutusu dökümden besleniyor', /orderPartiDokum\(o\)/.test(H3));
+    dogru('kutu başlığı ve toplam var', /ÜRETİM PARTİSİ/.test(H3) && /class="parti-b"/.test(H3));
+    dogru('tanımsız satır uyarı rengiyle', /pb-yok/.test(H3));
     dogru('ürün kartında partiCuval alanı var', /editProd\.partiCuval=\+this\.value\|\|0/.test(H3));
     dogru('yeni ürün şablonunda alan var', /partiCuval:0/.test(H3));
     dogru('ürün tablosunda parti sütunu var', /Parti \(çuval\)/.test(H3));
