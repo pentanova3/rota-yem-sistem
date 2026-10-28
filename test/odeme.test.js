@@ -1717,6 +1717,66 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   }
 
   // ==========================================================================
+  baslik('26e) TABLO ARACI — sayaç çubuğu BİRİKMEMELİ (28.10.2026)');
+  {
+    /* Canlıda görüldü: Siparişler ekranında arama kutusuna yazarken her harfte bir
+       "N / N" satırı birikiyordu (407/407, 309/309, 87/87, 24/24 …) ve kullanıcı
+       bunları sipariş satırı sandı. Sebep: kap (#ordersTable) zaten .tbl-scroll
+       olduğu için çubuk kabın DIŞINA konuyor, refreshOrders ise yalnız kabın İÇİNİ
+       tazeliyor → eski çubuk kalıyor, yenisi ekleniyor. */
+    const ta = fs.readFileSync(path.join(__dirname, '..', 'tablo-arac.js'), 'utf8');
+    const srcBar = /function barYerlestir\([\s\S]*?\n  \}/.exec(ta);
+    dogru('barYerlestir tanımlı', !!srcBar);
+
+    // Minik DOM taklidi — yalnız bu fonksiyonun kullandığı uçlar
+    const El = (cls) => {
+      const e = {
+        _cls: (cls || '').split(' ').filter(Boolean), children: [], parentNode: null, style: {},
+        get classList() { return {contains: (c) => e._cls.indexOf(c) >= 0}; },
+        get parentElement() { return e.parentNode; },
+        get previousElementSibling() {
+          if (!e.parentNode) return null;
+          const i = e.parentNode.children.indexOf(e);
+          return i > 0 ? e.parentNode.children[i - 1] : null;
+        },
+        insertBefore(yeni, ref) {
+          const i = ref ? e.children.indexOf(ref) : e.children.length;
+          e.children.splice(i < 0 ? e.children.length : i, 0, yeni); yeni.parentNode = e; return yeni;
+        },
+        remove() { if (e.parentNode) { const i = e.parentNode.children.indexOf(e); if (i >= 0) e.parentNode.children.splice(i, 1); e.parentNode = null; } },
+      };
+      return e;
+    };
+    eval(srcBar[0]);
+
+    // Siparişler ekranının gerçek yapısı: kart > (card-bd tbl-scroll)#ordersTable > table
+    const kart = El('card'), kap = El('card-bd tbl-scroll');
+    kart.insertBefore(kap, null);
+    const barSay = () => kart.children.filter((x) => x.classList.contains('ta-bar')).length;
+
+    // Her tazeleme: kabın içi silinir (yeni tablo), sonra bagla → barYerlestir
+    for (let i = 0; i < 6; i++) {
+      kap.children = [];                  // el.innerHTML = orderTable(...)
+      const tablo = El('tbl'); kap.insertBefore(tablo, null);
+      barYerlestir(El('ta-bar'), tablo);
+    }
+    dogru('6 tazelemeden sonra TEK çubuk kalır (birikme yok)', barSay() === 1, barSay() + ' çubuk');
+
+    // Kap .tbl-scroll DEĞİLSE çubuk kabın İÇİNE girer (eski davranış korunur)
+    const kap2 = El('card-bd'); const kart2 = El('card'); kart2.insertBefore(kap2, null);
+    const t2 = El('tbl'); kap2.insertBefore(t2, null);
+    barYerlestir(El('ta-bar'), t2);
+    dogru('scroll kabı yoksa çubuk tablonun yanına (kabın içine) konur',
+      kap2.children.filter((x) => x.classList.contains('ta-bar')).length === 1 &&
+      kart2.children.filter((x) => x.classList.contains('ta-bar')).length === 0);
+
+    // Siparişler kartının yapısı gerçekten bu mu — kaynak sözleşmesi
+    const tmr3 = fs.readFileSync(path.join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    dogru('#ordersTable gerçekten .tbl-scroll kabı', /class="card-bd tbl-scroll" id="ordersTable"/.test(tmr3));
+    dogru('refreshOrders yalnız kabın içini tazeliyor', /el\.innerHTML=orderTable\(arr\)/.test(tmr3));
+  }
+
+  // ==========================================================================
   baslik('27) NAKLİYE KDV — birim KDV HARİÇ girilir, faturaya KDV DAHİL gider');
   // ==========================================================================
   // FİRMA KURALI (29.07): nakliye hizmet bedelidir → %20 KDV. Matrah hesaplanır, üzerine KDV
