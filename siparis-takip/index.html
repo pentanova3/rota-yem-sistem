@@ -181,6 +181,11 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .kg-bas{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--slate-500);margin:13px 0 5px}
 .kg-t{background:#fff;font-size:12px}
 .kg-t tbody tr:hover{background:var(--blue-50)}
+/* Parti ipuçları (28.10.2026) */
+.parti-ip{font-size:10px;color:var(--blue-700);font-weight:600;margin-top:3px;white-space:nowrap}
+.parti-top{margin-top:8px;font-size:12px;color:var(--slate-600)}
+.parti-top b{color:var(--blue-800)}
+.parti-top span{font-size:11px;color:var(--slate-400)}
 .st-beklemede{background:var(--slate-100);color:var(--slate-600)}
 .st-onay{background:var(--blue-100);color:var(--blue-600)}
 .st-hazir{background:var(--amber-100);color:var(--amber-700)}
@@ -2003,7 +2008,7 @@ function orderTable(arr){
       <td onclick="openOrder('${o.id}')" style="cursor:pointer;white-space:nowrap;font-weight:700;color:var(--blue-700)">${o.no?('#'+o.no):'—'}</td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer" class="ot-date">${o.teslimTarihi?`<div class="d1">${fmtDate(o.teslimTarihi)}</div>`:`<div class="d1" style="color:var(--slate-300);font-weight:500">—</div>`}<div class="d2">alındı ${fmtDate(o.date)}</div></td>
       <td onclick="openOrder('${o.id}')" style="cursor:pointer">${musteriHucre(o)}</td>
-      <td onclick="openOrder('${o.id}')" style="cursor:pointer" class="ot-prods"><div class="p1" title="${esc(prods)}">${esc(prods)||'—'}</div><div class="ot-sub">${(o.lines||[]).length} kalem${o.kargo?' · '+esc(o.kargo):''}</div></td>
+      <td onclick="openOrder('${o.id}')" style="cursor:pointer" class="ot-prods"><div class="p1" title="${esc(prods)}">${esc(prods)||'—'}</div><div class="ot-sub">${(function(){var tp=orderParti(o);return tp?'<b title="Toplam üretim partisi">'+esc(fmtParti(tp))+'</b> · ':'';})()}${(o.lines||[]).length} kalem${o.kargo?' · '+esc(o.kargo):''}</div></td>
       ${priceCol?`<td onclick="openOrder('${o.id}')" style="cursor:pointer" class="num"><b>${fmtTL(orderTotal(o))}</b></td>`:''}
       <td>${onaySureciCell(o)}</td>
       <td>${statusBadge(o.status)}</td>
@@ -2150,6 +2155,7 @@ function renderOrderModal(){
       <fieldset ${icRO?'disabled':''} style="border:0;padding:0;margin:0;min-width:0">
       <table class="line-tbl"><thead><tr><th style="width:42%">Ürün</th><th style="width:18%">Miktar (çuval)</th>${showPrice?'<th style="width:18%">Birim ₺</th><th style="width:18%">Tutar</th>':''}<th></th></tr></thead><tbody id="lineRows">${lines}</tbody></table>
       ${ro?'':`<button class="btn btn-gray btn-sm" style="margin-top:8px" onclick="addLine()">+ Ürün Ekle</button>`}
+      ${(function(){var tp=orderParti(o);return tp?`<div class="parti-top">Üretim: <b>${esc(fmtParti(tp))}</b><span> · partisi tanımlı kalemlerden</span></div>`:'';})()}
       ${showPrice?`<div class="line-total" style="display:block">
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--slate-500);font-weight:600;margin-bottom:${dbsIskonto(o)>0?'3px':'8px'}"><span>Hesaplanan Toplam</span><span>${fmtTL(orderNetHesap(o))}</span></div>
         ${dbsIskonto(o)>0?`<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#0E7490;font-weight:600;margin-bottom:8px"><span>− DBS İndirimi (%${fmtN(dbsOran(o))}) → kesilecek</span><span>${fmtTL(orderNetDbs(o))}</span></div>`:''}
@@ -2242,7 +2248,7 @@ function orderLineRow(l,i,ro){
   const opts=(bilinmeyen?`<option value="${esc(l.code)}" selected>${esc(l.code)} · katalog dışı</option>`:'')+DB.products.filter(x=>x.active!==false).map(x=>`<option value="${x.code}" ${l.code===x.code?'selected':''}>${esc(x.code)}</option>`).join('');
   return `<tr>
     <td><select data-odak="l${i}c" ${ro?'disabled':''} onchange="setLine(${i},'code',this.value)"><option value="">— Ürün —</option>${opts}</select></td>
-    <td><input type="number" step="0.01" min="0" data-odak="l${i}q" value="${l.qty}" ${ro?'disabled':''} onchange="setLine(${i},'qty',this.value)"></td>
+    <td><input type="number" step="0.01" min="0" data-odak="l${i}q" value="${l.qty}" ${ro?'disabled':''} onchange="setLine(${i},'qty',this.value)">${(function(){var ip=partiIpucu(l);return ip?`<div class="parti-ip" title="Bir partide ${fmtN(partiCuvalOf(l.code))} çuval çıkıyor">${esc(ip)}</div>`:'';})()}</td>
     ${showPrice?`<td><input type="number" step="0.01" data-odak="l${i}p" value="${priceVal}" ${ro?'disabled':''} onchange="setLine(${i},'price',this.value)" placeholder="${hint?'Liste: '+fmtN(hint):'Fiyat gir'}"></td><td style="text-align:right;font-weight:600;padding-right:10px">${fmtTL(tot)}</td>`:''}
     <td>${ro?'':`<button class="rm" onclick="rmLine(${i})">✕</button>`}</td>
   </tr>`;
@@ -4620,7 +4626,7 @@ function renderProducts(c,tb){
   if(isAdmin())tb.innerHTML=`<button class="btn btn-gray" onclick="openFiyatYukle()" style="margin-right:8px">Excel'den Fiyat Yükle</button><button class="btn btn-gray" onclick="openPublishTariff()" style="margin-right:8px">📋 Yeni Tarife Yayınla</button><button class="btn btn-pri" onclick="openProd()">+ Yeni Ürün</button>`;
   const showPrice=canSeePrice();
   const showTD=showPrice&&canSeeKomisyon();   // danışman liste fiyatı yalnız yöneticide
-  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Güncel tarife: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th>':''}${showTD?'<th class="num" style="background:#EDE9FE">Danışman Liste ₺</th><th class="num" style="background:#ECFEFF">Kredi Kartı ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td>`:''}${showTD?`<td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td><td class="num" style="background:#F0FDFF;font-weight:600" title="İMECE vadeli fiyatının tabanı">${p.krediKarti?fmtN(p.krediKarti):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
+  let h=`<div class="card"><div class="card-hd"><h3>${DB.products.length} Ürün</h3><span style="font-size:11px;color:var(--slate-400)">Güncel tarife: ${esc(DB.meta.priceDate||'—')} · Fabrika / Yakın / Uzak (25 kg)</span></div><div class="card-bd"><table class="tbl"><thead><tr><th>Kod</th><th>Ambalaj</th><th class="num" title="Makinenin bir seferde ürettiği çuval">Parti (çuval)</th>${showPrice?'<th class="num">Fabrika ₺</th><th class="num">Yakın ₺</th><th class="num">Uzak ₺</th>':''}${showTD?'<th class="num" style="background:#EDE9FE">Danışman Liste ₺</th><th class="num" style="background:#ECFEFF">Kredi Kartı ₺</th>':''}<th>Durum</th>${isAdmin()?'<th></th>':''}</tr></thead><tbody>${DB.products.map(p=>`<tr><td><b>${esc(p.code)}</b></td><td>${esc(p.pkg||'')}</td><td class="num">${p.partiCuval>0?fmtN(p.partiCuval):'<span style="color:var(--amber-700)" title="Girilmedi — bu üründe parti hesaplanmaz">—</span>'}</td>${showPrice?`<td class="num">${fmtN(p.fabrika)}</td><td class="num">${fmtN(p.yakin)}</td><td class="num">${fmtN(p.uzak)}</td>`:''}${showTD?`<td class="num" style="background:#F5F3FF;font-weight:600">${p.danismanListe?fmtN(p.danismanListe):'—'}</td><td class="num" style="background:#F0FDFF;font-weight:600" title="İMECE vadeli fiyatının tabanı">${p.krediKarti?fmtN(p.krediKarti):'—'}</td>`:''}<td>${p.active!==false?'<span class="badge st-teslim">Aktif</span>':'<span class="badge st-iptal">Pasif</span>'}</td>${isAdmin()?`<td><button class="btn-ic" onclick="openProd('${p.id}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button></td>`:''}</tr>`).join('')}</tbody></table></div></div>`;
   // Teknik Danışman Fiyat Listesi kartı (Torbalı + iskontolu alış)
   if(showTD){
     const isk=tdIskontoAyar();   // ürünler kartı — gösterim hesapla aynı (0 dahil)
@@ -4658,7 +4664,7 @@ function addUzak(){const inp=document.getElementById('newUzak');if(!inp)return;c
 function removeUzak(ci){if(!confirm(ci+' uzak iller listesinden çıkarılsın mı?'))return;DB.uzakCities=(DB.uzakCities||[]).filter(c=>c!==ci);logAct('Uzak il çıkarıldı: '+ci);saveDB();toast(ci+' çıkarıldı');render()}
 function openProd(id){if(!isAdmin()){toast('Sadece yönetici');return}
   if(id)editProd=JSON.parse(JSON.stringify(DB.products.find(p=>p.id===id)));
-  else editProd={id:null,code:'',name:'',pkg:'25 kg',fabrika:0,yakin:0,uzak:0,danismanListe:0,krediKarti:0,active:true};
+  else editProd={id:null,code:'',name:'',pkg:'25 kg',fabrika:0,yakin:0,uzak:0,danismanListe:0,krediKarti:0,partiCuval:0,active:true};
   const o=editProd;
   const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:560px" onclick="event.stopPropagation()">
     <div class="modal-hd"><h2>${o.id?'Ürün Düzenle':'Yeni Ürün'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
@@ -4669,6 +4675,8 @@ function openProd(id){if(!isAdmin()){toast('Sadece yönetici');return}
       <div class="sub-hd">Teknik Danışman Liste Fiyatı (Torbalı ₺)</div>
       <div class="fgrid"><div class="fld"><label>Danışman Liste Fiyatı</label><input type="number" value="${o.danismanListe||0}" onchange="editProd.danismanListe=+this.value"><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Danışman alış = bu × (1 − iskonto). Prim hesabında kullanılır.</div></div>
       <div class="fld"><label>Kredi Kartı Tek Çekim ₺</label><input type="number" step="0.01" value="${o.krediKarti||0}" onchange="editProd.krediKarti=+this.value"><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Fiyat listesindeki <b>Kredi Kartı</b> sütunu. <b>İMECE</b> vadeli fiyatı bu tabandan hesaplanır.</div></div></div>
+      <div class="sub-hd">Üretim</div>
+      <div class="fgrid"><div class="fld"><label>Bir Partide Çıkan Çuval</label><input type="number" step="1" min="0" value="${o.partiCuval||''}" placeholder="Örn: 16" onchange="editProd.partiCuval=+this.value||0"><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px">Makinenin tek seferde ürettiği çuval sayısı. Sipariş parti sayısı buradan hesaplanır (çuval ÷ bu sayı). <b>Boş bırakılırsa</b> o üründe parti gösterilmez.</div></div></div>
       <div class="fld"><label><input type="checkbox" ${o.active!==false?'checked':''} onchange="editProd.active=this.checked" style="width:auto;margin-right:6px">Aktif (sipariş alınabilir)</label></div>
     </div>
     <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delProd('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveProd()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
@@ -5315,6 +5323,41 @@ const KADEME_LBL={fabrika:'Fabrika Teslim',yakin:'Yakın Bayi',uzak:'Uzak Bayi',
 const ST_COLOR={beklemede:'#94A3B8',hazir:'#F59E0B',sevk:'#0EA5E9',teslim:'#16A34A',iptal:'#EF4444'};
 // ============ TONAJ & HEDEF RAPORU ============
 function prodKg(code){const p=prodByCode(code);const m=/([\d.,]+)\s*kg/i.exec((p&&p.pkg)||'');const kg=m?parseFloat(m[1].replace(',','.')):25;return kg>0?kg:25;}
+/* ═══ PARTİ HESABI (firma kuralı 28.10.2026) ═══════════════════════════════════════════
+   Makine bir seferde sabit sayıda çuval üretir; bu sayı ÜRÜNE göre değişir
+   (10-40 → 16 çuval = 400 kg · BK-300 → 20). Sipariş kaç parti üretim demek:
+       parti = sipariş çuvalı ÷ bir partideki çuval
+   Firmanın verdiği örnek: 80 çuval 10-40 → 80×25 kg ÷ 400 kg = 5 parti (= 80÷16).
+   Kilogram iki tarafta da sadeleştiği için hesap doğrudan ÇUVAL üzerinden yapılır;
+   böylece ambalajı 25 kg olmayan üründe de doğru kalır.
+   TANIMSIZ ÜRÜN: partiCuval girilmemişse hesap YAPILMAZ ve hiçbir yerde sayı
+   gösterilmez — 0'a bölüp Infinity yazmak ya da 0 parti demek yanıltıcı olurdu. */
+function partiCuvalOf(code){const p=prodByCode(code);const n=+((p&&p.partiCuval)||0);return n>0?n:0;}
+function lineParti(l){
+  if(!l||!l.code)return null;
+  const n=partiCuvalOf(l.code);if(!n)return null;
+  const q=+l.qty||0;if(q<=0)return null;
+  const tam=Math.floor(q/n), artan=round2(q-tam*n);
+  return {parti:q/n,tam:tam,artan:artan,birim:n,tamMi:artan===0};
+}
+// Siparişin toplam parti sayısı — partisi tanımlı kalemlerden. Hiç tanımlı yoksa null.
+function orderParti(o){
+  const ls=(o&&Array.isArray(o.lines))?o.lines:[];
+  let top=0,varMi=false;
+  ls.forEach(function(l){const r=lineParti(l);if(r){top+=r.parti;varMi=true;}});
+  return varMi?round2(top):null;
+}
+// 5 → "5 parti" · 5,3125 → "5,31 parti" (tam sayıda ondalık gösterilmez)
+function fmtParti(x){
+  if(x==null)return '';
+  const t=Math.round(x*100)/100;
+  return (Number.isInteger(t)?String(t):t.toLocaleString('tr-TR',{maximumFractionDigits:2}))+' parti';
+}
+// Kalem satırı ipucu: tam değilse artan çuvalı da söyler (üretim planında gerekli)
+function partiIpucu(l){
+  const r=lineParti(l);if(!r)return '';
+  return r.tamMi?fmtParti(r.parti):(r.tam>0?(r.tam+' parti + '+fmtN(r.artan)+' çuval'):(fmtN(r.artan)+' çuval · 1 partiden az'));
+}
 function tonOf(code,qty){return (+qty||0)*prodKg(code)/1000;}
 function tonajHedefMap(){DB.meta=DB.meta||{};return (DB.meta.tonajHedef=DB.meta.tonajHedef||{});}
 function setTonajHedef(key,val){if(!isAdmin())return;const m=tonajHedefMap();const v=parseFloat(String(val).replace(',','.'));if(isNaN(v)||v<=0)delete m[key];else m[key]=v;logAct('Aylık tonaj hedefi: '+key+' → '+(m[key]!=null?m[key]+' ton':'kaldırıldı'));saveDB();render();}
