@@ -166,6 +166,21 @@ table.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 /* status badge */
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;letter-spacing:.01em;white-space:nowrap}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%;flex-shrink:0;background:currentColor;opacity:.85}
+/* Bayi/danışman kartındaki sipariş geçmişi (28.10.2026) */
+.kom-gec{margin:14px 0 4px;border:1px solid var(--slate-200);border-radius:10px;background:var(--slate-50);padding:10px 12px}
+.kom-gec>summary{cursor:pointer;font-size:13px;color:var(--slate-700);list-style:none;display:flex;align-items:center;gap:8px}
+.kom-gec>summary::-webkit-details-marker{display:none}
+.kom-gec>summary::before{content:'▸';color:var(--slate-400);font-size:11px}
+.kom-gec[open]>summary::before{content:'▾'}
+.kg-hint{font-weight:400;font-size:11.5px;color:var(--slate-500)}
+.kg-bos{font-size:12px;color:var(--slate-500);padding:10px 2px 2px}
+.kg-ozet{display:flex;gap:8px;flex-wrap:wrap;margin:11px 0 4px}
+.kg-k{flex:1;min-width:92px;background:#fff;border:1px solid var(--slate-200);border-radius:8px;padding:7px 10px}
+.kg-n{display:block;font-size:15px;font-weight:700;color:var(--blue-800);line-height:1.25}
+.kg-l{display:block;font-size:10.5px;color:var(--slate-500);margin-top:1px}
+.kg-bas{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--slate-500);margin:13px 0 5px}
+.kg-t{background:#fff;font-size:12px}
+.kg-t tbody tr:hover{background:var(--blue-50)}
 .st-beklemede{background:var(--slate-100);color:var(--slate-600)}
 .st-onay{background:var(--blue-100);color:var(--blue-600)}
 .st-hazir{background:var(--amber-100);color:var(--amber-700)}
@@ -3991,6 +4006,81 @@ function openKom(type,id){
   renderKomModal();
 }
 function setKomType(t){editKom.type=t;editKom.rate=(t==='danisman'?TD_ISKONTO_DEFAULT:0);if(t!=='bayi')editKom.ozelIskonto=0;renderKomModal()}
+/* ═══ BAYİ/DANIŞMAN KARTINDA SİPARİŞ GEÇMİŞİ (firma isteği 28.10.2026) ═══════════════
+   Kart şimdiye kadar yalnız iskonto/ödeme ayarını tutuyordu; geçmişe bakmak için
+   Siparişler ekranına gidip süzmek gerekiyordu.
+   KAPSAM, SİPARİŞLER EKRANINDAKİ SÜZGEÇLE BİREBİR AYNI (ordBayi/ordDanisman): iki yüzey
+   aynı kişi için farklı adet göstermesin. İptaller ayrı sayılır, toplamlara girmez.
+   TUTAR YALNIZ FİYAT YETKİSİ OLANA: canSeePrice() false ise ciro/iskonto sütunları hiç
+   çizilmez (listede de böyle). */
+function komGecmisData(kom){
+  const bayiMi=kom.type==='bayi';
+  const hepsi=DB.orders.filter(function(o){
+    if(!o||o.tarihsel)return false;
+    var k=bayiMi?ordBayi(o):ordDanisman(o);
+    return !!(k&&k.id===kom.id);
+  }).sort(function(a,b){return String(b.date||'').localeCompare(String(a.date||''));});
+  const aktif=hepsi.filter(function(o){return o.status!=='iptal';});
+  const teslim=aktif.filter(satisMi);
+  var ton=0,ciro=0,kazanc=0;
+  aktif.forEach(function(o){ton+=orderTon(o);ciro+=orderTotal(o);});
+  // Bayide kazanç = yararlandığı iskonto, danışmanda = prim. İkisi de YALNIZ teslimde doğar.
+  teslim.forEach(function(o){
+    kazanc+=bayiMi?effIsk(o,bayiIskHam(o)):(((orderKomisyon(o)||{}).tutar)||0);
+  });
+  // Yıl kırılımı — en yeni yıl üstte
+  const yillar={};
+  aktif.forEach(function(o){
+    var y=String(o.date||'').slice(0,4);if(!y)return;
+    var g=yillar[y]=yillar[y]||{adet:0,ton:0,ciro:0};
+    g.adet++;g.ton+=orderTon(o);g.ciro+=orderTotal(o);
+  });
+  return {hepsi,aktif,teslim,ton:ton,ciro:ciro,kazanc:kazanc,iptal:hepsi.length-aktif.length,
+    yillar:Object.keys(yillar).sort().reverse().map(function(y){return Object.assign({yil:y},yillar[y]);})};
+}
+function komGecmisHTML(kom){
+  if(!kom||!kom.id)return '';   // yeni kayıtta geçmiş olmaz
+  const bayiMi=kom.type==='bayi';
+  const D=komGecmisData(kom);
+  const fiyat=canSeePrice();
+  if(!D.hepsi.length)
+    return `<details class="kom-gec"><summary><b>Sipariş Geçmişi</b> <span class="kg-hint">kayıt yok</span></summary>
+      <div class="kg-bos">Bu ${bayiMi?'bayiye':'danışmana'} bağlı sipariş bulunmuyor.</div></details>`;
+  const kutu=function(n,l){return '<div class="kg-k"><span class="kg-n">'+n+'</span><span class="kg-l">'+l+'</span></div>';};
+  const ozet='<div class="kg-ozet">'
+    +kutu(D.aktif.length,'Sipariş'+(D.iptal?' · '+D.iptal+' iptal':''))
+    +kutu(D.teslim.length,'Teslim edilen')
+    +kutu(fmtTon(D.ton)+' t','Toplam tonaj')
+    +(fiyat?kutu(fmtTL(D.ciro),'Toplam ciro'):'')
+    +(fiyat?kutu(fmtTL(D.kazanc),bayiMi?'Yararlandığı iskonto':'Hak ettiği prim'):'')
+    +'</div>';
+  const yilSat=D.yillar.map(function(y){
+    return '<tr><td><b>'+y.yil+'</b></td><td class="num">'+y.adet+'</td><td class="num">'+fmtTon(y.ton)+' t</td>'
+      +(fiyat?'<td class="num">'+fmtTL(y.ciro)+'</td>':'')+'</tr>';}).join('');
+  const yilTablo='<table class="t kg-t"><thead><tr><th>Yıl</th><th class="num">Sipariş</th><th class="num">Tonaj</th>'
+    +(fiyat?'<th class="num">Ciro</th>':'')+'</tr></thead><tbody>'+yilSat+'</tbody></table>';
+  const SON=8;
+  const sonSat=D.hepsi.slice(0,SON).map(function(o){
+    return '<tr onclick="komGecmisAc(\''+o.id+'\')" style="cursor:pointer" title="Siparişi aç">'
+      +'<td style="white-space:nowrap">'+fmtDate(o.date)+'</td>'
+      +'<td>#'+esc(o.no||'?')+'</td>'
+      +'<td>'+statusBadge(o.status)+'</td>'
+      +'<td style="font-size:11px;color:var(--slate-600)">'+esc((o.lines||[]).map(function(l){return l.code+' ×'+fmtN(l.qty);}).join(', ')||'—')+'</td>'
+      +'<td class="num">'+fmtTon(orderTon(o))+' t</td>'
+      +(fiyat?'<td class="num">'+fmtTL(orderTotal(o))+'</td>':'')+'</tr>';}).join('');
+  const sonTablo='<table class="t kg-t"><thead><tr><th>Tarih</th><th>No</th><th>Durum</th><th>Ürünler</th><th class="num">Tonaj</th>'
+    +(fiyat?'<th class="num">Tutar</th>':'')+'</tr></thead><tbody>'+sonSat+'</tbody></table>';
+  return `<details class="kom-gec" open><summary><b>Sipariş Geçmişi</b> <span class="kg-hint">${D.aktif.length} sipariş · ${fmtTon(D.ton)} t</span></summary>
+    ${ozet}
+    <div class="kg-bas">Yıl Bazında</div>${yilTablo}
+    <div class="kg-bas">Son ${Math.min(SON,D.hepsi.length)} Sipariş${D.hepsi.length>SON?' <span class="kg-hint">('+D.hepsi.length+' kaydın en yenisi)</span>':''}</div>${sonTablo}
+    <button class="btn btn-gray btn-sm" style="margin-top:9px" onclick="komGecmisTumu('${kom.id}')">Siparişler ekranında tümünü aç →</button>
+  </details>`;
+}
+// Satıra tıklayınca sipariş kartı: kom kartını kapat, siparişi aç
+function komGecmisAc(id){closeModal();VIEW='siparisler';render();setTimeout(function(){openOrder(id);},120);}
+// Siparişler ekranına geç ve süzgeci bu kişiye kur (ekranla kart aynı kapsamı gösterir)
+function komGecmisTumu(komId){closeModal();filt.kom=komId;filt.status='';VIEW='siparisler';render();}
 function renderKomModal(){
   const o=editKom;
   const isDan=o.type==='danisman';
@@ -4003,13 +4093,14 @@ function renderKomModal(){
       <option value="">Normal (havale / nakit)</option>
       <option value="dbs" ${o.odemeTipi==='dbs'?'selected':''}>DBS</option>
     </select><div style="font-size:9.5px;color:var(--slate-400);margin-top:3px"><b>DBS:</b> iskonto üzerine %${fmtN(dbsOranAyar())} — otomatik. <b>İMECE vadesi sipariş ekranından seçilir.</b>${isAdmin()?` <a onclick="closeModal();go('ayarlar')" style="color:var(--blue-700);font-weight:700;cursor:pointer;text-decoration:underline">Oranı değiştir →</a>`:' Oranı yönetici <b>Ayarlar → DBS İndirimi</b>’nden değiştirir.'}</div></div>`;
-  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:520px" onclick="event.stopPropagation()">
+  const m=`<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:${o.id?'680px':'520px'}" onclick="event.stopPropagation()">
     <div class="modal-hd"><h2>${o.id?'Düzenle':'Yeni'} · ${o.type==='bayi'?'Bayi':'Teknik Danışman'}</h2><button class="btn-ic" onclick="closeModal()" style="font-size:18px">✕</button></div>
     <div class="modal-bd">
       <div class="fgrid"><div class="fld"><label>Ad Soyad / Ünvan</label><input value="${esc(o.name)}" onchange="editKom.name=this.value"></div><div class="fld"><label>Tip</label><select onchange="setKomType(this.value)"><option value="bayi" ${o.type==='bayi'?'selected':''}>Bayi</option><option value="danisman" ${o.type==='danisman'?'selected':''}>Teknik Danışman</option></select></div></div>
       <div class="fgrid">${rateField}<div class="fld"><label>Telefon (WhatsApp)</label><input value="${esc(o.phone)}" onchange="editKom.phone=this.value"></div></div>
       <div class="fgrid"><div class="fld"><label>Şehir / Konum</label><input value="${esc(o.city||'')}" onchange="editKom.city=this.value"></div><div class="fld"><label></label>${o.phone?`<button class="btn btn-wa" onclick="window.open('https://wa.me/'+'${phoneClean(o.phone)}','_blank')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> WhatsApp Aç</button>`:'<span></span>'}</div></div>
       <div class="fld"><label>Not</label><textarea rows="2" onchange="editKom.note=this.value">${esc(o.note||'')}</textarea></div>
+      ${komGecmisHTML(o)}
       <div class="fld"><label><input type="checkbox" ${o.active!==false?'checked':''} onchange="editKom.active=this.checked" style="width:auto;margin-right:6px">Aktif</label></div>
     </div>
     <div class="modal-ft"><div>${o.id?`<button class="btn btn-gray btn-sm" onclick="delKom('${o.id}')" style="color:var(--red-700)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Sil</button>`:''}</div><div style="display:flex;gap:8px"><button class="btn btn-grn" onclick="saveKom()">Kaydet</button><button class="btn btn-gray" onclick="closeModal()">Kapat</button></div></div>
