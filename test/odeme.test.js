@@ -1670,6 +1670,113 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   }
 
   // ==========================================================================
+  baslik('26d) BAYİ/DANIŞMAN KARTINDA SİPARİŞ GEÇMİŞİ (28.10.2026)');
+  {
+    const _k2 = path.join(__dirname, '..');
+    const H2 = fs.readFileSync(path.join(_k2, 'siparis-takip', 'index.html'), 'utf8');
+    const al2 = (n) => { const m = H2.match(new RegExp('^function ' + n + '\\([\\s\\S]*?^\\}', 'm')); return m ? m[0] : null; };
+
+    // Kurgu veri: aynı bayinin 3 siparişi (biri iptal), bir de başka bayinin siparişi
+    const B = {id: 'b1', type: 'bayi', name: 'TEST BAYİ'};
+    const D2 = {id: 'd1', type: 'danisman', name: 'TEST DANIŞMAN'};
+    const sip = (no, st, bayiId, qty) => ({id: 'o' + no, no, date: '2026-0' + (no % 9 + 1) + '-01',
+      status: st, bayiId, aliciBayi: !!bayiId, total: 1000 * no, lines: [{code: 'X25', qty}]});
+    global.DB = {orders: [sip(1, 'teslim', 'b1', 40), sip(2, 'hazir', 'b1', 20), sip(3, 'iptal', 'b1', 10), sip(4, 'teslim', 'b9', 80)],
+      komisyoncular: [B, D2], customers: [], products: [{code: 'X25', pkg: '25 kg'}]};
+    global.komById = (id) => DB.komisyoncular.find((k) => k.id === id);
+    global.custById = (id) => DB.customers.find((c) => c.id === id);
+    global.prodByCode = (c) => DB.products.find((p) => p.code === c);
+    global.effIsk = (o, x) => x; global.bayiIskHam = () => 100;
+    global.orderKomisyon = () => ({tutar: 50}); global.orderTotal = (o) => +o.total || 0;
+    // TEK eval: ok fonksiyonu İÇİNDE eval edilirse bildirimler o kapsamda kalır, dışarıdan görünmez.
+    eval(['ordBayi', 'ordDanisman', 'satisMi', 'prodKg', 'tonOf', 'lineTon', 'orderTon', 'komGecmisData']
+      .map((n) => al2(n)).filter(Boolean).join('\n'));
+    dogru('komGecmisData tanımlı', typeof komGecmisData === 'function');
+    const G = komGecmisData(B);
+    dogru('yalnız KENDİ siparişleri sayılır (başka bayininki hariç)', G.hepsi.length === 3);
+    dogru('İPTAL aktif sayıdan düşer ama kaybolmaz', G.aktif.length === 2 && G.iptal === 1);
+    dogru('teslim sayısı doğru', G.teslim.length === 1);
+    dogru('tonaj yalnız aktiflerden (iptal hariç)', Math.abs(G.ton - (40 + 20) * 25 / 1000) < 0.001);
+    dogru('ciro yalnız aktiflerden', G.ciro === 1000 + 2000);
+    dogru('kazanç YALNIZ teslimde doğar (bayi: iskonto)', G.kazanc === 100);
+    dogru('yıl kırılımı üretiliyor', G.yillar.length >= 1 && G.yillar[0].adet >= 1);
+
+    // KAPSAM SÖZLEŞMESİ: kart, Siparişler ekranındaki süzgeçle AYNI kuralı kullanmalı
+    const filtSay = (id) => DB.orders.filter((o) => { const b = ordBayi(o), d = ordDanisman(o); return (b && b.id === id) || (d && d.id === id); }).length;
+    dogru('kart kapsamı = Siparişler süzgeci kapsamı', komGecmisData(B).hepsi.length === filtSay('b1'));
+
+    // Danışmanda prim dalı
+    DB.orders[0].danismanId = 'd1'; DB.orders[0].bayiId = ''; DB.orders[0].aliciBayi = false;
+    dogru('danışmanda prim dalı çalışıyor', komGecmisData(D2).kazanc === 50);
+
+    // Arayüz kapıları
+    dogru('yeni kayıtta geçmiş çizilmez', /if\(!kom\|\|!kom\.id\)return '';/.test(H2));
+    dogru('tutar sütunları canSeePrice ile kapılı', /const fiyat=canSeePrice\(\);/.test(H2) && /\$\{fiyat\?/.test(H2 + '') === false ? true : /fiyat\?/.test(H2));
+    dogru('siparişe tıklama ve süzgeç köprüsü var', /function komGecmisAc\(/.test(H2) && /function komGecmisTumu\(/.test(H2));
+    dogru('tarihsel arşiv satırı geçmişe girmez', /if\(!o\|\|o\.tarihsel\)return false;/.test(H2));
+  }
+
+  // ==========================================================================
+  baslik('26e) TABLO ARACI — sayaç çubuğu BİRİKMEMELİ (28.10.2026)');
+  {
+    /* Canlıda görüldü: Siparişler ekranında arama kutusuna yazarken her harfte bir
+       "N / N" satırı birikiyordu (407/407, 309/309, 87/87, 24/24 …) ve kullanıcı
+       bunları sipariş satırı sandı. Sebep: kap (#ordersTable) zaten .tbl-scroll
+       olduğu için çubuk kabın DIŞINA konuyor, refreshOrders ise yalnız kabın İÇİNİ
+       tazeliyor → eski çubuk kalıyor, yenisi ekleniyor. */
+    const ta = fs.readFileSync(path.join(__dirname, '..', 'tablo-arac.js'), 'utf8');
+    const srcBar = /function barYerlestir\([\s\S]*?\n  \}/.exec(ta);
+    dogru('barYerlestir tanımlı', !!srcBar);
+
+    // Minik DOM taklidi — yalnız bu fonksiyonun kullandığı uçlar
+    const El = (cls) => {
+      const e = {
+        _cls: (cls || '').split(' ').filter(Boolean), children: [], parentNode: null, style: {},
+        get classList() { return {contains: (c) => e._cls.indexOf(c) >= 0}; },
+        get parentElement() { return e.parentNode; },
+        get previousElementSibling() {
+          if (!e.parentNode) return null;
+          const i = e.parentNode.children.indexOf(e);
+          return i > 0 ? e.parentNode.children[i - 1] : null;
+        },
+        insertBefore(yeni, ref) {
+          const i = ref ? e.children.indexOf(ref) : e.children.length;
+          e.children.splice(i < 0 ? e.children.length : i, 0, yeni); yeni.parentNode = e; return yeni;
+        },
+        remove() { if (e.parentNode) { const i = e.parentNode.children.indexOf(e); if (i >= 0) e.parentNode.children.splice(i, 1); e.parentNode = null; } },
+      };
+      return e;
+    };
+    eval(srcBar[0]);
+
+    // Siparişler ekranının gerçek yapısı: kart > (card-bd tbl-scroll)#ordersTable > table
+    const kart = El('card'), kap = El('card-bd tbl-scroll');
+    kart.insertBefore(kap, null);
+    const barSay = () => kart.children.filter((x) => x.classList.contains('ta-bar')).length;
+
+    // Her tazeleme: kabın içi silinir (yeni tablo), sonra bagla → barYerlestir
+    for (let i = 0; i < 6; i++) {
+      kap.children = [];                  // el.innerHTML = orderTable(...)
+      const tablo = El('tbl'); kap.insertBefore(tablo, null);
+      barYerlestir(El('ta-bar'), tablo);
+    }
+    dogru('6 tazelemeden sonra TEK çubuk kalır (birikme yok)', barSay() === 1, barSay() + ' çubuk');
+
+    // Kap .tbl-scroll DEĞİLSE çubuk kabın İÇİNE girer (eski davranış korunur)
+    const kap2 = El('card-bd'); const kart2 = El('card'); kart2.insertBefore(kap2, null);
+    const t2 = El('tbl'); kap2.insertBefore(t2, null);
+    barYerlestir(El('ta-bar'), t2);
+    dogru('scroll kabı yoksa çubuk tablonun yanına (kabın içine) konur',
+      kap2.children.filter((x) => x.classList.contains('ta-bar')).length === 1 &&
+      kart2.children.filter((x) => x.classList.contains('ta-bar')).length === 0);
+
+    // Siparişler kartının yapısı gerçekten bu mu — kaynak sözleşmesi
+    const tmr3 = fs.readFileSync(path.join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    dogru('#ordersTable gerçekten .tbl-scroll kabı', /class="card-bd tbl-scroll" id="ordersTable"/.test(tmr3));
+    dogru('refreshOrders yalnız kabın içini tazeliyor', /el\.innerHTML=orderTable\(arr\)/.test(tmr3));
+  }
+
+  // ==========================================================================
   baslik('27) NAKLİYE KDV — birim KDV HARİÇ girilir, faturaya KDV DAHİL gider');
   // ==========================================================================
   // FİRMA KURALI (29.07): nakliye hizmet bedelidir → %20 KDV. Matrah hesaplanır, üzerine KDV

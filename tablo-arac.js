@@ -331,6 +331,25 @@
     wrap.appendChild(table);
   }
 
+  /* ARAÇ ÇUBUĞUNU YERLEŞTİR — BİRİKME KORUMASI (28.10.2026).
+     Kap zaten .tbl-scroll ise çubuk kabın DIŞINA (kardeş olarak) konur. O kap innerHTML ile
+     tazelendiğinde (ör. siparis-takip refreshOrders) tablo yenilenir ama dışarıdaki çubuk
+     SİLİNMEZ; bir sonraki bagla() yeni tablo görüp yeni çubuk ekler. Ölçüldü: Siparişler
+     ekranında arama kutusuna her harfte bir "N / N" satırı birikiyordu (407/407, 309/309,
+     87/87, 24/24 …) ve kullanıcı bunları sipariş satırı sandı.
+     Çözüm: yenisini koymadan ÖNCE o kaba ait eski çubuğu kaldır. */
+  function barYerlestir(bar, table) {
+    var host = table.parentElement;
+    if (host && host.classList.contains('tbl-scroll') && host.parentNode) {
+      var onceki = host.previousElementSibling;
+      if (onceki && onceki.classList && onceki.classList.contains('ta-bar')) onceki.remove();
+      host.parentNode.insertBefore(bar, host);
+      bar.style.padding = '10px 14px 0';
+    } else if (host) {
+      host.insertBefore(bar, table);
+    }
+  }
+
   function enhance(table, view) {
     if (!table || !table.tHead) return;
     if (table.closest('.modal-bd, .modal, #modal, .line-tbl, .overlay, .sz')) return;
@@ -374,14 +393,8 @@
       bar.appendChild(inp);
       bar.appendChild(meta);
       bar.appendChild(clr);
-      var host = table.parentElement;
       // Saha/Bakım: tablo .tbl-scroll içinde — arama çubuğunu kaydırma kutusunun ÜSTÜNE koy
-      if (host && host.classList.contains('tbl-scroll') && host.parentNode) {
-        host.parentNode.insertBefore(bar, host);
-        bar.style.padding = '10px 14px 0';
-      } else if (host) {
-        host.insertBefore(bar, table);
-      }
+      barYerlestir(bar, table);
       st.meta = meta;
       st.clearBtn = clr;
       inp.addEventListener('input', function () {
@@ -407,13 +420,7 @@
       clr2.style.display = 'none';
       bar2.appendChild(meta2);
       bar2.appendChild(clr2);
-      var host2 = table.parentElement;
-      if (host2 && host2.classList.contains('tbl-scroll') && host2.parentNode) {
-        host2.parentNode.insertBefore(bar2, host2);
-        bar2.style.padding = '10px 14px 0';
-      } else if (host2) {
-        host2.insertBefore(bar2, table);
-      }
+      barYerlestir(bar2, table);
       st.meta = meta2;
       st.clearBtn = clr2;
       clr2.addEventListener('click', function () {
