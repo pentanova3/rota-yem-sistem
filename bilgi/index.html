@@ -106,7 +106,7 @@ function render(o){
       +row('Palet',o.palet)
       +(o.strec?row('Streç','Evet'):'')
       +(o.nakliyeMusteri?row('Nakliye Ücreti','Tarafınıza aittir'):'')
-      +(o.not&&String(o.not).trim()?row('Not',o.not):'');
+      ;   // İÇ NOT BASILMAZ (28.10.2026) — müşteriye yazılacak not: onayNot alanı
   } else if(o.status==='teslim'){
     leadT='Siparişiniz teslim edilmiştir'; leadX='Teslimat bilgileri aşağıdadır.';
     const ttar=o.teslimEdildiTarih||o.teslimTarihi;

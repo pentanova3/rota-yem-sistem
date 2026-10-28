@@ -2309,7 +2309,7 @@ exports.sifreDegistir = onRequest({region: "us-central1", cors: true, secrets: [
 // tutarı onaylamış oluyordu. Onay kaydı delil niteliğinde tutulduğu için bu alanlar gitmeli.
 const MUSTERI_ALANLAR = ["no", "date", "customer", "odeme", "fiyatKademe", "status", "onayNot",
   "plaka", "sofor", "soforTel", "hareketTarihi", "hareketSaati", "kargo", "palet", "strec", "nakliyeMusteri",
-  "not", "sevkTarih", "teslimEdildiTarih", "musteriOnay", "musteriOnayTs",
+  "sevkTarih", "teslimEdildiTarih", "musteriOnay", "musteriOnayTs",   // iç sevkiyat notu alanı 28.10.2026'da ÇIKARILDI: müşteri ucuna inmemeli (sınama MUSTERI_ALANLAR'ı okur)
   "total", "dbsOran", "imeceAy", "imeceOran", "imeceFark"];
 
 // ---- ÖDEME TİPİ (DBS) — SUNUCU TARAFI DAMGA ----
