@@ -1632,6 +1632,44 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   }
 
   // ==========================================================================
+  baslik('26c) İÇ NOT MÜŞTERİYE SIZMAMALI (28.10.2026 firma kararı)');
+  {
+    /* Canlıda ölçüldü: 407 siparişin 87'sinde not dolu ve hepsi İÇ sevkiyat notu
+       ("1 PALET PLUS AYNI ARAÇTA AHMET BEYAZTAŞ'A GİDECEK"). Sevk mesajı ve bilgi
+       sayfası bunu müşteriye gösteriyordu → bir bayiye BAŞKA müşterinin sevkiyatı.
+       Müşteriye yazılacak not ayrı alandadır: onayNot. */
+    const _k = path.join(__dirname, '..');
+    const tmr2 = fs.readFileSync(path.join(_k, 'siparis-takip', 'index.html'), 'utf8');
+    const fn2 = fs.readFileSync(path.join(_k, 'functions', 'index.js'), 'utf8');
+
+    // 1) SEVK mesajı — koşturmalı
+    const al = (n) => { const m = tmr2.match(new RegExp('^function ' + n + '\\([\\s\\S]*?^\\}', 'm')); return m ? m[0] : null; };
+    global.fmtN = (n) => String(n);
+    global.fmtDate = (d) => String(d || '');
+    global.todayISO = () => '2026-10-28';
+    global.bilgiLink = () => 'LINK';
+    const src = al('buildShipMsg');
+    dogru('buildShipMsg okundu', !!src);
+    eval(src);
+    const ornek = {customer: 'Bayi: ÖZDEMİR TARIM', date: '2026-07-20', lines: [{code: 'BK-300 PLUS', qty: 84}],
+      not: 'AYNI ARAÇTA AHMET BEYAZTAŞ\'A GİDECEK', onayNot: 'Müşteriye görünecek not'};
+    const m = buildShipMsg(ornek);
+    dogru('SEVK mesajında iç not YOK', !/AHMET BEYAZTA/.test(m) && !/\nNot:/.test(m));
+    dogru('SEVK mesajı yine de gidiyor (ürün + sevkiyat var)', /BK-300 PLUS/.test(m) && /yola çıkmıştır/.test(m));
+
+    // 2) Bilgi sayfasının İKİ kopyası da basmamalı
+    for (const yol of ['bilgi/index.html', 'musteri-site/bilgi/index.html'])
+      dogru(yol + ': iç not satırı YOK', !/row\('Not',\s*o\.not\)/.test(fs.readFileSync(path.join(_k, yol), 'utf8')));
+
+    // 3) Sunucu alanı — ekranda gizlemek yetmez, alan tarayıcıya İNMEMELİ
+    const ma = /const MUSTERI_ALANLAR = \[([\s\S]*?)\];/.exec(fn2);
+    dogru('MUSTERI_ALANLAR okundu', !!ma);
+    const alanlar = (ma ? ma[1].match(/"[^"]+"/g) || [] : []).map((x) => x.slice(1, -1));
+    dogru('müşteri ucunda "not" alanı YOK', alanlar.indexOf('not') < 0);
+    dogru('müşteriye açık not alanı "onayNot" DURUYOR', alanlar.indexOf('onayNot') >= 0);
+  }
+
+  // ==========================================================================
   baslik('27) NAKLİYE KDV — birim KDV HARİÇ girilir, faturaya KDV DAHİL gider');
   // ==========================================================================
   // FİRMA KURALI (29.07): nakliye hizmet bedelidir → %20 KDV. Matrah hesaplanır, üzerine KDV
