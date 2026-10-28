@@ -1777,6 +1777,54 @@ baslik('25) BİLDİRİM BLOĞU — GERÇEKTEN KOŞTURULARAK (metin testi çalı�
   }
 
   // ==========================================================================
+  baslik('26f) PARTİ HESABI — sipariş kaç parti üretim (28.10.2026 firma kuralı)');
+  {
+    /* Kural: parti = sipariş çuvalı ÷ bir partide makineden çıkan çuval (ürüne göre değişir).
+       Firmanın verdiği örnek: 80 çuval 10-40, makine 16 çuval (400 kg) çıkarıyor
+       → 80×25 ÷ 400 = 5 parti. Kilogram iki tarafta sadeleşir; hesap çuval üzerinden. */
+    const H3 = fs.readFileSync(path.join(__dirname, '..', 'siparis-takip', 'index.html'), 'utf8');
+    const al3 = (n) => { const m = H3.match(new RegExp('^function ' + n + '\\([\\s\\S]*?^\\}', 'm')); return m ? m[0] : null; };
+    const PROD = [{code: '10-40', pkg: '25 kg', partiCuval: 16}, {code: 'BK-300', pkg: '25 kg', partiCuval: 20},
+      {code: 'RK-20', pkg: '25 kg'}, {code: 'ELLI', pkg: '50 kg', partiCuval: 8}];
+    global.prodByCode = (c) => PROD.find((p) => p.code === c);
+    global.round2 = (n) => Math.round(n * 100) / 100;
+    global.fmtN = (n) => Number(n || 0).toLocaleString('tr-TR');
+    eval(['partiCuvalOf', 'lineParti', 'orderParti', 'fmtParti', 'partiIpucu'].map(al3).join('\n'));
+
+    // FİRMANIN ÖRNEKLERİ — birebir
+    esit('80 çuval 10-40 = 5 parti', lineParti({code: '10-40', qty: 80}).parti, 5);
+    esit('160 çuval 10-40 = 10 parti', lineParti({code: '10-40', qty: 160}).parti, 10);
+    esit('metin: "5 parti"', partiIpucu({code: '10-40', qty: 80}), '5 parti');
+    // Ürüne göre farklı parti büyüklüğü
+    esit('200 çuval BK-300 (parti 20) = 10 parti', lineParti({code: 'BK-300', qty: 200}).parti, 10);
+    // Ambalajı 25 kg OLMAYAN üründe de çuval üzerinden doğru (kg sadeleşir)
+    esit('50 kg ambalajda da çuval üzerinden: 24 çuval / 8 = 3', lineParti({code: 'ELLI', qty: 24}).parti, 3);
+    // Tam bölünmeyen
+    const k = lineParti({code: '10-40', qty: 85});
+    dogru('85 çuval → 5 tam parti + 5 çuval artan', k.tam === 5 && k.artan === 5 && k.tamMi === false);
+    esit('metin artanı söylüyor', partiIpucu({code: '10-40', qty: 85}), '5 parti + 5 çuval');
+    dogru('1 partiden az olan ayrıca belirtiliyor', /1 partiden az/.test(partiIpucu({code: '10-40', qty: 10})));
+    // TANIMSIZ ürün — 0'a bölme / sahte "0 parti" olmamalı
+    dogru('partiCuval girilmemişse hesap YAPILMAZ', lineParti({code: 'RK-20', qty: 40}) === null);
+    esit('tanımsızda metin boş', partiIpucu({code: 'RK-20', qty: 40}), '');
+    dogru('miktar 0 ise gösterilmez', lineParti({code: '10-40', qty: 0}) === null);
+    dogru('bilinmeyen kod güvenli', lineParti({code: 'YOK', qty: 10}) === null && lineParti(null) === null);
+    // Sipariş toplamı — yalnız tanımlı kalemlerden
+    esit('sipariş toplamı tanımlı kalemlerden', orderParti({lines: [{code: '10-40', qty: 160}, {code: 'BK-300', qty: 200}, {code: 'RK-20', qty: 40}]}), 20);
+    dogru('hiç tanımlı kalem yoksa null (satır çizilmez)', orderParti({lines: [{code: 'RK-20', qty: 40}]}) === null);
+    dogru('boş siparişte null', orderParti({lines: []}) === null && orderParti({}) === null);
+    // Biçim
+    esit('tam sayıda ondalık yok', fmtParti(10), '10 parti');
+    dogru('ondalıklı değerde 2 hane', /^5,31 parti$/.test(fmtParti(85 / 16)));
+    // Arayüz kapıları
+    dogru('ürün kartında partiCuval alanı var', /editProd\.partiCuval=\+this\.value\|\|0/.test(H3));
+    dogru('yeni ürün şablonunda alan var', /partiCuval:0/.test(H3));
+    dogru('ürün tablosunda parti sütunu var', /Parti \(çuval\)/.test(H3));
+    dogru('kalem satırında ipucu çiziliyor', /partiIpucu\(l\)/.test(H3));
+    dogru('sipariş listesinde toplam parti var', /orderParti\(o\)/.test(H3));
+  }
+
+  // ==========================================================================
   baslik('27) NAKLİYE KDV — birim KDV HARİÇ girilir, faturaya KDV DAHİL gider');
   // ==========================================================================
   // FİRMA KURALI (29.07): nakliye hizmet bedelidir → %20 KDV. Matrah hesaplanır, üzerine KDV
